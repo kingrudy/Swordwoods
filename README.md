@@ -6,12 +6,12 @@ jaag op dieren om niet te verhongeren en versla steeds sterkere golven monsters.
 ## Starten
 
     docker compose up -d --build
-    # open http://<server-ip>:8080
+    # open http://<server-ip>:8787
 
 Zonder compose:
 
     docker build -t swordwoods .
-    docker run -d --name swordwoods -p 8080:8080 -v swordwoods-data:/data --restart unless-stopped swordwoods
+    docker run -d --name swordwoods -p 8787:8080 -v swordwoods-data:/data --restart unless-stopped swordwoods
 
 De build heeft geen internet of npm nodig: three.js (r170) zit in `public/vendor/three/`,
 de server gebruikt alleen ingebouwde Node-modules (Node 22).

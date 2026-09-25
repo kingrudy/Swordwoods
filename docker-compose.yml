@@ -3,7 +3,7 @@ services:
     build: .
     container_name: swordwoods
     ports:
-      - "8080:8080"          # verander de linkerpoort naar wat jij wilt
+      - "8787:8080"          # linkerpoort = poort op je server; pas aan als 8787 ook bezet is
     volumes:
       - swordwoods-data:/data # accounts en voortgang
     environment:
