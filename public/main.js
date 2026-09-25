@@ -11,6 +11,7 @@ const $ = id => document.getElementById(id);
 const net = new Net();
 let mode = 'login', myName = null, save = null;
 const TOKEN_KEY = 'sw-token';
+const BUILD = document.querySelector('meta[name="sw-build"]')?.content || '';
 const store = {
   get() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
   set(v) { try { localStorage.setItem(TOKEN_KEY, v); } catch {} },
@@ -99,6 +100,12 @@ function setHandlers() {
       if (r) net.send({ t: 'join', id }); else $('lb-err').textContent = 'De kamer uit je uitnodiging bestaat niet meer. Kies een andere kamer.';
     }
   });
+  net.on('outdated', () => {
+    // Nieuwe versie op de server: één keer automatisch herladen, daarna uitleggen.
+    let last = 0; try { last = +sessionStorage.getItem('sw-reload') || 0; } catch {}
+    if (Date.now() - last > 30000) { try { sessionStorage.setItem('sw-reload', String(Date.now())); } catch {} location.reload(); }
+    else overlay('Nieuwe versie', 'Je browser laadt nog een oude versie van het spel. Sluit het tabblad en open de link opnieuw, of wis de websitegegevens van deze site.');
+  });
   net.on('authfail', () => { store.del(); show('auth'); loadLeaderboard(); });
   net.on('rooms', m => renderRooms(m.rooms));
   net.on('err', m => { $('lb-err').textContent = m.msg; });
@@ -119,7 +126,7 @@ function setHandlers() {
 async function connect(token) {
   setHandlers();
   try { await net.open(); } catch (e) { show('auth'); $('au-err').textContent = e.message; return; }
-  net.send({ t: 'auth', token });
+  net.send({ t: 'auth', token, build: BUILD });
 }
 
 setMode('login');

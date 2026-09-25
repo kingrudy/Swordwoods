@@ -19,7 +19,8 @@ export async function startGame({ net, joined, user }) {
   const { heightAt, slopeAt, vnoise } = W;
   const rng = mulberry32(seed * 3 + 1);
   // Telefoon/tablet: aanraakbesturing en lichtere graphics
-  const isTouch = new URLSearchParams(location.search).get('touch') === '1' || matchMedia('(pointer: coarse)').matches;
+  const qTouch = new URLSearchParams(location.search).get('touch');
+  let isTouch = qTouch === '1' || (qTouch !== '0' && (matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && !matchMedia('(hover: hover)').matches)));
   const LOW = isTouch;
   if (isTouch) document.body.classList.add('touch');
 
@@ -679,6 +680,12 @@ export async function startGame({ net, joined, user }) {
     gp.prev = p.buttons.map((_, i) => b(i));
   }
   if (isTouch) setupTouch();
+  else addEventListener('touchstart', function onFirstTouch() {       // touchscreen op een laptop of onbekend toestel: overlay alsnog aanzetten
+    removeEventListener('touchstart', onFirstTouch);
+    if (isTouch) return;
+    isTouch = true; document.body.classList.add('touch'); setupTouch(); renderInv();
+    $('btn-resume').textContent = 'Tik om te starten';
+  }, { passive: true });
 
   /* ================================================================ update */
   let sendT = 0;

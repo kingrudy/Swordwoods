@@ -98,22 +98,36 @@ function leaderboard() {
 /* ------------------------------------------------------------------ HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 const cache = new Map();
+// Build-id: hash van alle spelbestanden. Staat in elk script-adres (/b/<id>/...), zodat een browser of proxy
+// nooit oude spelcode kan combineren met een nieuwe server.
+const BUILD = (() => {
+  const h = crypto.createHash('sha256');
+  const walk = d => { for (const f of fs.readdirSync(d).sort()) { const p = path.join(d, f); if (f === 'vendor') continue; if (fs.statSync(p).isDirectory()) walk(p); else h.update(f).update(fs.readFileSync(p)); } };
+  try { walk(PUBLIC); } catch {}
+  h.update(fs.readFileSync(path.join(__dir, 'room.js')));
+  return h.digest('hex').slice(0, 10);
+})();
 
 function serveStatic(req, res) {
-  let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  let p = decodeURIComponent(new URL(req.url, 'http://x').pathname), versioned = false;
+  const vm = /^\/b\/([A-Za-z0-9]+)(\/.*)$/.exec(p);
+  if (vm) { versioned = vm[1] === BUILD; p = vm[2]; }
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC, p));
   if (!file.startsWith(PUBLIC + path.sep)) { res.writeHead(403).end(); return; }
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Niet gevonden'); return; }
     const ext = path.extname(file);
-    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': p.startsWith('/vendor/') ? 'public, max-age=604800, immutable' : 'no-cache' };
+    const isHtml = ext === '.html';
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': isHtml ? 'no-store, max-age=0' : (versioned || p.startsWith('/vendor/')) ? 'public, max-age=31536000, immutable' : 'no-store, max-age=0' };
     const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '') && ['.html', '.js', '.css', '.json', '.svg'].includes(ext);
     const ck = file + (gz ? ':gz' : '');
     const hit = cache.get(ck);
     if (hit && hit.mtime === st.mtimeMs) { if (gz) headers['Content-Encoding'] = 'gzip'; res.writeHead(200, headers).end(hit.buf); return; }
     fs.readFile(file, (e, buf) => {
       if (e) { res.writeHead(500).end(); return; }
+      if (isHtml) buf = Buffer.from(buf.toString('utf8').replaceAll('__BUILD__', BUILD));
       if (gz) { buf = zlib.gzipSync(buf); headers['Content-Encoding'] = 'gzip'; }
       cache.set(ck, { mtime: st.mtimeMs, buf });
       res.writeHead(200, headers).end(buf);
@@ -137,7 +151,7 @@ const onRequest = async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       const ip = req.socket.remoteAddress || '?';
       if (req.method === 'GET' && url.pathname === '/api/leaderboard') return json(res, 200, leaderboard());
-      if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, rooms: rooms.size, users: Object.keys(db.users).length });
+      if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, build: BUILD, rooms: rooms.size, users: Object.keys(db.users).length });
       if (req.method === 'POST' && (url.pathname === '/api/register' || url.pathname === '/api/login')) {
         if (limited(ip + (req.headers['x-forwarded-for'] || ''))) return json(res, 429, { err: 'Te veel pogingen. Probeer het over een minuut opnieuw.' });
         let body; try { body = await readJson(req); } catch { return json(res, 400, { err: 'Ongeldig verzoek.' }); }
@@ -220,9 +234,16 @@ class Conn {
       const key = u.name.toLowerCase(), old = byUser.get(key);
       if (old && old !== this) { old.send({ t: 'kicked' }); old.kill(); }
       this.user = u; byUser.set(key, this); ensureSave(u);
+      if (m.build !== BUILD) {               // oude spelcode in de browser: niet laten spelen, wel uitleggen
+        this.outdated = true;
+        this.send({ t: 'outdated', build: BUILD });
+        this.send({ t: 'authed', name: u.name, save: u.save, rooms: [] });
+        return this.send({ t: 'err', msg: 'Er is een nieuwe versie van Swordwoods. Herlaad de pagina (F5, of op je telefoon omlaag trekken) om verder te spelen.' });
+      }
       return this.send({ t: 'authed', name: u.name, save: u.save, rooms: roomList() });
     }
     if (!this.user) return;
+    if (this.outdated) return this.send({ t: 'err', msg: 'Herlaad de pagina om de nieuwe versie te laden.' });
     if (this.room) {
       if (m.t === 'leave') return this.leaveRoom(true);
       if (this.player) this.room.handle(this.player, m);
@@ -287,7 +308,7 @@ function makeRoom(name, max, permanent) {
 const roomList = () => [...rooms.values()].map(r => r.summary);
 function broadcastRooms() {
   const msg = JSON.stringify({ t: 'rooms', rooms: roomList() });
-  for (const c of conns) if (c.user && !c.room) c.send(msg);
+  for (const c of conns) if (c.user && !c.room && !c.outdated) c.send(msg);
 }
 makeRoom('Bos van Aldric', 8, true);
 makeRoom('Zwaardenwoud', 8, true);
@@ -310,7 +331,7 @@ function listen(port, main) {
   const srv = http.createServer(onRequest);
   srv.on('upgrade', onUpgrade);
   srv.on('error', e => { if (main) { console.error('Kan niet luisteren op poort ' + port + ': ' + e.message); process.exit(1); } });
-  srv.listen(port, () => console.log('Swordwoods ' + VERSION + ' luistert op poort ' + port + (main ? ' (data: ' + DATA_DIR + ')' : ' (extra)')));
+  srv.listen(port, () => console.log('Swordwoods ' + VERSION + ' (build ' + BUILD + ') luistert op poort ' + port + (main ? ' (data: ' + DATA_DIR + ')' : ' (extra)')));
 }
 listen(PORT, true);
 for (const p of EXTRA_PORTS) listen(p, false);
