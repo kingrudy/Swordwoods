@@ -25,7 +25,13 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 - **Dood**: je respawnt na 8 seconden en verliest de helft van je hout.
 - **Winkel**: dicht bij het startpunt staat een kraam van Handelaar Bram (blauwe lichtzuil, en een pijl met afstand in je scherm). Alles betaal je met hout: vlees, helende drankjes (`Q`, max. 5), schilden (12/24/36% minder schade), bijl-upgrades (hakt en slaat harder) en willekeurige zwaarden van een gekozen zeldzaamheid (30 tot 600 hout). De server controleert prijs en afstand. Hout krijg je van bomen, kisten en na elke gewonnen golf.
 
-**Telefoon en tablet**: open dezelfde link in de browser. Links op het scherm sleep je om te lopen (ver slepen = rennen), rechts sleep je om rond te kijken. De knoppen zijn slaan, springen, eten, drankje, rennen en de interactieknop die verschijnt bij een kist of de winkel. Tik op een slot om een wapen te kiezen, ☰ is het pauzemenu. Speel in landschap (volledig scherm start automatisch waar de browser dat toestaat). Op mobiel staan de graphics lichter.
+**Telefoon en tablet**: open dezelfde link in de browser en speel liggend. In beeld staat een gamepad: links de stick om te lopen (ver duwen = rennen, of tik ergens links en de stick springt naar je duim), rechts sleep je om te kijken. Knoppen: A slaan, B springen, X gebruiken (kist of winkel), Y eten, 🧪 drankje, L rennen aan/uit, R volgend wapen, 📨 uitnodigen en ☰ menu. Op mobiel staan de graphics lichter.
+
+**Controller**: een echte gamepad (Xbox, PlayStation, of een Bluetooth-controller op je telefoon) werkt ook. Linkerstick lopen, rechterstick kijken, A/RT slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen wisselen, linkerstick indrukken rennen, Start pauze. Zodra een controller verbonden is, verdwijnt de overlay.
+
+**Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
+
+**Versie**: onderaan de lobby en op `/api/health` staat het versienummer. Staat daar niet de laatste versie, dan draait je server nog een oude build.
 
 Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaan/hakken, E kist openen of winkel gebruiken, R eten, Q drankje, 1-9 of scrollwiel item kiezen, Esc pauze. Werkt de muis niet vast, dan kun je slepen om te kijken.
 

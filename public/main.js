@@ -1,6 +1,11 @@
 // Inloggen, account maken en lobby. Het 3D-spel (three.js) wordt pas geladen zodra je een kamer betreedt.
 import { Net } from './net.js';
 import { RARITIES } from './items.js';
+import { openInvite, takeInvitedRoom, clearInviteParam } from './invite.js';
+
+let invitedRoom = takeInvitedRoom();
+if (invitedRoom) document.getElementById('invited').hidden = false;
+fetch('/api/health').then(r => r.json()).then(h => { for (const id of ['version-auth', 'version-lobby']) document.getElementById(id).textContent = 'Versie ' + (h.version || '?'); }).catch(() => {});
 
 const $ = id => document.getElementById(id);
 const net = new Net();
@@ -80,6 +85,7 @@ $('rooms').addEventListener('click', e => { const b = e.target.closest('[data-jo
 $('btn-quick').onclick = () => { $('lb-err').textContent = ''; net.send({ t: 'quick' }); };
 $('btn-new').onclick = () => { $('create-form').classList.toggle('on'); $('cr-name').focus(); };
 $('create-form').addEventListener('submit', e => { e.preventDefault(); net.send({ t: 'create', name: $('cr-name').value, max: +$('cr-max').value }); });
+$('btn-invite-lobby').onclick = () => openInvite({});
 $('btn-logout').onclick = () => { store.del(); try { net.ws.close(); } catch {} location.reload(); };
 
 /* ---------------- verbinding ---------------- */
@@ -88,6 +94,10 @@ function setHandlers() {
   if (handlersSet) return; handlersSet = true;
   net.on('authed', m => {
     myName = m.name; save = m.save; renderLobby(); renderRooms(m.rooms); show('lobby'); loadLeaderboard();
+    if (invitedRoom) {
+      const r = m.rooms.find(x => x.id === invitedRoom); const id = invitedRoom; invitedRoom = null; clearInviteParam();
+      if (r) net.send({ t: 'join', id }); else $('lb-err').textContent = 'De kamer uit je uitnodiging bestaat niet meer. Kies een andere kamer.';
+    }
   });
   net.on('authfail', () => { store.del(); show('auth'); loadLeaderboard(); });
   net.on('rooms', m => renderRooms(m.rooms));

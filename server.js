@@ -17,6 +17,7 @@ const PORT = Number(process.env.PORT) || 8304;
 // Extra poorten voor het geval een deploy-platform de containerpoort zelf herschrijft
 const EXTRA_PORTS = (process.env.EXTRA_PORTS ?? '8080,8787').split(',').map(Number).filter(p => p > 0 && p !== PORT);
 const TICK_MS = 50;
+const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dir, 'package.json'), 'utf8')).version; } catch { return '?'; } })();
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 /* ------------------------------------------------------------------ opslag */
@@ -136,7 +137,7 @@ const onRequest = async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       const ip = req.socket.remoteAddress || '?';
       if (req.method === 'GET' && url.pathname === '/api/leaderboard') return json(res, 200, leaderboard());
-      if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, rooms: rooms.size, users: Object.keys(db.users).length });
+      if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, rooms: rooms.size, users: Object.keys(db.users).length });
       if (req.method === 'POST' && (url.pathname === '/api/register' || url.pathname === '/api/login')) {
         if (limited(ip + (req.headers['x-forwarded-for'] || ''))) return json(res, 429, { err: 'Te veel pogingen. Probeer het over een minuut opnieuw.' });
         let body; try { body = await readJson(req); } catch { return json(res, 400, { err: 'Ongeldig verzoek.' }); }
@@ -309,7 +310,7 @@ function listen(port, main) {
   const srv = http.createServer(onRequest);
   srv.on('upgrade', onUpgrade);
   srv.on('error', e => { if (main) { console.error('Kan niet luisteren op poort ' + port + ': ' + e.message); process.exit(1); } });
-  srv.listen(port, () => console.log('Swordwoods luistert op poort ' + port + (main ? ' (data: ' + DATA_DIR + ')' : ' (extra)')));
+  srv.listen(port, () => console.log('Swordwoods ' + VERSION + ' luistert op poort ' + port + (main ? ' (data: ' + DATA_DIR + ')' : ' (extra)')));
 }
 listen(PORT, true);
 for (const p of EXTRA_PORTS) listen(p, false);

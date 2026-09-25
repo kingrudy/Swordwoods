@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
 import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS } from './items.js';
 import * as M from './models.js';
+import { openInvite, closeInvite } from './invite.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -240,7 +241,7 @@ export async function startGame({ net, joined, user }) {
   };
 
   /* ================================================================ status en HUD */
-  const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: 0.4, pitch: 0, onGround: true, bob: 0 };
+  const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: Math.atan2(-(W.shop.x - joined.you.x), -(W.shop.z - joined.you.z)), pitch: 0, onGround: true, bob: 0 };   // start met zicht op de winkel
   const inv = { wood: 0, meat: 0, potions: 0, up: { shield: 0, axe: 0 }, swords: [], equip: 0, stats: {} };
   const you = { hp: 100, hu: 80, sc: 0, rs: 0 };
   const wave = { n: 0, ph: 0, t: 0, left: 0 };
@@ -462,7 +463,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ invoer */
   const keys = {}; let locked = false, soft = false, shopOpen = false;
-  const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false };
+  const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false };
   const drag = { down: false, moved: 0 };
   const veil = $('veil');
   function showVeil(on) { veil.classList.toggle('on', on); }
@@ -580,36 +581,57 @@ export async function startGame({ net, joined, user }) {
   $('shop-list').addEventListener('click', e => { const b = e.target.closest('[data-buy]'); if (b && !b.disabled) net.send({ t: 'buy', id: b.dataset.buy }); });
 
   /* ================================================================ aanraakbesturing */
+  function pauseGame() {
+    locked = false; virt.x = virt.y = 0; virt.attack = false; virt.jump = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    showVeil(true);
+  }
+  function inviteFromGame() {
+    pauseGame();
+    openInvite({ roomId: joined.room.id, roomName: joined.room.name });
+  }
+  $('btn-invite').onclick = () => openInvite({ roomId: joined.room.id, roomName: joined.room.name });
+  const cycleWeapon = d => { const n = items().length; if (n > 1) equipSlot((inv.equip + d + n) % n); };
+
   function setupTouch() {
-    const tz = $('tz'), base = $('joybase'), knob = $('joyknob'), R = 56;
+    const tz = $('tz'), stick = $('stick'), knob = $('joyknob'), R = 58;
     let joyId = null, ox = 0, oy = 0, lookId = null, lx = 0, ly = 0;
+    const home = () => { stick.style.left = stick.style.top = stick.style.bottom = ''; stick.classList.remove('active', 'float'); knob.style.transform = ''; };
     tz.addEventListener('pointerdown', e => {
       if (!locked || dead || shopOpen) return;
       e.preventDefault(); try { tz.setPointerCapture(e.pointerId); } catch {}
       if (e.clientX < innerWidth * 0.45 && joyId === null) {
-        joyId = e.pointerId; ox = e.clientX; oy = e.clientY;
-        base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.classList.add('on'); knob.style.transform = 'translate(0,0)';
+        joyId = e.pointerId;
+        const r = stick.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        if (Math.hypot(e.clientX - cx, e.clientY - cy) < r.width * 0.75) { ox = cx; oy = cy; }       // op de stick: vaste plek
+        else {                                                                                   // ergens anders links: stick springt naar je duim
+          ox = e.clientX; oy = e.clientY; stick.classList.add('float');
+          stick.style.left = (ox - r.width / 2) + 'px'; stick.style.top = (oy - r.height / 2) + 'px'; stick.style.bottom = 'auto';
+        }
+        stick.classList.add('active'); move(e);
       } else if (lookId === null) { lookId = e.pointerId; lx = e.clientX; ly = e.clientY; }
     });
+    function move(e) {
+      let dx = e.clientX - ox, dy = e.clientY - oy; const d = Math.hypot(dx, dy);
+      virt.sprint = d > R * 1.25;
+      if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+      virt.x = dx / R; virt.y = dy / R; knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    }
     tz.addEventListener('pointermove', e => {
-      if (e.pointerId === joyId) {
-        let dx = e.clientX - ox, dy = e.clientY - oy; const d = Math.hypot(dx, dy);
-        virt.sprint = d > R * 1.3;
-        if (d > R) { dx = dx / d * R; dy = dy / d * R; }
-        virt.x = dx / R; virt.y = dy / R; knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-      } else if (e.pointerId === lookId) {
+      if (e.pointerId === joyId) move(e);
+      else if (e.pointerId === lookId) {
         player.yaw -= (e.clientX - lx) * 0.0052; player.pitch = clamp(player.pitch - (e.clientY - ly) * 0.0052, -1.45, 1.45);
         lx = e.clientX; ly = e.clientY;
       }
     });
     const end = e => {
-      if (e.pointerId === joyId) { joyId = null; virt.x = virt.y = 0; virt.sprint = false; base.classList.remove('on'); }
+      if (e.pointerId === joyId) { joyId = null; virt.x = virt.y = 0; virt.sprint = false; home(); }
       if (e.pointerId === lookId) lookId = null;
     };
     tz.addEventListener('pointerup', end); tz.addEventListener('pointercancel', end);
     const press = (id, down, up) => {
       const b = $(id);
-      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('down'); down(); });
+      b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); b.classList.add('down'); if (navigator.vibrate) try { navigator.vibrate(8); } catch {} down(); });
       const rel = () => { if (b.classList.contains('down')) { b.classList.remove('down'); if (up) up(); } };
       b.addEventListener('pointerup', rel); b.addEventListener('pointercancel', rel); b.addEventListener('pointerleave', rel);
     };
@@ -619,22 +641,56 @@ export async function startGame({ net, joined, user }) {
     press('tb-eat', () => net.send({ t: 'eat' }));
     press('tb-drink', () => net.send({ t: 'drink' }));
     press('tb-sprint', () => { virt.toggle = !virt.toggle; $('tb-sprint').classList.toggle('on', virt.toggle); });
-    press('tb-menu', () => { locked = false; virt.x = virt.y = 0; virt.attack = false; base.classList.remove('on'); showVeil(true); });
+    press('tb-next', () => cycleWeapon(1));
+    press('tb-menu', () => { home(); pauseGame(); });
+    press('tb-invite', () => { home(); inviteFromGame(); });
     $('hotbar').addEventListener('pointerdown', e => { const sl = e.target.closest('.slot'); if (sl) { e.preventDefault(); equipSlot([...$('hotbar').children].indexOf(sl)); } });
     document.addEventListener('contextmenu', e => e.preventDefault());
+  }
+
+  /* ================================================================ echte controller (Gamepad API) */
+  const gp = { prev: [], idx: null };
+  addEventListener('gamepadconnected', e => { gp.idx = e.gamepad.index; document.body.classList.add('padconnected'); toast('🎮 Controller verbonden. Druk op Start om te spelen.', '#6fd37a'); });
+  addEventListener('gamepaddisconnected', e => {
+    if (gp.idx === e.gamepad.index) { gp.idx = null; document.body.classList.remove('padconnected'); virt.px = virt.py = 0; virt.pattack = virt.pjump = virt.psprint = false; toast('Controller losgekoppeld.', '#bbb'); }
+  });
+  function pollPad(dt) {
+    if (gp.idx === null || !navigator.getGamepads) return;
+    const p = navigator.getGamepads()[gp.idx]; if (!p) return;
+    const dz = v => Math.abs(v || 0) < 0.18 ? 0 : v;
+    const b = i => !!(p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5));
+    const hit = i => b(i) && !gp.prev[i];
+    if (hit(9)) {                                     // Start: pauze aan/uit
+      if ($('invite').classList.contains('on')) closeInvite();
+      else if (shopOpen) closeShop(false);
+      else if (locked) pauseGame(); else { showVeil(false); enterSoft(); }
+    }
+    if (shopOpen && hit(1)) closeShop(false);
+    if (locked && !dead && !shopOpen) {
+      virt.px = dz(p.axes[0]); virt.py = dz(p.axes[1]);
+      player.yaw -= dz(p.axes[2]) * 2.6 * dt; player.pitch = clamp(player.pitch - dz(p.axes[3]) * 2.0 * dt, -1.45, 1.45);
+      virt.pattack = b(0) || b(7); virt.pjump = b(1); virt.psprint = b(10);
+      if (hit(2)) interact();
+      if (hit(3)) net.send({ t: 'eat' });
+      if (hit(6)) net.send({ t: 'drink' });
+      if (hit(4)) cycleWeapon(-1);
+      if (hit(5)) cycleWeapon(1);
+    } else { virt.px = virt.py = 0; virt.pattack = virt.pjump = virt.psprint = false; }
+    gp.prev = p.buttons.map((_, i) => b(i));
   }
   if (isTouch) setupTouch();
 
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
+    pollPad(dt);
     if (locked && !dead && !shopOpen) {
       const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
-      const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y;   // joystick omhoog = vooruit
-      const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x;
+      const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;   // joystick omhoog = vooruit
+      const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x + virt.px;
       let wx = f.x * iz + rx * ix, wz = f.z * iz + rz * ix;
       let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
-      const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle;
+      const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
       const sp = (run ? 9 : 5.4) * wl, k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
       player.vx += (wx * sp - player.vx) * k; player.vz += (wz * sp - player.vz) * k;
       let nx = player.x + player.vx * dt, nz = player.z + player.vz * dt;
@@ -650,7 +706,7 @@ export async function startGame({ net, joined, user }) {
       const gnd = heightAt(player.x, player.z);
       if (player.onGround) {
         if (gnd < player.y - 0.7) player.onGround = false;
-        else { player.y = gnd; if (keys.Space || virt.jump) { player.vy = 7.6; player.onGround = false; } }
+        else { player.y = gnd; if (keys.Space || virt.jump || virt.pjump) { player.vy = 7.6; player.onGround = false; } }
       }
       if (!player.onGround) { player.vy -= 22 * dt; player.y += player.vy * dt; if (player.y <= gnd && player.vy <= 0) { player.y = gnd; player.vy = 0; player.onGround = true; } }
       player.bob += Math.hypot(player.vx, player.vz) * dt * 1.7;
@@ -735,9 +791,9 @@ export async function startGame({ net, joined, user }) {
     }
 
     // aanwijzing
-    if (virt.attack && locked && !dead && !shopOpen) startSwing();
+    if ((virt.attack || virt.pattack) && locked && !dead && !shopOpen) startSwing();
     const pr = $('prompt'), ch = locked && !dead && !shopOpen ? findChest() : null, sh = !ch && locked && !dead && !shopOpen && nearShop();
-    if (isTouch) { const tb = $('tb-use'); tb.classList.toggle('on', !!(ch || sh)); tb.textContent = sh ? '🏪' : '🧰'; }
+    if (isTouch) { const tb = $('tb-use'); tb.classList.toggle('dim', !(ch || sh)); tb.firstElementChild.textContent = sh ? '🏪' : ch ? '🧰' : '✋'; }
     if (ch) { pr.innerHTML = isTouch ? 'Kist openen' : '<b>E</b> · kist openen'; pr.classList.add('on'); }
     else if (sh) { pr.innerHTML = isTouch ? 'Winkel openen' : '<b>E</b> · winkel openen'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
@@ -772,6 +828,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
+  window.__game = { pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }
