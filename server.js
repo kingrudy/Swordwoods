@@ -13,7 +13,9 @@ const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dir, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dir, 'data');
-const PORT = Number(process.env.PORT) || 8787;
+const PORT = Number(process.env.PORT) || 8301;
+// Extra poorten voor het geval een deploy-platform de containerpoort zelf herschrijft
+const EXTRA_PORTS = (process.env.EXTRA_PORTS ?? '8080,8787').split(',').map(Number).filter(p => p > 0 && p !== PORT);
 const TICK_MS = 50;
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -128,7 +130,7 @@ function readJson(req) {
 }
 const json = (res, code, obj) => res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(obj));
 
-const server = http.createServer(async (req, res) => {
+const onRequest = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
     if (url.pathname.startsWith('/api/')) {
@@ -146,7 +148,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
     serveStatic(req, res);
   } catch (e) { console.error(e); if (!res.headersSent) res.writeHead(500).end(); }
-});
+};
 
 /* ------------------------------------------------------------------ WebSocket (RFC 6455, minimaal) */
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -254,14 +256,14 @@ class Conn {
   }
 }
 
-server.on('upgrade', (req, socket) => {
+const onUpgrade = (req, socket) => {
   if (new URL(req.url, 'http://x').pathname !== '/ws' || (req.headers.upgrade || '').toLowerCase() !== 'websocket') { socket.destroy(); return; }
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
   socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
   conns.add(new Conn(socket));
-});
+};
 
 setInterval(() => {
   const now = Date.now();
@@ -303,4 +305,11 @@ setInterval(() => {
   if (lobbyT >= 2) { lobbyT = 0; broadcastRooms(); }
 }, TICK_MS);
 
-server.listen(PORT, () => console.log('Swordwoods draait op poort ' + PORT + ' (data: ' + DATA_DIR + ')'));
+function listen(port, main) {
+  const srv = http.createServer(onRequest);
+  srv.on('upgrade', onUpgrade);
+  srv.on('error', e => { if (main) { console.error('Kan niet luisteren op poort ' + port + ': ' + e.message); process.exit(1); } });
+  srv.listen(port, () => console.log('Swordwoods luistert op poort ' + port + (main ? ' (data: ' + DATA_DIR + ')' : ' (extra)')));
+}
+listen(PORT, true);
+for (const p of EXTRA_PORTS) listen(p, false);
