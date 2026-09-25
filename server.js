@@ -13,7 +13,7 @@ const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dir, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dir, 'data');
-const PORT = Number(process.env.PORT) || 8301;
+const PORT = Number(process.env.PORT) || 8304;
 // Extra poorten voor het geval een deploy-platform de containerpoort zelf herschrijft
 const EXTRA_PORTS = (process.env.EXTRA_PORTS ?? '8080,8787').split(',').map(Number).filter(p => p > 0 && p !== PORT);
 const TICK_MS = 50;

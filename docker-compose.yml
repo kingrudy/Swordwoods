@@ -3,7 +3,7 @@ services:
     build: .
     container_name: swordwoods
     ports:
-      - "8301:8301"          # poort op je server : poort in de container (luistert ook op 8080 en 8787)
+      - "8304:8304"          # poort op je server : poort in de container (luistert ook op 8080 en 8787)
     volumes:
       - swordwoods-data:/data # accounts en voortgang
     environment:
@@ -11,7 +11,7 @@ services:
       # FIRST_WAVE_DELAY: 45   # seconden tot de eerste golf
       # WAVE_GAP: 120          # seconden tussen "laatste vijand weg" en de volgende golf
       # HUNGER_RATE: 0.22      # hongerpunten per seconde (100 = vol)
-      PORT: "8301"
+      PORT: "8304"
       TZ: Europe/Amsterdam
     restart: unless-stopped
 volumes:
