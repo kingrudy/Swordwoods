@@ -13,7 +13,7 @@ const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dir, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dir, 'data');
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT) || 8787;
 const TICK_MS = 50;
 fs.mkdirSync(DATA_DIR, { recursive: true });
 

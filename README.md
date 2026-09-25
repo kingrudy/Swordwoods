@@ -11,7 +11,7 @@ jaag op dieren om niet te verhongeren en versla steeds sterkere golven monsters.
 Zonder compose:
 
     docker build -t swordwoods .
-    docker run -d --name swordwoods -p 8787:8080 -v swordwoods-data:/data --restart unless-stopped swordwoods
+    docker run -d --name swordwoods -p 8787:8787 -v swordwoods-data:/data --restart unless-stopped swordwoods
 
 De build heeft geen internet of npm nodig: three.js (r170) zit in `public/vendor/three/`,
 de server gebruikt alleen ingebouwde Node-modules (Node 22).
@@ -29,6 +29,6 @@ Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaa
 ## Beheer
 - Data: volume `swordwoods-data` (bestand `db.json`). Maak hier een back-up van. Wachtwoorden zijn gehasht (scrypt).
 - Zet er bij internetgebruik een reverse proxy met HTTPS voor (Caddy, Traefik, nginx). WebSockets (`/ws`) moeten doorgelaten worden. Zonder HTTPS gaan wachtwoorden onversleuteld over het netwerk.
-- Instellingen via omgevingsvariabelen: `PORT`, `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`.
+- Instellingen via omgevingsvariabelen: `PORT` (standaard 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`.
 - Gezondheidscheck: `/api/health`. Ranglijst: `/api/leaderboard`.
 - De positie van spelers wordt door de client bepaald (de server controleert gevechten, loot en honger). Prima onder vrienden, niet bedoeld tegen valsspelers.

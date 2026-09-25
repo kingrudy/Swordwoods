@@ -3,7 +3,7 @@ services:
     build: .
     container_name: swordwoods
     ports:
-      - "8787:8080"          # linkerpoort = poort op je server; pas aan als 8787 ook bezet is
+      - "8787:8787"          # poort op je server : poort in de container (het spel luistert op 8787)
     volumes:
       - swordwoods-data:/data # accounts en voortgang
     environment:
@@ -11,6 +11,7 @@ services:
       # FIRST_WAVE_DELAY: 45   # seconden tot de eerste golf
       # WAVE_GAP: 120          # seconden tussen "laatste vijand weg" en de volgende golf
       # HUNGER_RATE: 0.22      # hongerpunten per seconde (100 = vol)
+      PORT: "8787"
       TZ: Europe/Amsterdam
     restart: unless-stopped
 volumes:
