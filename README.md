@@ -23,8 +23,11 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 - **Honger**: je honger loopt terug (zo'n 7,5 minuut van vol naar leeg). Bij 0 verlies je gezondheid. Doden van konijnen (1 vlees), herten (3) en everzwijnen (4, vechten terug) levert vlees op; `R` eet een stuk (+30 honger, +8 gezondheid). Bij 80+ honger doe je 15% meer schade.
 - **Kisten**: staan verspreid, herkenbaar aan een lichtzuil. Hoe verder van het startpunt, hoe beter de kans op een zeldzaam zwaard. Ze vullen zich na 10 minuten weer, bomen groeien na 4 minuten terug.
 - **Dood**: je respawnt na 8 seconden en verliest de helft van je hout.
+- **Winkel**: dicht bij het startpunt staat een kraam van Handelaar Bram (blauwe lichtzuil, en een pijl met afstand in je scherm). Alles betaal je met hout: vlees, helende drankjes (`Q`, max. 5), schilden (12/24/36% minder schade), bijl-upgrades (hakt en slaat harder) en willekeurige zwaarden van een gekozen zeldzaamheid (30 tot 600 hout). De server controleert prijs en afstand. Hout krijg je van bomen, kisten en na elke gewonnen golf.
 
-Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaan/hakken, E kist openen, R eten, 1-9 of scrollwiel item kiezen, Esc pauze. Werkt de muis niet vast, dan kun je slepen om te kijken.
+**Telefoon en tablet**: open dezelfde link in de browser. Links op het scherm sleep je om te lopen (ver slepen = rennen), rechts sleep je om rond te kijken. De knoppen zijn slaan, springen, eten, drankje, rennen en de interactieknop die verschijnt bij een kist of de winkel. Tik op een slot om een wapen te kiezen, ☰ is het pauzemenu. Speel in landschap (volledig scherm start automatisch waar de browser dat toestaat). Op mobiel staan de graphics lichter.
+
+Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaan/hakken, E kist openen of winkel gebruiken, R eten, Q drankje, 1-9 of scrollwiel item kiezen, Esc pauze. Werkt de muis niet vast, dan kun je slepen om te kijken.
 
 ## Beheer
 - Data: volume `swordwoods-data` (bestand `db.json`). Maak hier een back-up van. Wachtwoorden zijn gehasht (scrypt).

@@ -241,8 +241,11 @@ function textTexture(text, color, font, w, h) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 export function makeLabel(text, color = '#ffffff') {
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(text, color, '600 40px system-ui, sans-serif', 256, 64), transparent: true, depthWrite: false, fog: false }));
-  s.scale.set(1.15, 0.29, 1); s.renderOrder = 12;
+  const font = '600 40px system-ui, sans-serif', probe = document.createElement('canvas').getContext('2d');
+  probe.font = font;
+  const w = Math.max(256, Math.ceil(probe.measureText(text).width) + 40);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(text, color, font, w, 64), transparent: true, depthWrite: false, fog: false }));
+  s.scale.set(0.29 * (w / 64), 0.29, 1); s.renderOrder = 12;
   return s;
 }
 export function makePopup(text, color = '#ffe08a') {
@@ -255,4 +258,57 @@ export function makePopup(text, color = '#ffe08a') {
 export function colorForName(name) {
   let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.45).getHex();
+}
+
+/* ---------------------------------------------------------------- winkel met handelaar */
+const shopBeamMat = new THREE.MeshBasicMaterial({ color: 0x4aa3ff, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+function stripeTexture() {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 8;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#f1e6cf' : '#b5382f'; x.fillRect(i * 16, 0, 16, 8); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t;
+}
+/** Kraampje met handelaar. Voorkant kijkt naar +Z. */
+export function buildShop() {
+  const g = new THREE.Group();
+  const plank = std(0x8a5a2b), dark = std(0x5a3c25), light = std(0xb98a52);
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
+  add(new THREE.BoxGeometry(4.4, 0.18, 3.4), plank, 0, 0.09, 0);                                   // vloer
+  for (const [x, z] of [[-1.95, -1.45], [1.95, -1.45], [-1.95, 1.45], [1.95, 1.45]]) add(new THREE.CylinderGeometry(0.09, 0.11, 2.7, 8), dark, x, 1.5, z);
+  add(new THREE.BoxGeometry(4.0, 2.4, 0.12), plank, 0, 1.35, -1.45);                               // achterwand
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.1, 2.0, 2.9), plank, s * 1.98, 1.25, 0);    // zijwanden (laag)
+  const roof = add(new THREE.ConeGeometry(3.5, 1.2, 4), new THREE.MeshStandardMaterial({ map: stripeTexture(), roughness: 0.9 }), 0, 3.3, 0, 0, Math.PI / 4, 0);
+  roof.scale.set(1.0, 1, 0.82);
+  add(new THREE.BoxGeometry(3.6, 0.95, 0.6), dark, 0, 0.66, 1.05);                                 // toonbank
+  add(new THREE.BoxGeometry(3.9, 0.08, 0.85), light, 0, 1.17, 1.08);
+  for (const y of [1.15, 1.85]) add(new THREE.BoxGeometry(3.5, 0.07, 0.4), light, 0, y, -1.2);     // planken
+  const goods = [[0xd0403a, 0], [0x4aa3ff, 1], [0x6fd37a, 2], [0xf2c14e, 3]];
+  for (let i = 0; i < 7; i++) {
+    const [c] = goods[i % 4], y = i < 4 ? 1.27 : 1.97, x = -1.4 + (i % 4) * 0.9 + (i > 3 ? 0.4 : 0);
+    const bottle = add(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshStandardMaterial({ color: c, roughness: 0.3, emissive: c, emissiveIntensity: 0.25 }), x, y + 0.07, -1.2);
+    add(new THREE.CylinderGeometry(0.035, 0.04, 0.12, 6), light, x, y + 0.2, -1.2);
+  }
+  for (const x of [-0.9, 0.2, 1.2]) add(new THREE.SphereGeometry(0.15, 8, 6), std(0x9a4b3a), x, 1.28, 1.05);   // vlees op de toonbank
+  add(new THREE.BoxGeometry(0.7, 0.6, 0.7), light, -2.6, 0.3, 0.8, 0, 0.3, 0);                      // kisten en vat
+  add(new THREE.BoxGeometry(0.55, 0.5, 0.55), plank, -2.55, 0.85, 0.85, 0, 0.7, 0);
+  add(new THREE.CylinderGeometry(0.34, 0.3, 0.75, 12), dark, 2.6, 0.375, 0.9);
+  add(new THREE.BoxGeometry(0.9, 0.5, 0.7), light, 2.7, 0.25, -0.5, 0, -0.2, 0);
+  // bord
+  const c = document.createElement('canvas'); c.width = 256; c.height = 96; const cx = c.getContext('2d');
+  cx.fillStyle = '#4b2f17'; cx.fillRect(0, 0, 256, 96); cx.strokeStyle = '#d9a83a'; cx.lineWidth = 6; cx.strokeRect(6, 6, 244, 84);
+  cx.fillStyle = '#f2d28a'; cx.font = '700 46px system-ui, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText('WINKEL', 128, 50);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const board = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 0.08), [dark, dark, dark, dark, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }), dark]);
+  board.position.set(0, 2.45, 1.78); board.castShadow = true; g.add(board);
+  for (const x of [-1.95, 1.95]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffb84a, emissiveIntensity: 2 })); l.position.set(x, 2.1, 1.55); g.add(l); }
+  // handelaar
+  const npc = buildHumanoid({ skin: 0xd9a77a, cloth: 0x2f6b4a, hair: 0x9a9a9a, scale: 1.0 });
+  npc.group.position.set(0, 0.18, -0.15); npc.group.rotation.y = Math.PI;
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.03, 16), std(0x6b4a2a)); brim.position.y = 0.17; npc.head.add(brim);
+  const top = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.25, 12), std(0x6b4a2a)); top.position.y = 0.3; npc.head.add(top);
+  npc.armL.rotation.x = -0.5; npc.armR.rotation.x = -0.35;
+  g.add(npc.group);
+  const label = makeLabel('Handelaar Bram', '#ffd27a'); label.position.y = 4.4; label.scale.multiplyScalar(1.5); g.add(label);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.5, 16, 12, 1, true).translate(0, 8, 0), shopBeamMat); beam.position.y = 0.3; g.add(beam);
+  return { group: g, npc, beam };
 }

@@ -1,7 +1,7 @@
 // Multiplayer-client: rendert de wereld, stuurt invoer naar de server en toont wat de server meldt.
 import * as THREE from 'three';
 import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
-import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS } from './items.js';
+import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS } from './items.js';
 import * as M from './models.js';
 
 const $ = id => document.getElementById(id);
@@ -17,10 +17,14 @@ export async function startGame({ net, joined, user }) {
   const W = createWorld(seed);
   const { heightAt, slopeAt, vnoise } = W;
   const rng = mulberry32(seed * 3 + 1);
+  // Telefoon/tablet: aanraakbesturing en lichtere graphics
+  const isTouch = new URLSearchParams(location.search).get('touch') === '1' || matchMedia('(pointer: coarse)').matches;
+  const LOW = isTouch;
+  if (isTouch) document.body.classList.add('touch');
 
   /* ================================================================ renderer, scenes */
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, LOW ? 1.5 : 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -54,7 +58,7 @@ export async function startGame({ net, joined, user }) {
 
   scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x9bb872, 1.5));
   const sun = new THREE.DirectionalLight(0xfff0d2, 2.6);
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = true; sun.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048);
   const sc = sun.shadow.camera; sc.left = -48; sc.right = 48; sc.top = 48; sc.bottom = -48; sc.near = 1; sc.far = 220;
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
   scene.add(sun, sun.target);
@@ -92,16 +96,17 @@ export async function startGame({ net, joined, user }) {
   // gras, bloemen, rotsen, wolken (alleen sfeer)
   {
     const dummy = new THREE.Object3D(), c = new THREE.Color();
-    const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.09, 0.55, 5, 1).translate(0, 0.27, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), 14000);
-    const flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 6, 5).translate(0, 0.42, 0), new THREE.MeshStandardMaterial({ roughness: 0.7 }), 1400);
+    const TUFT_N = LOW ? 5000 : 14000, FLOW_N = LOW ? 600 : 1400;
+    const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.09, 0.55, 5, 1).translate(0, 0.27, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), TUFT_N);
+    const flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 6, 5).translate(0, 0.42, 0), new THREE.MeshStandardMaterial({ roughness: 0.7 }), FLOW_N);
     let nt = 0, nf = 0;
-    for (let tries = 0; tries < 60000 && (nt < 14000 || nf < 1400); tries++) {
+    for (let tries = 0; tries < 60000 && (nt < TUFT_N || nf < FLOW_N); tries++) {
       const x = (rng() - 0.5) * (WORLD - 20), z = (rng() - 0.5) * (WORLD - 20), h = heightAt(x, z);
-      if (h < 0.7 || h > 12 || slopeAt(x, z) > 0.6) continue;
+      if (h < 0.7 || h > 12 || slopeAt(x, z) > 0.6 || Math.hypot(x - W.shop.x, z - W.shop.z) < 3.6) continue;
       dummy.position.set(x, h - 0.03, z); dummy.rotation.set((rng() - 0.5) * 0.4, rng() * 6.28, (rng() - 0.5) * 0.4);
       const s = 0.45 + rng() * 0.6; dummy.scale.set(s, s * (0.8 + rng() * 0.7), s); dummy.updateMatrix();
-      if (nf < 1400 && rng() < 0.1) { flowers.setMatrixAt(nf, dummy.matrix); c.setHSL([0.0, 0.12, 0.62, 0.86, 0.15][Math.floor(rng() * 5)], 0.75, 0.62); flowers.setColorAt(nf, c); nf++; }
-      else if (nt < 14000) { tufts.setMatrixAt(nt, dummy.matrix); c.setHSL(0.24 + rng() * 0.06, 0.55, 0.22 + rng() * 0.12); tufts.setColorAt(nt, c); nt++; }
+      if (nf < FLOW_N && rng() < 0.1) { flowers.setMatrixAt(nf, dummy.matrix); c.setHSL([0.0, 0.12, 0.62, 0.86, 0.15][Math.floor(rng() * 5)], 0.75, 0.62); flowers.setColorAt(nf, c); nf++; }
+      else if (nt < TUFT_N) { tufts.setMatrixAt(nt, dummy.matrix); c.setHSL(0.24 + rng() * 0.06, 0.55, 0.22 + rng() * 0.12); tufts.setColorAt(nt, c); nt++; }
     }
     tufts.count = nt; flowers.count = nf; tufts.frustumCulled = false; flowers.frustumCulled = false; scene.add(tufts, flowers);
 
@@ -109,7 +114,7 @@ export async function startGame({ net, joined, user }) {
     let n = 0;
     for (let tries = 0; tries < 6000 && n < 260; tries++) {
       const x = (rng() - 0.5) * (WORLD - 30), z = (rng() - 0.5) * (WORLD - 30), h = heightAt(x, z);
-      if (h < -0.3 || Math.hypot(x, z) < 8) continue;
+      if (h < -0.3 || Math.hypot(x, z) < 8 || Math.hypot(x - W.shop.x, z - W.shop.z) < 7) continue;
       dummy.position.set(x, h + 0.05, z); dummy.rotation.set(rng() * 0.6, rng() * 6.28, rng() * 0.6);
       const s = 0.4 + Math.pow(rng(), 2.5) * 2.6; dummy.scale.set(s * (0.8 + rng() * 0.6), s * 0.8, s * (0.8 + rng() * 0.6)); dummy.updateMatrix();
       rocks.setMatrixAt(n++, dummy.matrix);
@@ -162,6 +167,8 @@ export async function startGame({ net, joined, user }) {
   function chestReset(i) { const o = chestObjs[i]; if (!o) return; o.opened = false; o.opening = false; o.pivot.rotation.x = 0; o.beam.visible = true; }
   for (const i of joined.felled) fellInstant(i);
   for (const i of joined.chests) chestOpenInstant(i);
+  const shopObj = M.buildShop();
+  shopObj.group.position.set(W.shop.x, W.shop.y - 0.05, W.shop.z); shopObj.group.rotation.y = W.shop.rotY; scene.add(shopObj.group);
   await nextFrame();
 
   /* ================================================================ deeltjes en geluid */
@@ -224,6 +231,8 @@ export async function startGame({ net, joined, user }) {
     hurt: () => { noise(0.25, 0.3, 500); tone(110, 0.25, 'sawtooth', 0.12, -60); },
     fall: () => { noise(0.9, 0.3, 350); tone(80, 0.6, 'sine', 0.25, -40); },
     creak: () => tone(140, 0.5, 'sawtooth', 0.05, 90),
+    coin: () => { tone(988, 0.08, 'square', 0.05); tone(1319, 0.16, 'square', 0.05, 0, 0.08); },
+    drink: () => { noise(0.2, 0.1, 900); tone(260, 0.2, 'sine', 0.08, 140); },
     eat: () => { noise(0.08, 0.12, 1200); tone(300, 0.09, 'triangle', 0.08, 120, 0.09); },
     kill: () => tone(180, 0.25, 'triangle', 0.1, -100),
     horn: () => { tone(120, 1.2, 'sawtooth', 0.09, 10); tone(180, 1.2, 'sawtooth', 0.06, 10, 0.02); },
@@ -232,7 +241,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ status en HUD */
   const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: 0.4, pitch: 0, onGround: true, bob: 0 };
-  const inv = { wood: 0, meat: 0, swords: [], equip: 0, stats: {} };
+  const inv = { wood: 0, meat: 0, potions: 0, up: { shield: 0, axe: 0 }, swords: [], equip: 0, stats: {} };
   const you = { hp: 100, hu: 80, sc: 0, rs: 0 };
   const wave = { n: 0, ph: 0, t: 0, left: 0 };
   const names = new Map(joined.players.map(p => [p.id, p.name]));
@@ -255,8 +264,10 @@ export async function startGame({ net, joined, user }) {
   function renderInv() {
     $('wood').textContent = '🪵 Hout: ' + inv.wood;
     $('meat').innerHTML = '🍖 Vlees: ' + inv.meat + ' <small style="opacity:.6">(R = eten)</small>';
+    $('potion').innerHTML = '🧪 Drank: ' + inv.potions + ' <small style="opacity:.6">(Q)</small>';
+    $('tb-eat').lastElementChild.textContent = inv.meat; $('tb-drink').lastElementChild.textContent = inv.potions;
     const all = items(), hb = $('hotbar'); hb.innerHTML = '';
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < (isTouch ? Math.max(all.length, 2) : 9); i++) {     // op touch alleen de slots die je hebt
       const it = all[i], d = document.createElement('div');
       d.className = 'slot' + (i === inv.equip ? ' sel' : ''); d.innerHTML = '<small>' + (i + 1) + '</small>';
       if (it) {
@@ -382,8 +393,8 @@ export async function startGame({ net, joined, user }) {
     const hint = $('prompt');
   });
   net.on('inv', m => {
-    inv.wood = m.wood; inv.meat = m.meat; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
-    renderInv(); rebuildHeld();
+    inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
+    renderInv(); rebuildHeld(); if (shopOpen) renderShop();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
   net.on('pjoin', m => { names.set(m.id, m.name); toast('<b>' + esc(m.name) + '</b> doet mee.', '#6fd37a'); });
@@ -415,7 +426,7 @@ export async function startGame({ net, joined, user }) {
       if (m.res === 'replaced') html += '<br><small>Rugzak vol: ' + esc(m.dropped.name) + ' weggegooid.</small>';
       else if (m.res === 'left') html += '<br><small>Zwakker dan wat je al hebt, achtergelaten.</small>';
       else if (m.auto) html += '<br><small>Nu je beste zwaard, automatisch uitgerust.</small>';
-      if (m.src === 'monster') html = 'Buit van een monster!<br>' + html; else if (m.src === 'wave') html = 'Golfbeloning!<br>' + html;
+      if (m.src === 'monster') html = 'Buit van een monster!<br>' + html; else if (m.src === 'wave') html = 'Golfbeloning!<br>' + html; else if (m.src === 'shop') html = 'Gekocht in de winkel!<br>' + html;
       toast(html, R.color); sfx.reveal(sw.rarity);
       const co = pendingReveal != null && m.src === 'chest' ? chestObjs[pendingReveal] : null;
       if (co) {
@@ -434,6 +445,8 @@ export async function startGame({ net, joined, user }) {
       case 'chest': { const o = chestObjs[m.i]; if (!o || o.opened) break; o.opened = true; o.opening = true; o.t = 0; o.beam.visible = false; sfx.creak(); if (m.by === myId) pendingReveal = m.i; break; }
       case 'chestBack': chestReset(m.i); break;
       case 'ate': sfx.eat(); break;
+      case 'drank': sfx.drink(); break;
+      case 'bought': sfx.coin(); break;
       case 'hit': {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
         addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg, m.e === 'm' ? '#ffe08a' : '#ffffff');
@@ -448,13 +461,18 @@ export async function startGame({ net, joined, user }) {
   net.on('_close', () => { /* main.js toont de melding */ });
 
   /* ================================================================ invoer */
-  const keys = {}; let locked = false, soft = false;
+  const keys = {}; let locked = false, soft = false, shopOpen = false;
+  const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false };
   const drag = { down: false, moved: 0 };
   const veil = $('veil');
   function showVeil(on) { veil.classList.toggle('on', on); }
   function enterSoft() { if (locked) return; soft = true; locked = true; showVeil(false); }
   function requestLock() {
     audio(); if (actx && actx.state === 'suspended') actx.resume();
+    if (isTouch) {      // geen pointer lock op touch: direct spelen en (waar mogelijk) volledig scherm + landschap
+      try { const p = document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }); if (p && p.then) p.then(() => screen.orientation?.lock?.('landscape')?.catch?.(() => {})).catch(() => {}); } catch {}
+      enterSoft(); return;
+    }
     const el = renderer.domElement;
     if (!el.requestPointerLock) { enterSoft(); return; }
     try { const r = el.requestPointerLock(); if (r && r.catch) r.catch(enterSoft); } catch { enterSoft(); }
@@ -465,27 +483,33 @@ export async function startGame({ net, joined, user }) {
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === renderer.domElement;
     if (locked) soft = false;
-    showVeil(!locked);
+    showVeil(!locked && !shopOpen);
     if (!locked) for (const k in keys) keys[k] = false;
   });
   document.addEventListener('mousemove', e => {
-    if (!locked) return;
+    if (!locked || isTouch || shopOpen) return;
     if (soft) { if (!drag.down) return; drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY); }
     player.yaw -= clamp(e.movementX, -120, 120) * 0.0022;
     player.pitch = clamp(player.pitch - clamp(e.movementY, -120, 120) * 0.0022, -1.45, 1.45);
   });
   document.addEventListener('mousedown', e => {
-    if (!locked || e.button !== 0) return;
+    if (!locked || e.button !== 0 || isTouch || shopOpen) return;
     if (soft) { drag.down = true; drag.moved = 0; } else startSwing();
   });
-  document.addEventListener('mouseup', e => { if (soft && drag.down && e.button === 0) { drag.down = false; if (drag.moved < 6) startSwing(); } });
-  document.addEventListener('wheel', e => { if (!locked) return; const n = items().length; equipSlot((inv.equip + (e.deltaY > 0 ? 1 : -1) + n) % n); }, { passive: true });
+  document.addEventListener('mouseup', e => { if (!isTouch && soft && drag.down && e.button === 0) { drag.down = false; if (drag.moved < 6) startSwing(); } });
+  document.addEventListener('wheel', e => { if (!locked || shopOpen) return; const n = items().length; equipSlot((inv.equip + (e.deltaY > 0 ? 1 : -1) + n) % n); }, { passive: true });
   addEventListener('keydown', e => {
     keys[e.code] = true;
     if (e.code === 'Space') e.preventDefault();
+    if (shopOpen) {
+      if (e.code === 'Escape') { closeShop(false); showVeil(!locked); }
+      else if (e.code === 'KeyE' || e.code === 'KeyB') closeShop(true);
+      return;
+    }
     if (!locked) return;
     if (soft && e.code === 'Escape') { locked = false; drag.down = false; showVeil(true); for (const k in keys) keys[k] = false; return; }
-    if (e.code === 'KeyE') tryOpen();
+    if (e.code === 'KeyE') interact();
+    if (e.code === 'KeyQ') net.send({ t: 'drink' });
     if (e.code === 'KeyR') net.send({ t: 'eat' });
     if (e.code === 'KeyF') startSwing();
     if (/^Digit[1-9]$/.test(e.code)) equipSlot(+e.code[5] - 1);
@@ -498,7 +522,7 @@ export async function startGame({ net, joined, user }) {
 
   const swing = { t: 1, cd: 0 };
   function startSwing() {
-    if (dead || swing.t < 1 || swing.cd > 0) return;
+    if (dead || shopOpen || swing.t < 1 || swing.cd > 0) return;
     const it = items()[inv.equip] || AXE;
     swing.t = 0; swing.cd = 0.5 / (it.speed || 1) * 0.92;
     sfx.swing(); net.send({ t: 'swing' });
@@ -515,17 +539,103 @@ export async function startGame({ net, joined, user }) {
     return best;
   }
   function tryOpen() { if (dead) return; const o = findChest(); if (o) net.send({ t: 'open', i: o.c.idx }); }
+  function nearShop() {
+    const dx = W.shop.x - player.x, dz = W.shop.z - player.z, d = Math.hypot(dx, dz);
+    if (d > 5.6) return false;
+    const f = fwd(); return (dx * f.x + dz * f.z) / (d || 1) > 0.15;
+  }
+  function interact() { if (dead || shopOpen) return; if (findChest()) tryOpen(); else if (nearShop()) openShop(); }
+
+  /* ================================================================ winkel */
+  const shopEl = $('shop');
+  function renderShop() {
+    $('shop-wood').textContent = '🪵 ' + inv.wood + ' hout';
+    let html = '', group = '';
+    for (const it of SHOP) {
+      if (it.group !== group) { group = it.group; html += (html ? '</div>' : '') + '<div class="shop-group">' + group + '</div><div class="shop-items">'; }
+      let state = 'ok', label = 'Koop · ' + it.cost + ' hout';
+      if (it.kind === 'shield' || it.kind === 'axe') {
+        const cur = inv.up[it.kind];
+        if (it.level <= cur) { state = 'owned'; label = 'Gekocht'; } else if (it.level > cur + 1) { state = 'locked'; label = 'Koop eerst niveau ' + (it.level - 1); }
+      } else if (it.kind === 'potion' && inv.potions >= MAX_POTIONS) { state = 'owned'; label = 'Vol (' + MAX_POTIONS + ')'; }
+      const dis = state !== 'ok' || inv.wood < it.cost;
+      const col = it.kind === 'sword' ? RARITIES[it.rarity].color : '';
+      html += '<div class="item' + (state === 'owned' ? ' owned' : '') + '"><b>' + (col ? '<span class="rar" style="color:' + col + '"></span>' : '') + esc(it.name) + '</b><small>' + esc(it.desc) + '</small>' +
+        '<button class="buy" type="button" data-buy="' + it.id + '"' + (dis ? ' disabled' : '') + '>' + label + '</button></div>';
+    }
+    $('shop-list').innerHTML = html + '</div>';
+  }
+  function openShop() {
+    if (shopOpen || dead) return;
+    shopOpen = true; player.vx = player.vz = 0; virt.x = virt.y = 0; virt.attack = false; virt.jump = false;
+    renderShop(); shopEl.classList.add('on'); showVeil(false);
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  function closeShop(relock = true) {
+    if (!shopOpen) return;
+    shopOpen = false; shopEl.classList.remove('on');
+    if (relock && !isTouch && !soft) requestLock();
+  }
+  $('shop-close').onclick = () => closeShop(true);
+  $('shop-list').addEventListener('click', e => { const b = e.target.closest('[data-buy]'); if (b && !b.disabled) net.send({ t: 'buy', id: b.dataset.buy }); });
+
+  /* ================================================================ aanraakbesturing */
+  function setupTouch() {
+    const tz = $('tz'), base = $('joybase'), knob = $('joyknob'), R = 56;
+    let joyId = null, ox = 0, oy = 0, lookId = null, lx = 0, ly = 0;
+    tz.addEventListener('pointerdown', e => {
+      if (!locked || dead || shopOpen) return;
+      e.preventDefault(); try { tz.setPointerCapture(e.pointerId); } catch {}
+      if (e.clientX < innerWidth * 0.45 && joyId === null) {
+        joyId = e.pointerId; ox = e.clientX; oy = e.clientY;
+        base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.classList.add('on'); knob.style.transform = 'translate(0,0)';
+      } else if (lookId === null) { lookId = e.pointerId; lx = e.clientX; ly = e.clientY; }
+    });
+    tz.addEventListener('pointermove', e => {
+      if (e.pointerId === joyId) {
+        let dx = e.clientX - ox, dy = e.clientY - oy; const d = Math.hypot(dx, dy);
+        virt.sprint = d > R * 1.3;
+        if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+        virt.x = dx / R; virt.y = dy / R; knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      } else if (e.pointerId === lookId) {
+        player.yaw -= (e.clientX - lx) * 0.0052; player.pitch = clamp(player.pitch - (e.clientY - ly) * 0.0052, -1.45, 1.45);
+        lx = e.clientX; ly = e.clientY;
+      }
+    });
+    const end = e => {
+      if (e.pointerId === joyId) { joyId = null; virt.x = virt.y = 0; virt.sprint = false; base.classList.remove('on'); }
+      if (e.pointerId === lookId) lookId = null;
+    };
+    tz.addEventListener('pointerup', end); tz.addEventListener('pointercancel', end);
+    const press = (id, down, up) => {
+      const b = $(id);
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('down'); down(); });
+      const rel = () => { if (b.classList.contains('down')) { b.classList.remove('down'); if (up) up(); } };
+      b.addEventListener('pointerup', rel); b.addEventListener('pointercancel', rel); b.addEventListener('pointerleave', rel);
+    };
+    press('tb-atk', () => { virt.attack = true; startSwing(); }, () => { virt.attack = false; });
+    press('tb-jump', () => { virt.jump = true; }, () => { virt.jump = false; });
+    press('tb-use', () => interact());
+    press('tb-eat', () => net.send({ t: 'eat' }));
+    press('tb-drink', () => net.send({ t: 'drink' }));
+    press('tb-sprint', () => { virt.toggle = !virt.toggle; $('tb-sprint').classList.toggle('on', virt.toggle); });
+    press('tb-menu', () => { locked = false; virt.x = virt.y = 0; virt.attack = false; base.classList.remove('on'); showVeil(true); });
+    $('hotbar').addEventListener('pointerdown', e => { const sl = e.target.closest('.slot'); if (sl) { e.preventDefault(); equipSlot([...$('hotbar').children].indexOf(sl)); } });
+    document.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  if (isTouch) setupTouch();
 
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
-    if (locked && !dead) {
+    if (locked && !dead && !shopOpen) {
       const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
-      const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
-      const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+      const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y;   // joystick omhoog = vooruit
+      const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x;
       let wx = f.x * iz + rx * ix, wz = f.z * iz + rz * ix;
-      const wl = Math.hypot(wx, wz); if (wl > 0) { wx /= wl; wz /= wl; }
-      const sp = ((keys.ShiftLeft || keys.ShiftRight) ? 9 : 5.4) * (wl > 0 ? 1 : 0), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
+      let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
+      const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle;
+      const sp = (run ? 9 : 5.4) * wl, k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
       player.vx += (wx * sp - player.vx) * k; player.vz += (wz * sp - player.vz) * k;
       let nx = player.x + player.vx * dt, nz = player.z + player.vz * dt;
       const deep = (x, z) => heightAt(x, z) < WATER - 0.35;
@@ -540,7 +650,7 @@ export async function startGame({ net, joined, user }) {
       const gnd = heightAt(player.x, player.z);
       if (player.onGround) {
         if (gnd < player.y - 0.7) player.onGround = false;
-        else { player.y = gnd; if (keys.Space) { player.vy = 7.6; player.onGround = false; } }
+        else { player.y = gnd; if (keys.Space || virt.jump) { player.vy = 7.6; player.onGround = false; } }
       }
       if (!player.onGround) { player.vy -= 22 * dt; player.y += player.vy * dt; if (player.y <= gnd && player.vy <= 0) { player.y = gnd; player.vy = 0; player.onGround = true; } }
       player.bob += Math.hypot(player.vx, player.vz) * dt * 1.7;
@@ -625,11 +735,23 @@ export async function startGame({ net, joined, user }) {
     }
 
     // aanwijzing
-    const pr = $('prompt'), ch = locked && !dead ? findChest() : null;
-    if (ch) { pr.innerHTML = '<b>E</b> · kist openen'; pr.classList.add('on'); }
-    else if (locked && !dead && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
+    if (virt.attack && locked && !dead && !shopOpen) startSwing();
+    const pr = $('prompt'), ch = locked && !dead && !shopOpen ? findChest() : null, sh = !ch && locked && !dead && !shopOpen && nearShop();
+    if (isTouch) { const tb = $('tb-use'); tb.classList.toggle('on', !!(ch || sh)); tb.textContent = sh ? '🏪' : '🧰'; }
+    if (ch) { pr.innerHTML = isTouch ? 'Kist openen' : '<b>E</b> · kist openen'; pr.classList.add('on'); }
+    else if (sh) { pr.innerHTML = isTouch ? 'Winkel openen' : '<b>E</b> · winkel openen'; pr.classList.add('on'); }
+    else if (locked && !dead && !shopOpen && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
     else pr.classList.remove('on');
 
+    if (Math.floor(time * 5) !== Math.floor((time - dt) * 5)) {
+      const dx = W.shop.x - player.x, dz = W.shop.z - player.z, d = Math.hypot(dx, dz), chip = $('shopchip');
+      chip.classList.add('on');
+      if (d < 9) chip.textContent = '🏪 Winkel hier';
+      else {
+        const f = fwd(), ang = Math.atan2(dx * Math.cos(player.yaw) + dz * -Math.sin(player.yaw), dx * f.x + dz * f.z) * 180 / Math.PI;
+        chip.innerHTML = '<span class="arr" style="transform:rotate(' + ang.toFixed(0) + 'deg)">▲</span>🏪 Winkel · ' + Math.round(d) + ' m';
+      }
+    }
     for (const c of clouds) { c.position.x += dt * 2.2; if (c.position.x > 480) c.position.x = -480; }
     water.position.y = WATER + Math.sin(time * 0.6) * 0.06;
     chips.update(dt); leaves.update(dt); sparkles.update(dt); blood.update(dt);
@@ -640,7 +762,7 @@ export async function startGame({ net, joined, user }) {
   $('hud').classList.add('on');
   $('veil').querySelector('h2').textContent = 'Welkom, ' + user;
   $('veil').querySelector('p').textContent = 'Kamer: ' + joined.room.name + '. Klik om te beginnen. Het spel loopt door als je pauzeert.';
-  $('btn-resume').textContent = 'Start';
+  $('btn-resume').textContent = isTouch ? 'Tik om te starten' : 'Start';
   showVeil(true);
   let last = performance.now();
   function frame(now) {
@@ -650,6 +772,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
+  window.__game = { isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

@@ -60,7 +60,7 @@ function renderLobby() {
   $('lb-hello').textContent = 'Welkom terug, ' + myName + '. Kies een kamer of maak er zelf een.';
   const s = save.stats || {};
   const cells = [['Beste golf', s.bestWave | 0], ['Punten', s.score | 0], ['Monsters verslagen', s.kills | 0], ['Dieren gejaagd', s.animals | 0],
-    ['Bomen omgehakt', s.trees | 0], ['Kisten geopend', s.chests | 0], ['Hout', save.wood | 0], ['Vlees', save.meat | 0], ['Keer gevallen', s.deaths | 0], ['Speeltijd', fmtTime(s.playSec | 0)]];
+    ['Bomen omgehakt', s.trees | 0], ['Kisten geopend', s.chests | 0], ['Hout', save.wood | 0], ['Vlees', save.meat | 0], ['Drankjes', save.potions | 0], ['Hout uitgegeven', s.spent | 0], ['Schild', 'niveau ' + ((save.up && save.up.shield) | 0)], ['Bijl', 'niveau ' + ((save.up && save.up.axe) | 0)], ['Keer gevallen', s.deaths | 0], ['Speeltijd', fmtTime(s.playSec | 0)]];
   $('my-stats').innerHTML = cells.map(([k, v]) => '<div class="stat"><b>' + esc(v) + '</b><span>' + k + '</span></div>').join('');
   $('my-swords').innerHTML = (save.swords || []).length
     ? save.swords.map(w => '<span class="sw" style="color:' + RARITIES[w.rarity].color + '">' + esc(w.name) + ' · ' + w.damage + '</span>').join('')

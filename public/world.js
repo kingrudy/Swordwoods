@@ -49,6 +49,22 @@ export function createWorld(seed) {
     return len(dx, dz);
   }
 
+  // ---- winkel: vaste, vlakke plek dicht bij de start (deterministisch, zonder rng)
+  const shop = (() => {
+    let best = null, bestScore = 1e9;
+    for (let r = 16; r <= 34; r += 2) for (let k = 0; k < 24; k++) {
+      const a = k / 24 * Math.PI * 2 + 0.6, x = r * Math.cos(a), z = r * Math.sin(a), h = heightAt(x, z);
+      if (h < 1.2) continue;
+      let dev = 0;
+      for (const [dx, dz] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) dev = Math.max(dev, Math.abs(heightAt(x + dx, z + dz) - h));
+      const score = dev * 10 + r * 0.05;
+      if (score < bestScore) { bestScore = score; best = { x, z, y: h }; }
+    }
+    best.rotY = Math.atan2(-best.x, -best.z);   // kijkt naar het startpunt
+    best.r = 2.6; best.solid = true;
+    return best;
+  })();
+
   // ---- bomen en kisten (eigen rng, los van decoratie)
   const rng = mulberry32(seed * 13 + 5);
   const grid = new Map();
@@ -59,11 +75,12 @@ export function createWorld(seed) {
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = grid.get((cx + i) + ',' + (cz + j)); if (a) for (const o of a) fn(o); }
   };
 
+  gAdd(shop);
   const trees = [];
   for (let tries = 0; tries < 20000 && trees.length < 420; tries++) {
     const x = (rng() - 0.5) * (WORLD - 30), z = (rng() - 0.5) * (WORLD - 30);
     const h = heightAt(x, z);
-    if (h < 0.9 || h > 13 || slopeAt(x, z) > 0.55 || len(x, z) < 7) continue;
+    if (h < 0.9 || h > 13 || slopeAt(x, z) > 0.55 || len(x, z) < 7 || len(x - shop.x, z - shop.z) < 9) continue;
     if (vnoise(x * 0.03 + 9, z * 0.03 + 9) < 0.35 && rng() < 0.75) continue;
     let ok = true;
     gNear(x, z, o => { if (len(o.x - x, o.z - z) < 3.2) ok = false; });
@@ -78,7 +95,7 @@ export function createWorld(seed) {
   for (let tries = 0; tries < 20000 && chests.length < 46; tries++) {
     const r = 14 + rng() * (HALF * 0.82 - 14), a = rng() * 6.28;
     const x = r * Math.cos(a), z = r * Math.sin(a), h = heightAt(x, z);
-    if (h < 0.8 || h > 15 || slopeAt(x, z) > 0.45) continue;
+    if (h < 0.8 || h > 15 || slopeAt(x, z) > 0.45 || len(x - shop.x, z - shop.z) < 9) continue;
     let ok = true;
     gNear(x, z, o => { if (len(o.x - x, o.z - z) < 3.2) ok = false; });
     for (const c of chests) if (len(c.x - x, c.z - z) < 24) ok = false;
@@ -98,5 +115,5 @@ export function createWorld(seed) {
     return null;
   }
 
-  return { seed, heightAt, slopeAt, trees, chests, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
+  return { seed, heightAt, slopeAt, trees, chests, shop, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
 }

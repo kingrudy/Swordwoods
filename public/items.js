@@ -25,6 +25,11 @@ export function rollSword(luck, rnd = Math.random) {
   const ws = RARITIES.map((r, i) => r.w * (1 + luck * i * 1.6));
   let t = rnd() * ws.reduce((a, b) => a + b, 0), ri = 0;
   for (; ri < ws.length - 1; ri++) { if (t < ws[ri]) break; t -= ws[ri]; }
+  return rollSwordOfRarity(ri, rnd);
+}
+
+/** Zwaard van een vaste zeldzaamheid (winkel). */
+export function rollSwordOfRarity(ri, rnd = Math.random) {
   const R = RARITIES[ri], bi = Math.floor(rnd() * BASES.length), B = BASES[bi];
   return {
     type: 'sword', rarity: ri, base: bi,
@@ -55,4 +60,25 @@ export const ANIMALS = [
   { key: 'konijn',    name: 'Konijn',    hp: 8,  speed: 7.5, flee: 15, meat: 1, r: 0.3 },
   { key: 'hert',      name: 'Hert',      hp: 24, speed: 9.5, flee: 22, meat: 3, r: 0.6 },
   { key: 'everzwijn', name: 'Everzwijn', hp: 42, speed: 5.5, flee: 0,  meat: 4, r: 0.6, dmg: 11 },
+];
+
+// ---------------------------------------------------------------- winkel
+// Alles kost hout. De server controleert prijs, afstand en limieten; de client toont alleen deze lijst.
+export const SHIELD_REDUCE = [0, 0.12, 0.24, 0.36];   // minder schade per schildniveau
+export const AXE_LEVELS = 3;                          // bijl-upgrades: +1 schade op bomen, +2 op wezens per niveau
+export const MAX_POTIONS = 5;
+export const SHOP = [
+  { id: 'meat1',   group: 'Eten',      name: 'Vlees',            desc: 'Eet het tegen honger (R).', cost: 3,   kind: 'meat', n: 1 },
+  { id: 'meat5',   group: 'Eten',      name: 'Vleespakket',      desc: 'Vijf stukken vlees.',       cost: 13,  kind: 'meat', n: 5 },
+  { id: 'potion',  group: 'Drankjes',  name: 'Helende drank',    desc: 'Herstelt 50 gezondheid (Q). Je kunt er 5 dragen.', cost: 8, kind: 'potion' },
+  { id: 'shield1', group: 'Uitrusting', name: 'Houten schild',   desc: '12% minder schade.',        cost: 20,  kind: 'shield', level: 1 },
+  { id: 'shield2', group: 'Uitrusting', name: 'Beslagen schild', desc: '24% minder schade.',        cost: 60,  kind: 'shield', level: 2 },
+  { id: 'shield3', group: 'Uitrusting', name: 'IJzeren schild',  desc: '36% minder schade.',        cost: 140, kind: 'shield', level: 3 },
+  { id: 'axe1',    group: 'Uitrusting', name: 'Scherpe bijl',    desc: 'Hakt sneller, doet meer schade.', cost: 15, kind: 'axe', level: 1 },
+  { id: 'axe2',    group: 'Uitrusting', name: 'Gesmede bijl',    desc: 'Nog scherper.',             cost: 40,  kind: 'axe', level: 2 },
+  { id: 'axe3',    group: 'Uitrusting', name: 'Meesterbijl',     desc: 'De beste bijl van de smid.', cost: 90, kind: 'axe', level: 3 },
+  { id: 'sword1',  group: 'Zwaarden',  name: 'Zwaard van goede kwaliteit', desc: 'Willekeurig zwaard, zeldzaamheid Goed.',     cost: 30,  kind: 'sword', rarity: 1 },
+  { id: 'sword2',  group: 'Zwaarden',  name: 'Zeldzaam zwaard',  desc: 'Willekeurig zwaard, zeldzaamheid Zeldzaam.', cost: 85,  kind: 'sword', rarity: 2 },
+  { id: 'sword3',  group: 'Zwaarden',  name: 'Episch zwaard',    desc: 'Willekeurig zwaard, zeldzaamheid Episch.',   cost: 220, kind: 'sword', rarity: 3 },
+  { id: 'sword4',  group: 'Zwaarden',  name: 'Legendarisch zwaard', desc: 'Willekeurig zwaard, zeldzaamheid Legendarisch.', cost: 600, kind: 'sword', rarity: 4 },
 ];

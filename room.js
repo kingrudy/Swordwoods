@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer: spelers, monsterjacht in golven, dieren, honger, bomen en kisten.
 
 import { createWorld, HALF, WATER } from './public/world.js';
-import { rollSword, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode } from './public/items.js';
+import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS } from './public/items.js';
 
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 export const CFG = {
@@ -28,7 +28,8 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
 export function ensureSave(u) {
   const s = u.save || (u.save = {});
-  s.wood = s.wood | 0; s.meat = s.meat | 0;
+  s.wood = s.wood | 0; s.meat = s.meat | 0; s.potions = clamp(s.potions | 0, 0, MAX_POTIONS);
+  s.up = Object.assign({ shield: 0, axe: 0 }, s.up || {}); s.up.shield = clamp(s.up.shield | 0, 0, 3); s.up.axe = clamp(s.up.axe | 0, 0, 3);
   if (!Array.isArray(s.swords)) s.swords = [];
   s.equip = clamp(s.equip | 0, 0, s.swords.length);
   s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0 }, s.stats || {});
@@ -69,7 +70,7 @@ export class Room {
   }
   sendInv(P) {
     const s = P.u.save;
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, swords: s.swords, equip: s.equip, stats: s.stats });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, up: s.up, swords: s.swords, equip: s.equip, stats: s.stats });
   }
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
 
@@ -123,6 +124,8 @@ export class Room {
         break;
       }
       case 'eat': this.eat(P); break;
+      case 'drink': this.drink(P); break;
+      case 'buy': this.buy(P, String(m.id)); break;
     }
   }
 
@@ -161,13 +164,13 @@ export class Room {
     if (!best) return;
     const full = P.hunger >= 80 ? 1.15 : 1;   // goed gevoed = iets sterker
     if (kind === 'm' || kind === 'a') {
-      const dmg = (it.type === 'axe' ? AXE.damage : it.damage) * full * (0.9 + Math.random() * 0.2);
+      const dmg = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2);
       best.hp -= dmg; best.stun = 0.18;
       if (kind === 'a') { best.angry = true; best.hurtT = this.T; }
       this.bc({ t: 'ev', k: 'hit', e: kind, id: best.id, dmg: Math.round(dmg), x: r1(best.x), z: r1(best.z) });
       if (best.hp <= 0) { if (kind === 'm') this.killMonster(best, P); else this.killAnimal(best, P); }
     } else {
-      const dmg = it.type === 'axe' ? 1 : Math.max(0.15, it.damage / 60);
+      const dmg = it.type === 'axe' ? 1 + s.up.axe : Math.max(0.15, it.damage / 60);
       this.treeHp[best.idx] -= dmg;
       this.bc({ t: 'ev', k: 'chop', i: best.idx });
       if (this.treeHp[best.idx] <= 0) {
@@ -191,6 +194,48 @@ export class Room {
     P.hunger = Math.min(100, P.hunger + 30);
     P.hp = Math.min(100, P.hp + 8);
     P.conn.send({ t: 'ev', k: 'ate' });
+    this.sendInv(P); this.markDirty();
+  }
+
+  drink(P) {
+    const s = P.u.save;
+    if (P.dead || this.T - (P.lastDrink || -9) < 1) return;
+    if (s.potions <= 0) { this.toast(P, 'Je hebt geen helende drank. Koop er een in de winkel.', '#ff9c8a'); return; }
+    if (P.hp >= 100) { this.toast(P, 'Je gezondheid is al vol.', '#bbb'); return; }
+    P.lastDrink = this.T; s.potions--; P.hp = Math.min(100, P.hp + 50);
+    P.conn.send({ t: 'ev', k: 'drank' });
+    this.sendInv(P); this.markDirty();
+  }
+
+  buy(P, id) {
+    const s = P.u.save, it = SHOP.find(x => x.id === id), sh = this.world.shop;
+    if (!it || P.dead) return;
+    if (len(sh.x - P.x, sh.z - P.z) > 7.5) { this.toast(P, 'Je staat te ver van de winkel.', '#ff9c8a'); return; }
+    if (s.wood < it.cost) { this.toast(P, 'Te weinig hout: je hebt ' + s.wood + ', dit kost ' + it.cost + '.', '#ff9c8a'); return; }
+    const fail = msg => this.toast(P, msg, '#ff9c8a');
+    switch (it.kind) {
+      case 'meat': s.meat += it.n; break;
+      case 'potion':
+        if (s.potions >= MAX_POTIONS) return fail('Je draagt al ' + MAX_POTIONS + ' drankjes.');
+        s.potions++; break;
+      case 'shield': case 'axe': {
+        const key = it.kind, cur = s.up[key];
+        if (it.level <= cur) return fail('Dat heb je al.');
+        if (it.level > cur + 1) return fail('Koop eerst het vorige niveau.');
+        s.up[key] = it.level; break;
+      }
+      case 'sword': {
+        const sw = rollSwordOfRarity(it.rarity);
+        if (s.swords.length >= MAX_SWORDS && sw.damage <= Math.min(...s.swords.map(x => x.damage))) return fail('Je rugzak zit vol met betere zwaarden. Niets afgerekend.');
+        s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost;
+        this.giveSword(P, sw, 'shop'); this.sendInv(P); this.markDirty();
+        P.conn.send({ t: 'ev', k: 'bought' });
+        return;
+      }
+    }
+    s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost;
+    P.conn.send({ t: 'ev', k: 'bought' });
+    this.toast(P, it.name + ' gekocht voor ' + it.cost + ' hout.', '#f2c14e');
     this.sendInv(P); this.markDirty();
   }
 
@@ -229,6 +274,7 @@ export class Room {
   // ------------------------------------------------------------ schade en dood
   hurt(P, dmg, src) {
     if (P.dead) return;
+    dmg *= 1 - SHIELD_REDUCE[P.u.save.up.shield];
     P.hp -= dmg; P.lastHurt = this.T;
     P.conn.send({ t: 'hurt', dmg: Math.round(dmg), x: src ? r1(src.x) : null, z: src ? r1(src.z) : null });
     if (P.hp <= 0) this.die(P);
@@ -298,7 +344,8 @@ export class Room {
       const s = P.u.save; s.stats.bestWave = Math.max(s.stats.bestWave, w.n);
       const bonus = w.n * 25; s.stats.score += bonus;
       P.hp = Math.min(100, P.hp + 30);
-      this.toast(P, 'Golf ' + w.n + ' verslagen! +' + bonus + ' punten', '#f2c14e');
+      const wb = w.n * 3; s.wood += wb;
+      this.toast(P, 'Golf ' + w.n + ' verslagen! +' + bonus + ' punten en +' + wb + ' hout', '#f2c14e');
       if (Math.random() < 0.4) this.giveSword(P, rollSword(Math.min(1, w.n / 12)), 'wave');
       this.sendInv(P);
     }
