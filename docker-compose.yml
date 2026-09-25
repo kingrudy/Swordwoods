@@ -1,0 +1,17 @@
+services:
+  swordwoods:
+    build: .
+    container_name: swordwoods
+    ports:
+      - "8080:8080"          # verander de linkerpoort naar wat jij wilt
+    volumes:
+      - swordwoods-data:/data # accounts en voortgang
+    environment:
+      # Optioneel, handig om te testen:
+      # FIRST_WAVE_DELAY: 45   # seconden tot de eerste golf
+      # WAVE_GAP: 120          # seconden tussen "laatste vijand weg" en de volgende golf
+      # HUNGER_RATE: 0.22      # hongerpunten per seconde (100 = vol)
+      TZ: Europe/Amsterdam
+    restart: unless-stopped
+volumes:
+  swordwoods-data:
