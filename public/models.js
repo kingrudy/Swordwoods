@@ -310,7 +310,7 @@ export function buildShop() {
   npc.armL.rotation.x = -0.5; npc.armR.rotation.x = -0.35;
   g.add(npc.group);
   const label = makeLabel('Handelaar Bram', '#ffd27a'); label.position.y = 4.4; label.scale.multiplyScalar(1.5); g.add(label);
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.5, 16, 12, 1, true).translate(0, 8, 0), shopBeamMat); beam.position.y = 0.3; g.add(beam);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.5, 16, 12, 1, true).translate(0, 8, 0), shopBeamMat); beam.position.set(0, 0.3, -2.2); g.add(beam);   // achter de kraam, niet door de handelaar heen
   return { group: g, npc, beam };
 }
 

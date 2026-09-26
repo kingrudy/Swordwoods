@@ -5,6 +5,7 @@ import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MA
   let fishing = null;   // eigen hengel in het water: { x, z, bite }
 import * as M from './models.js';
 import { createGraphics, QUALITY } from './graphics.js';
+import * as CH from './characters.js';
 import { openInvite, closeInvite } from './invite.js';
 
 const $ = id => document.getElementById(id);
@@ -248,6 +249,7 @@ export async function startGame({ net, joined, user }) {
   const you = { hp: 100, hu: 80, sc: 0, rs: 0 };
   const wave = { n: 0, ph: 0, t: 0, left: 0 };
   const names = new Map(joined.players.map(p => [p.id, p.name]));
+  const looks = new Map(joined.players.map(p => [p.id, p.look | 0]));
   let dead = false, shake = 0, pendingReveal = null, lastPlayers = [];
   const items = () => [AXE, ...inv.swords];
 
@@ -326,8 +328,43 @@ export async function startGame({ net, joined, user }) {
   const remotes = new Map(), mons = new Map(), anis = new Map();
   const popups = [];
   function makeEntBase(model, type) {
-    const g = model.group; scene.add(g);
-    return { group: g, model, x: 0, z: 0, y: 0, yaw: 0, tx: 0, tz: 0, ty: 0, tyaw: 0, phase: 0, speed: 0, hp: 1, maxhp: 1, first: true };
+    const g = new THREE.Group(); g.add(model.group); scene.add(g);
+    return { group: g, body: model.group, model, x: 0, z: 0, y: 0, yaw: 0, tx: 0, tz: 0, ty: 0, tyaw: 0, phase: 0, speed: 0, hp: 1, maxhp: 1, first: true };
+  }
+  /* ---------------- geanimeerde 3D-figuren (worden ingewisseld zodra ze geladen zijn) */
+  const RIG_FOR_MONSTER = (type, id) => type === 0 ? (id % 2 ? 'skeleton_rogue' : 'skeleton_minion') : type === 2 ? 'skeleton_warrior' : type === 3 ? 'skeleton_mage' : null;
+  const RIG_HEIGHT = { 0: 1.65, 2: 3.4, 3: 6.8 };
+  function setRig(e, rig) {
+    e.group.remove(e.body); e.body = rig.group; e.group.add(rig.group);
+    e.model = rig; e.flashMats = null;
+    if (e.item) mountItem(e);
+  }
+  function wantRig(e, name, height, fresh = false) {
+    if (!name) return;
+    if (CH.isReady(name)) { const r = CH.createRig(name, height, G.quality !== 'laag'); if (r) { setRig(e, r); if (fresh) e.spawnAnim = true; return; } }
+    e.want = { name, height };
+  }
+  function onRigReady(name) {
+    for (const map of [remotes, mons]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); e.want = null; } }
+    if (name === 'merchant' && !merchant) {
+      merchant = CH.createRig('merchant', 1.8);
+      if (merchant) { shopObj.npc.group.visible = false; merchant.group.position.copy(shopObj.npc.group.position); merchant.group.rotation.y = shopObj.npc.group.rotation.y; shopObj.group.add(merchant.group); merchant.loop('Idle'); }
+    }
+  }
+  let merchant = null;
+  function rigLocomotion(e, run = 5.5, walk = 2.0, idle = 'Idle', walkClip = 'Walking_A', runClip = 'Running_A') {
+    const r = e.model, sp = e.speed / (r.height / 1.85);
+    if (sp < 0.35) r.loop(idle);
+    else if (sp < run * 0.72) r.loop(walkClip, clamp(sp / walk, 0.6, 1.8));
+    else r.loop(runClip, clamp(sp / run, 0.7, 1.6));
+  }
+  function mountItem(e) {
+    const r = e.model;
+    const parent = r.kind === 'rig' ? r.handR : r.mount; if (!parent) return;
+    if (e.item.parent) e.item.parent.remove(e.item);
+    if (r.kind === "rig") { const s = r.inner.scale.x; e.item.scale.setScalar(0.9 / s); e.item.rotation.set(0, Math.PI, 0); e.item.position.set(0, 0.033, 0); }
+    else { e.item.scale.setScalar(0.7); e.item.rotation.set(-Math.PI / 2 + 0.3, 0, 0); e.item.position.set(0, -0.02, -0.06); }
+    parent.add(e.item);
   }
   function animateBody(e, dt) {
     const m = e.model, amp = clamp(e.speed / 2.5, 0, 1), s = Math.sin(e.phase) * 0.75 * amp;
@@ -352,6 +389,7 @@ export async function startGame({ net, joined, user }) {
     const name = names.get(id) || 'Speler';
     const model = M.buildHumanoid({ cloth: M.colorForName(name) });
     const e = makeEntBase(model); e.id = id; e.eq = -1; e.sw = 0; e.swingT = 1; e.dead = 0;
+    wantRig(e, CH.HEROES[(looks.get(id) | 0) % CH.HEROES.length].key, 1.8);
     const label = M.makeLabel(name, '#ffffff'); label.position.y = 2.25; e.group.add(label); e.label = label;
     // lichtzuil in de kleur van de speler, zichtbaar door de mist heen
     const col = new THREE.Color(M.colorForName(name)); { const hsl = {}; col.getHSL(hsl); col.setHSL(hsl.h, 0.95, 0.55); }
@@ -367,16 +405,17 @@ export async function startGame({ net, joined, user }) {
   }
   function setRemoteEq(e, code) {
     e.eq = code;
-    if (e.item) e.model.mount.remove(e.item);
+    if (e.item && e.item.parent) e.item.parent.remove(e.item);
     const d = decodeEq(code);
     e.item = d.type === 'axe' ? M.makeAxeMesh() : M.makeSwordMesh(d);
-    e.item.scale.setScalar(0.7); e.item.rotation.x = -Math.PI / 2 + 0.3; e.item.position.set(0, -0.02, -0.06);
-    e.item.traverse(o => { o.castShadow = true; }); e.model.mount.add(e.item);
+    e.item.traverse(o => { o.castShadow = true; });
+    mountItem(e);
   }
   function makeMonster(id, type) {
     const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 0 ? 0.85 : 1;
     e.bar = M.makeBar(0.9 + model.height * 0.18); scene.add(e.bar); e.barY = model.height + 0.35;
     if (type === 3) { const l = M.makeLabel(MONSTERS[3].name, '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
+    wantRig(e, RIG_FOR_MONSTER(type, id), RIG_HEIGHT[type], true);
     mons.set(id, e); return e;
   }
   function makeAnimal(id, type) {
@@ -443,7 +482,7 @@ export async function startGame({ net, joined, user }) {
       const e = map.get(id) || make(id, type);
       e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp;
     }
-    for (const id of [...map.keys()]) if (!seen.has(id)) killEnt(map, id);
+    for (const id of [...map.keys()]) if (!seen.has(id) && !map.get(id).dying) killEnt(map, id);
   }
   function addPopup(x, y, z, text, color) {
     const s = M.makePopup(text, color); s.position.set(x, y, z); scene.add(s); popups.push({ s, t: 0, x, y, z });
@@ -459,7 +498,7 @@ export async function startGame({ net, joined, user }) {
       const e = remotes.get(id) || makeRemote(id);
       e.tx = x; e.ty = y; e.tz = z; e.tyaw = yaw; e.hp = hp; e.dead = dd;
       if (e.eq !== eq) setRemoteEq(e, eq);
-      if (e.sw !== sw) { e.sw = sw; e.swingT = 0; }
+      if (e.sw !== sw) { e.sw = sw; e.swingT = 0; if (e.model.kind === 'rig') e.model.once('1H_Melee_Attack_Chop', { speed: 1.35 }); }
     }
     for (const id of [...remotes.keys()]) if (!seen.has(id)) killEnt(remotes, id);
     syncList(mons, m.m, makeMonster); syncList(anis, m.a, makeAnimal); if (m.d) syncDogs(m.d);
@@ -473,7 +512,7 @@ export async function startGame({ net, joined, user }) {
     renderInv(); rebuildHeld(); if (shopOpen) renderShop();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
-  net.on('pjoin', m => { names.set(m.id, m.name); toast('<b>' + esc(m.name) + '</b> doet mee.', '#6fd37a'); });
+  net.on('pjoin', m => { names.set(m.id, m.name); looks.set(m.id, m.look | 0); toast('<b>' + esc(m.name) + '</b> doet mee.', '#6fd37a'); });
   net.on('pleave', m => { const n = names.get(m.id); if (n) toast(esc(n) + ' is vertrokken.', '#bbb'); killEnt(remotes, m.id); names.delete(m.id); });
   net.on('hurt', m => {
     $('vignette').classList.add('on'); setTimeout(() => $('vignette').classList.remove('on'), 90);
@@ -523,7 +562,7 @@ export async function startGame({ net, joined, user }) {
       case 'chestBack': chestReset(m.i); break;
       case 'ate': sfx.eat(); break;
       case 'drank': sfx.drink(); break;
-      case 'bought': sfx.coin(); break;
+      case 'bought': sfx.coin(); if (merchant) merchant.once('Cheer'); break;
       case 'bark': {
         const dx = m.x - player.x, dz = m.z - player.z, d = Math.hypot(dx, dz);
         if (d < 45) { const right = dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw); sfx.bark(clamp(right / Math.max(d, 1), -0.9, 0.9), clamp(1.4 - d / 35, 0.15, 1)); }
@@ -568,11 +607,14 @@ export async function startGame({ net, joined, user }) {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
         addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg, m.e === 'm' ? '#ffe08a' : '#ffffff');
         blood.emit(m.x, gy + (e ? e.model.height * 0.5 : 0.7), m.z, 8, 2.2, 2.5, 0.6);
-        if (e) flash(e);
+        if (e) { flash(e); if (m.e === 'm' && e.model.kind === 'rig' && !e.model.busy && !e.dying) e.model.once('Hit_A', { speed: 1.6 }); }
         if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.hit();
         break;
       }
-      case 'mdie': killEnt(mons, m.id); blood.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 30, 3.2, 3.5, 1); if (Math.hypot(m.x - player.x, m.z - player.z) < 40) sfx.kill(); break;
+      case 'matk': { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once(e.type >= 2 ? '2H_Melee_Attack_Chop' : '1H_Melee_Attack_Chop', { speed: e.type >= 2 ? 1.1 : 1.4 }); break; }
+      case 'mdie': { const e = mons.get(m.id);
+        if (e && e.model.kind === 'rig') { e.dying = 1.8; e.model.once('Death_A', { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
+        else killEnt(mons, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 30, 3.2, 3.5, 1); if (Math.hypot(m.x - player.x, m.z - player.z) < 40) sfx.kill(); break;
       case 'adie': killEnt(anis, m.id); blood.emit(m.x, heightAt(m.x, m.z) + 0.4, m.z, 18, 2.5, 3, 0.8); break;
     }
   });
@@ -878,8 +920,18 @@ export async function startGame({ net, joined, user }) {
     for (const e of remotes.values()) {
       moveEnt(e, dt, true);
       if (e.swingT < 1) e.swingT = Math.min(1, e.swingT + dt / 0.45);
-      animateBody(e, dt);
-      e.group.rotation.z = e.dead ? Math.PI / 2 : 0; if (e.dead) e.group.position.y += 0.25;
+      if (e.model.kind === 'rig') {
+        const r = e.model;
+        if (e.dead && !e.wasDead) r.once('Death_A', { hold: true });
+        else if (!e.dead && e.wasDead) r.unlock();
+        e.wasDead = e.dead;
+        if (e.swingT === 0) r.once('1H_Melee_Attack_Chop', { speed: 1.35 });
+        if (!e.dead) rigLocomotion(e);
+        r.update(dt);
+      } else {
+        animateBody(e, dt);
+        e.group.rotation.z = e.dead ? Math.PI / 2 : 0; if (e.dead) e.group.position.y += 0.25;
+      }
       if (e.beam) {
         const d = Math.hypot(e.x - player.x, e.z - player.z);
         const k = clamp((d - 10) / 15, 0, 1) * (e.dead ? 0.45 : 1) * (0.88 + Math.sin(time * 3 + e.id) * 0.12);
@@ -895,9 +947,22 @@ export async function startGame({ net, joined, user }) {
       }
     }
     for (const e of mons.values()) {
-      moveEnt(e, dt); animateBody(e, dt); tickFlash(e, dt);
-      e.bar.visible = e.hp < e.maxhp || e.type === 3;
-      if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
+      if (e.dying !== undefined) {
+        e.dying -= dt; if (e.model.update) e.model.update(dt);
+        if (e.dying < 0.6) e.group.position.y -= dt * 1.2;
+        if (e.dying <= 0) { e.dying = undefined; killEnt(mons, e.id); }
+        continue;
+      }
+      moveEnt(e, dt); tickFlash(e, dt);
+      if (e.model.kind === 'rig') {
+        if (e.spawnAnim) { e.spawnAnim = false; e.model.once('Spawn_Ground_Skeletons', { speed: 1.4 }); }
+        rigLocomotion(e, 5.2, 2.2, 'Idle_Combat', 'Walking_D_Skeletons', 'Running_C');
+        const far = Math.hypot(e.x - player.x, e.z - player.z) > 55;       // verre monsters minder vaak animeren
+        e.animAcc = (e.animAcc || 0) + dt;
+        if (!far || e.animAcc > 0.1) { e.model.update(e.animAcc); e.animAcc = 0; }
+      } else animateBody(e, dt);
+      if (e.bar) e.bar.visible = e.hp < e.maxhp || e.type === 3;
+      if (e.bar && e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
     for (const e of dogs.values()) {
       moveEnt(e, dt);
@@ -985,6 +1050,7 @@ export async function startGame({ net, joined, user }) {
         chip.innerHTML = '<span class="arr" style="transform:rotate(' + ang.toFixed(0) + 'deg)">▲</span>🏪 Winkel · ' + Math.round(d) + ' m';
       }
     }
+    if (merchant) merchant.update(dt);
     for (const b of bobbers.values()) {
       b.t += dt; if (b.dip > 0) b.dip = Math.max(0, b.dip - dt);
       const dip = b.dip > 0 ? -0.12 - Math.abs(Math.sin(b.t * 22)) * 0.1 : 0;
@@ -1026,6 +1092,8 @@ export async function startGame({ net, joined, user }) {
     }
   }
 
+  CH.preload(['knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage', 'merchant'], onRigReady);
+
   showVeil(true);
   setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);
   let last = performance.now();
@@ -1036,6 +1104,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

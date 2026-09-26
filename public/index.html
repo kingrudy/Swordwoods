@@ -71,6 +71,11 @@
   ol.lb li.me { outline:1px solid var(--gold); }
   ol.lb .n { color:var(--dim); }
   ol.lb .s { color:var(--dim); font-variant-numeric:tabular-nums; }
+.heroes { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .hero { display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 6px; border-radius:12px; border:2px solid var(--line); background:rgba(255,255,255,.05); font-weight:600; font-size:13px; }
+  .hero span { font-size:26px; line-height:1; }
+  .hero.on { border-color:var(--gold); background:rgba(242,193,78,.14); }
+  .credits { color:var(--dim); font-size:11px; margin-top:8px; }
   .swords { display:flex; gap:6px; flex-wrap:wrap; }
   .sw { padding:4px 9px; border-radius:8px; font-size:12px; border:1px solid currentColor; }
   .create { display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
@@ -306,6 +311,10 @@
       </div>
       <div style="display:grid; gap:20px">
         <div class="card">
+          <h2>Jouw held</h2>
+          <div class="heroes" id="heroes"></div>
+        </div>
+        <div class="card">
           <h2>Jouw voortgang</h2>
           <div class="stats" id="my-stats"></div>
           <h2 style="margin-top:18px">Zwaarden</h2>
@@ -315,6 +324,7 @@
           <h2>Beste jagers</h2>
           <ol class="lb" id="lb-lobby"></ol>
           <p class="version" id="version-lobby"></p>
+          <p class="credits">Figuren: KayKit door Kay Lousberg (CC0)</p>
         </div>
       </div>
     </div>

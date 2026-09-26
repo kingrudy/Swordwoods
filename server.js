@@ -96,7 +96,7 @@ function leaderboard() {
 }
 
 /* ------------------------------------------------------------------ HTTP */
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+const MIME = { '.glb': 'model/gltf-binary', '.txt': 'text/plain; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 const cache = new Map();
 // Build-id: hash van alle spelbestanden. Staat in elk script-adres (/b/<id>/...), zodat een browser of proxy
 // nooit oude spelcode kan combineren met een nieuwe server.
@@ -121,7 +121,7 @@ function serveStatic(req, res) {
     const isHtml = ext === '.html';
     const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': isHtml ? 'no-store, max-age=0' : (versioned || p.startsWith('/vendor/')) ? 'public, max-age=31536000, immutable' : 'no-store, max-age=0' };
-    const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '') && ['.html', '.js', '.css', '.json', '.svg'].includes(ext);
+    const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '') && ['.html', '.js', '.css', '.json', '.svg', '.glb'].includes(ext);
     const ck = file + (gz ? ':gz' : '');
     const hit = cache.get(ck);
     if (hit && hit.mtime === st.mtimeMs) { if (gz) headers['Content-Encoding'] = 'gzip'; res.writeHead(200, headers).end(hit.buf); return; }
@@ -251,6 +251,7 @@ class Conn {
     }
     switch (m.t) {
       case 'rooms': this.send({ t: 'rooms', rooms: roomList() }); break;
+      case 'look': { const l = m.v | 0; if (l >= 0 && l <= 3) { this.user.save.look = l; markDirty(); this.send({ t: 'look', v: l }); } break; }
       case 'create': {
         if (rooms.size >= 24) return this.send({ t: 'err', msg: 'Er zijn al te veel kamers. Kies een bestaande.' });
         let name = String(m.name || '').replace(/[^\p{L}\p{N} _'-]/gu, '').trim().slice(0, 24) || (this.user.name + 's bos');

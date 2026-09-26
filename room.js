@@ -36,6 +36,7 @@ export function ensureSave(u) {
   s.equip = clamp(s.equip | 0, 0, s.swords.length);
   if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
   if (s.dog) { s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
+  if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) { let h = 0; for (const ch of String(u.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; s.look = h % 4; }
   s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0 }, s.stats || {});
   return s;
 }
@@ -91,12 +92,12 @@ export class Room {
     P.y = this.world.heightAt(P.x, P.z);
     this.players.set(P.id, P); this.emptySince = null;
     if (s.dog) this.spawnOwnedDog(P);
-    this.bc({ t: 'pjoin', id: P.id, name: P.name }, P);
+    this.bc({ t: 'pjoin', id: P.id, name: P.name, look: s.look }, P);
     conn.send({
       t: 'joined', now: Date.now(),
       room: { id: this.id, name: this.name, seed: this.seed, max: this.max },
       you: { id: P.id, name: P.name, x: P.x, y: P.y, z: P.z },
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look })),
       felled: [...this.felled.keys()], chests: [...this.chestOpen.keys()],
     });
     this.sendInv(P);
@@ -452,6 +453,7 @@ export class Room {
         this.move(m, m.x + dx / d * step, m.z + dz / d * step, M.r);
       } else if (this.T >= m.nextAtk) {
         m.nextAtk = this.T + M.atkCd;
+        this.bc({ t: 'ev', k: 'matk', id: m.id });
         if (tg.isDog) this.hurtDog(tg, m.dmg); else this.hurt(tg, m.dmg, m);
       }
     }

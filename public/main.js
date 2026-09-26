@@ -62,7 +62,13 @@ async function loadLeaderboard() {
   } catch {}
 }
 function fmtTime(s) { const m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + 'u ' + (m % 60) + 'm' : m + ' min'; }
+const HEROES = [['Ridder', '🛡️'], ['Barbaar', '🪓'], ['Magiër', '🔮'], ['Schurk', '🗡️']];
+function renderHeroes() {
+  $('heroes').innerHTML = HEROES.map(([n, i], k) => '<button type="button" class="hero' + ((save.look | 0) === k ? ' on' : '') + '" data-look="' + k + '"><span>' + i + '</span>' + n + '</button>').join('');
+}
+$('heroes').addEventListener('click', e => { const b = e.target.closest('[data-look]'); if (!b) return; save.look = +b.dataset.look; renderHeroes(); net.send({ t: 'look', v: save.look }); });
 function renderLobby() {
+  renderHeroes();
   $('lb-hello').textContent = 'Welkom terug, ' + myName + '. Kies een kamer of maak er zelf een.';
   const s = save.stats || {};
   const cells = [['Beste golf', s.bestWave | 0], ['Punten', s.score | 0], ['Monsters verslagen', s.kills | 0], ['Dieren gejaagd', s.animals | 0],
