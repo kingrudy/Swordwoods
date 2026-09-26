@@ -132,6 +132,8 @@
   .pause { width:min(520px,92vw); max-height:94vh; overflow:auto; padding:26px 28px; border-radius:20px; background:rgba(18,28,20,.92); box-shadow:0 20px 60px rgba(0,0,0,.5); }
   @media (max-height:640px) { .pause { padding:16px 20px; } .pause .keys { font-size:13px; gap:4px 12px; margin-bottom:12px; } .pause p { margin-bottom:10px; } }
   .pause h2 { margin:0 0 4px; font-size:28px; }
+  .gfx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 16px; font-size:14px; color:var(--dim); }
+  .gfx .row { gap:6px; }
   .pause p { margin:0 0 16px; color:var(--dim); font-size:14px; }
   .keys { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:15px; margin-bottom:20px; }
   kbd { display:inline-block; padding:1px 7px; border-radius:6px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.2); font:600 13px ui-monospace,monospace; }
@@ -237,7 +239,7 @@
   #err { color:#ff9c8a; font:12px ui-monospace,monospace; white-space:pre-wrap; margin-top:10px; }
 </style>
 <script type="importmap">
-{ "imports": { "three": "/vendor/three/three.module.js" } }
+{ "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three/addons/" } }
 </script>
 </head>
 <body>
@@ -387,6 +389,7 @@
       <span><kbd>F</kbd></span><span>Slaan (alternatief)</span>
       <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen, D-pad omhoog hond voeren, Start pauze</span>
     </div>
+    <div class="gfx"><span>Graphics</span><div class="row" id="gfx-row"></div></div>
     <div class="row">
       <button class="btn primary" id="btn-resume" type="button">Verder spelen</button>
       <button class="btn" id="btn-invite" type="button">📨 Vrienden uitnodigen</button>

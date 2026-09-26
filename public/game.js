@@ -4,6 +4,7 @@ import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
 import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS, DOG_FURS, dogXpNeeded } from './items.js';
   let fishing = null;   // eigen hengel in het water: { x, z, bite }
 import * as M from './models.js';
+import { createGraphics, QUALITY } from './graphics.js';
 import { openInvite, closeInvite } from './invite.js';
 
 const $ = id => document.getElementById(id);
@@ -26,11 +27,12 @@ export async function startGame({ net, joined, user }) {
   if (isTouch) document.body.classList.add('touch');
 
   /* ================================================================ renderer, scenes */
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, LOW ? 1.5 : 2));
-  renderer.setSize(innerWidth, innerHeight);
+  const GFX_KEY = 'sw-gfx';
+  let gfxChosen = null; try { gfxChosen = localStorage.getItem(GFX_KEY); } catch {}
+  const startQ = QUALITY[gfxChosen] ? gfxChosen : (isTouch ? 'laag' : 'hoog');
+  const renderer = new THREE.WebGLRenderer({ antialias: startQ !== 'laag', powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = startQ === 'laag' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.autoClear = false;
@@ -41,32 +43,10 @@ export async function startGame({ net, joined, user }) {
   camera.rotation.order = 'YXZ';
   const handScene = new THREE.Scene();
   const handCam = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.02, 10);
-
-  const HORIZON = new THREE.Color(0xcfe3ef);
-  scene.fog = new THREE.Fog(HORIZON, 70, 270);
-  const sunDir = new THREE.Vector3(0.55, 0.62, 0.35).normalize();
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x3d7fd0) }, horizon: { value: HORIZON }, sun: { value: sunDir } },
-    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 sun; varying vec3 vDir;
-      void main(){ float h = clamp(vDir.y, 0.0, 1.0); vec3 c = mix(horizon, top, pow(h, 0.55));
-        float s = max(dot(normalize(vDir), sun), 0.0); c += vec3(1.0, 0.92, 0.7) * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.18);
-        gl_FragColor = vec4(c, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`,
-  }));
-  sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
-
-  scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x9bb872, 1.5));
-  const sun = new THREE.DirectionalLight(0xfff0d2, 2.6);
-  sun.castShadow = true; sun.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048);
-  const sc = sun.shadow.camera; sc.left = -48; sc.right = 48; sc.top = 48; sc.bottom = -48; sc.near = 1; sc.far = 220;
-  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
-  scene.add(sun, sun.target);
-  handScene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a60, 1.6));
-  const handSun = new THREE.DirectionalLight(0xfff3dc, 2.4); handSun.position.set(1, 2, 1.5); handScene.add(handSun);
+  const G = createGraphics({ renderer, scene, camera, handScene, handCam, quality: startQ, serverOffset: joined.now ? joined.now - Date.now() : 0 });
+  G.applyQuality(startQ);
+  G.setHeightFn(heightAt);
+  { const tq = new URLSearchParams(location.search).get('tijd'); if (tq !== null && tq !== '') G.setTimeOfDay(parseFloat(tq)); }
 
   /* ================================================================ terrein */
   const SEG = 240;
@@ -90,16 +70,15 @@ export async function startGame({ net, joined, user }) {
     tGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   }
   const terrain = new THREE.Mesh(tGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  G.terrainDetail(terrain.material);
   terrain.receiveShadow = true; scene.add(terrain);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 3, WORLD * 3).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x2f6f9a, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.86 }));
-  water.position.y = WATER; scene.add(water);
+  G.createWater({ heightAt, WORLD, WATER });
   await nextFrame();
 
   // gras, bloemen, rotsen, wolken (alleen sfeer)
   {
     const dummy = new THREE.Object3D(), c = new THREE.Color();
-    const TUFT_N = LOW ? 5000 : 14000, FLOW_N = LOW ? 600 : 1400;
+    const TUFT_N = 14000, FLOW_N = 1400;   // dichtheid volgt de kwaliteitsinstelling
     const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.09, 0.55, 5, 1).translate(0, 0.27, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), TUFT_N);
     const flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 6, 5).translate(0, 0.42, 0), new THREE.MeshStandardMaterial({ roughness: 0.7 }), FLOW_N);
     let nt = 0, nf = 0;
@@ -111,7 +90,8 @@ export async function startGame({ net, joined, user }) {
       if (nf < FLOW_N && rng() < 0.1) { flowers.setMatrixAt(nf, dummy.matrix); c.setHSL([0.0, 0.12, 0.62, 0.86, 0.15][Math.floor(rng() * 5)], 0.75, 0.62); flowers.setColorAt(nf, c); nf++; }
       else if (nt < TUFT_N) { tufts.setMatrixAt(nt, dummy.matrix); c.setHSL(0.24 + rng() * 0.06, 0.55, 0.22 + rng() * 0.12); tufts.setColorAt(nt, c); nt++; }
     }
-    tufts.count = nt; flowers.count = nf; tufts.frustumCulled = false; flowers.frustumCulled = false; scene.add(tufts, flowers);
+    tufts.frustumCulled = false; flowers.frustumCulled = false; scene.add(tufts, flowers);
+    G.wind(tufts.material, 'grass'); G.wind(flowers.material, 'grass'); G.registerGrass(tufts, nt); G.registerGrass(flowers, nf);
 
     const rocks = new THREE.InstancedMesh(M.makeBlobGeo(1, 0.38, 3.3, 0.7, [9, 7]), new THREE.MeshStandardMaterial({ color: 0x777268, roughness: 0.95 }), 260);
     let n = 0;
@@ -126,7 +106,7 @@ export async function startGame({ net, joined, user }) {
   }
   const clouds = [];
   {
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, depthWrite: false });
+    const mat = G.cloudMat;
     for (let i = 0; i < 22; i++) {
       const g = new THREE.Group(), parts = 4 + Math.floor(rng() * 4);
       for (let k = 0; k < parts; k++) {
@@ -140,6 +120,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ bomen en kisten */
   const kit = M.makeTreeKit(seed);
+  for (const fm of M.foliageMats) G.wind(fm, 'leaf');
   const treeObjs = W.trees.map(t => {
     const o = M.buildTree(kit, t.type, t.vi, t.scale, t.rotY);
     o.group.position.set(t.x, t.y - 0.1, t.z); scene.add(o.group);
@@ -172,6 +153,8 @@ export async function startGame({ net, joined, user }) {
   for (const i of joined.chests) chestOpenInstant(i);
   const shopObj = M.buildShop();
   shopObj.group.position.set(W.shop.x, W.shop.y - 0.05, W.shop.z); shopObj.group.rotation.y = W.shop.rotY; scene.add(shopObj.group);
+  shopObj.group.updateMatrixWorld(true);
+  G.addLantern(shopObj.group.localToWorld(new THREE.Vector3(0, 2.4, 2.4)), 0xffc070, 6, 18);
   await nextFrame();
 
   /* ================================================================ deeltjes en geluid */
@@ -401,6 +384,21 @@ export async function startGame({ net, joined, user }) {
     e.bar = M.makeBar(0.7); scene.add(e.bar); e.barY = model.height + 0.3;
     anis.set(id, e); return e;
   }
+  function flash(e) {
+    if (!e.flashMats) {
+      e.flashMats = [];
+      e.group.traverse(o => { if (o.isMesh && o.material && o.material.emissive && !(o.material.emissiveIntensity > 1)) {
+        if (!o.material.userData.own) { o.material = o.material.clone(); o.material.userData.own = true; }
+        e.flashMats.push(o.material);
+      } });
+    }
+    e.flashT = 0.16;
+  }
+  function tickFlash(e, dt) {
+    if (!(e.flashT > 0)) return;
+    e.flashT = Math.max(0, e.flashT - dt); const k = e.flashT / 0.16;
+    for (const m of e.flashMats) { m.emissive.setRGB(1, 0.15, 0.1); m.emissiveIntensity = k * 0.9; }
+  }
   function killEnt(map, id) { const e = map.get(id); if (!e) return; scene.remove(e.group); if (e.bar) scene.remove(e.bar); if (e.beam) scene.remove(e.beam); map.delete(id); }
   const dogs = new Map();
   function makeDog(a) {
@@ -570,6 +568,7 @@ export async function startGame({ net, joined, user }) {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
         addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg, m.e === 'm' ? '#ffe08a' : '#ffffff');
         blood.emit(m.x, gy + (e ? e.model.height * 0.5 : 0.7), m.z, 8, 2.2, 2.5, 0.6);
+        if (e) flash(e);
         if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.hit();
         break;
       }
@@ -636,7 +635,7 @@ export async function startGame({ net, joined, user }) {
   });
   addEventListener('keyup', e => { keys[e.code] = false; });
   addEventListener('resize', () => {
-    renderer.setSize(innerWidth, innerHeight); camera.aspect = handCam.aspect = innerWidth / innerHeight;
+    G.resize(); camera.aspect = handCam.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix(); handCam.updateProjectionMatrix();
   });
 
@@ -854,8 +853,7 @@ export async function startGame({ net, joined, user }) {
     const eye = dead ? 0.4 : 1.7;
     camera.position.set(player.x + (Math.random() - 0.5) * shake * 0.2, player.y + eye + bobY, player.z + (Math.random() - 0.5) * shake * 0.2);
     camera.rotation.y = player.yaw; camera.rotation.x = dead ? -0.9 : player.pitch;
-    sun.position.set(player.x + sunDir.x * 100, sunDir.y * 100 + player.y, player.z + sunDir.z * 100);
-    sun.target.position.set(player.x, player.y, player.z); sky.position.copy(camera.position);
+    G.update(dt, time, player.x, player.y, player.z);
 
     // positie naar de server (15x per seconde)
     sendT += dt;
@@ -897,7 +895,7 @@ export async function startGame({ net, joined, user }) {
       }
     }
     for (const e of mons.values()) {
-      moveEnt(e, dt); animateBody(e, dt);
+      moveEnt(e, dt); animateBody(e, dt); tickFlash(e, dt);
       e.bar.visible = e.hp < e.maxhp || e.type === 3;
       if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
@@ -918,7 +916,7 @@ export async function startGame({ net, joined, user }) {
       if (e.label) e.label.visible = Math.hypot(e.x - player.x, e.z - player.z) < 40;
     }
     for (const e of anis.values()) {
-      moveEnt(e, dt); animateBody(e, dt);
+      moveEnt(e, dt); animateBody(e, dt); tickFlash(e, dt);
       e.bar.visible = e.hp < e.maxhp;
       if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
@@ -995,7 +993,6 @@ export async function startGame({ net, joined, user }) {
       if (b.dip > 0 && Math.random() < 0.3) splash.emit(b.x, WATER + 0.05, b.z, 2, 0.8, 1.2, 0.4);
     }
     for (const c of clouds) { c.position.x += dt * 2.2; if (c.position.x > 480) c.position.x = -480; }
-    water.position.y = WATER + Math.sin(time * 0.6) * 0.06;
     chips.update(dt); leaves.update(dt); sparkles.update(dt); blood.update(dt); splash.update(dt);
   }
 
@@ -1005,16 +1002,40 @@ export async function startGame({ net, joined, user }) {
   $('veil').querySelector('h2').textContent = 'Welkom, ' + user;
   $('veil').querySelector('p').textContent = 'Kamer: ' + joined.room.name + '. Klik om te beginnen. Het spel loopt door als je pauzeert.';
   $('btn-resume').textContent = isTouch ? 'Tik om te starten' : 'Start';
+  /* ================================================================ grafische kwaliteit */
+  function renderQuality() {
+    $('gfx-row').innerHTML = Object.entries(QUALITY).map(([k, v]) => '<button type="button" class="btn small' + (G.quality === k ? ' primary' : '') + '" data-q="' + k + '">' + v.label + '</button>').join('');
+  }
+  $('gfx-row').addEventListener('click', e => {
+    const b = e.target.closest('[data-q]'); if (!b) return;
+    G.applyQuality(b.dataset.q); gfxChosen = b.dataset.q; try { localStorage.setItem(GFX_KEY, gfxChosen); } catch {}
+    renderQuality();
+  });
+  renderQuality();
+  const fps = { t: 0, n: 0, slow: 0 };
+  function fpsCheck(dt) {        // te traag? dan zelf één stap lager (alleen als de speler niets heeft gekozen)
+    if (gfxChosen || !locked || document.hidden) return;
+    fps.t += dt; fps.n++;
+    if (fps.t < 4) return;
+    const f = fps.n / fps.t; fps.t = 0; fps.n = 0;
+    fps.slow = f < 28 ? fps.slow + 1 : 0;
+    if (fps.slow >= 2 && G.quality !== 'laag') {
+      const next = G.quality === 'hoog' ? 'middel' : 'laag';
+      G.applyQuality(next); renderQuality(); fps.slow = 0;
+      toast('Graphics op ' + QUALITY[next].label + ' gezet voor soepeler spelen. Aanpassen kan in het menu.', '#bbb');
+    }
+  }
+
   showVeil(true);
   setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (!(window.__game && window.__game.pause)) update(dt, now / 1000);
-    if (!(window.__game && window.__game.pause) || window.__game.forceRender) { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); }
+    if (!(window.__game && window.__game.pause) || window.__game.forceRender) { G.render(); fpsCheck(dt); }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
+  window.__game = { G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

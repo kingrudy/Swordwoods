@@ -93,7 +93,7 @@ export class Room {
     if (s.dog) this.spawnOwnedDog(P);
     this.bc({ t: 'pjoin', id: P.id, name: P.name }, P);
     conn.send({
-      t: 'joined',
+      t: 'joined', now: Date.now(),
       room: { id: this.id, name: this.name, seed: this.seed, max: this.max },
       you: { id: P.id, name: P.name, x: P.x, y: P.y, z: P.z },
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name })),

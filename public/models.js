@@ -17,6 +17,7 @@ export const barkMat = new THREE.MeshStandardMaterial({ color: 0x5a3c25, roughne
 export const woodCutMat = new THREE.MeshStandardMaterial({ color: 0xc89a5e, roughness: 0.8 });
 const leafMats = [0x2f6b2a, 0x3a7d2f, 0x2c6a3a, 0x4b8a34].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }));
 const pineMats = [0x1f4d2b, 0x265a31, 0x1a4526].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }));
+export const foliageMats = [...leafMats, ...pineMats];
 export const goldMat = new THREE.MeshStandardMaterial({ color: 0xd9a83a, metalness: 0.5, roughness: 0.35 });
 const leatherMat = new THREE.MeshStandardMaterial({ color: 0x4a2f1c, roughness: 0.9 });
 const metalMat = (c, emi) => new THREE.MeshStandardMaterial({ color: c, metalness: 0.45, roughness: 0.3, emissive: c, emissiveIntensity: emi });
