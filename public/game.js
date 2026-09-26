@@ -363,6 +363,16 @@ export async function startGame({ net, joined, user }) {
     const model = M.buildHumanoid({ cloth: M.colorForName(name) });
     const e = makeEntBase(model); e.id = id; e.eq = -1; e.sw = 0; e.swingT = 1; e.dead = 0;
     const label = M.makeLabel(name, '#ffffff'); label.position.y = 2.25; e.group.add(label); e.label = label;
+    // lichtzuil in de kleur van de speler, zichtbaar door de mist heen
+    const col = new THREE.Color(M.colorForName(name)); { const hsl = {}; col.getHSL(hsl); col.setHSL(hsl.h, 0.95, 0.55); }
+    e.beam = new THREE.Group();
+    const mk = (r, op) => new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.6, 140, 14, 1, true).translate(0, 70, 0),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false, fog: false, side: THREE.DoubleSide, toneMapped: false }));
+    e.beam.add(mk(0.6, 0.22), mk(0.16, 0.85));
+    e.beam.userData.base = [0.22, 0.85];
+    e.beamLabel = M.makeLabel(name, '#' + col.getHexString()); e.beamLabel.userData.sx = e.beamLabel.scale.x; e.beamLabel.userData.sy = e.beamLabel.scale.y; e.beamLabel.material.depthTest = false; e.beamLabel.renderOrder = 14; e.beam.add(e.beamLabel);
+    e.beam.frustumCulled = false; e.beam.traverse(o => { o.frustumCulled = false; o.renderOrder = 9; });
+    scene.add(e.beam);
     remotes.set(id, e); return e;
   }
   function setRemoteEq(e, code) {
@@ -384,7 +394,7 @@ export async function startGame({ net, joined, user }) {
     e.bar = M.makeBar(0.7); scene.add(e.bar); e.barY = model.height + 0.3;
     anis.set(id, e); return e;
   }
-  function killEnt(map, id) { const e = map.get(id); if (!e) return; scene.remove(e.group); if (e.bar) scene.remove(e.bar); map.delete(id); }
+  function killEnt(map, id) { const e = map.get(id); if (!e) return; scene.remove(e.group); if (e.bar) scene.remove(e.bar); if (e.beam) scene.remove(e.beam); map.delete(id); }
   const dogs = new Map();
   function makeDog(a) {
     const [id, , , , , , owner, , , , fur] = a;
@@ -825,6 +835,19 @@ export async function startGame({ net, joined, user }) {
       if (e.swingT < 1) e.swingT = Math.min(1, e.swingT + dt / 0.45);
       animateBody(e, dt);
       e.group.rotation.z = e.dead ? Math.PI / 2 : 0; if (e.dead) e.group.position.y += 0.25;
+      if (e.beam) {
+        const d = Math.hypot(e.x - player.x, e.z - player.z);
+        const k = clamp((d - 10) / 15, 0, 1) * (e.dead ? 0.45 : 1) * (0.88 + Math.sin(time * 3 + e.id) * 0.12);
+        e.beam.visible = k > 0.02;
+        if (e.beam.visible) {
+          e.beam.position.set(e.x, e.y, e.z);
+          const [o1, o2] = e.beam.userData.base; e.beam.children[0].material.opacity = o1 * k; e.beam.children[1].material.opacity = o2 * k;
+          const w = 1 + d / 22; e.beam.children[0].scale.set(w, 1, w); e.beam.children[1].scale.set(w, 1, w);   // verre zuilen iets breder, zodat ze zichtbaar blijven
+          const lab = e.beamLabel; lab.position.y = 3.5 + d * 0.06; lab.material.opacity = Math.min(1, k * 1.3);
+          lab.scale.set(lab.userData.sx * (1 + d / 11), lab.userData.sy * (1 + d / 11), 1);
+          lab.material.map.needsUpdate = false;
+        }
+      }
     }
     for (const e of mons.values()) {
       moveEnt(e, dt); animateBody(e, dt);
@@ -929,6 +952,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
+  window.__game = { renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }
