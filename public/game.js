@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
 import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS, DOG_FURS, dogXpNeeded } from './items.js';
+  let fishing = null;   // eigen hengel in het water: { x, z, bite }
 import * as M from './models.js';
 import { openInvite, closeInvite } from './invite.js';
 
@@ -212,6 +213,7 @@ export async function startGame({ net, joined, user }) {
   const leaves = new Particles(0x4c8f36, 0.14, 300, false, 3);
   const sparkles = new Particles(0xffe08a, 0.16, 400, true, -1.5);
   const blood = new Particles(0xb8332d, 0.13, 300, false, 12);
+  const splash = new Particles(0xcfeaff, 0.12, 200, false, 9);
 
   let actx = null;
   const audio = () => { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { actx = false; } } return actx || null; };
@@ -244,6 +246,9 @@ export async function startGame({ net, joined, user }) {
         o.start(t); o.stop(t + 0.15);
       }
     },
+    plop: () => { noise(0.12, 0.12, 1400); tone(420, 0.1, 'sine', 0.06, -200); },
+    bite: () => { noise(0.25, 0.22, 2200); tone(880, 0.12, 'square', 0.06); tone(1175, 0.16, 'square', 0.06, 0, 0.12); },
+    catch: gold => { noise(0.3, 0.2, 1800); for (let i = 0; i < (gold ? 6 : 3); i++) tone(700 + i * 140, 0.14, 'triangle', 0.07, 0, 0.1 + i * 0.07); },
     yelp: () => tone(900, 0.18, 'triangle', 0.06, 500),
     happy: () => { for (let i = 0; i < 4; i++) tone(660 + i * 110, 0.12, 'triangle', 0.06, 0, i * 0.07); },
     coin: () => { tone(988, 0.08, 'square', 0.05); tone(1319, 0.16, 'square', 0.05, 0, 0.08); },
@@ -256,7 +261,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ status en HUD */
   const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: Math.atan2(-(W.shop.x - joined.you.x), -(W.shop.z - joined.you.z)), pitch: 0, onGround: true, bob: 0 };   // start met zicht op de winkel
-  const inv = { wood: 0, meat: 0, potions: 0, up: { shield: 0, axe: 0 }, swords: [], equip: 0, stats: {} };
+  const inv = { wood: 0, meat: 0, potions: 0, fish: 0, up: { shield: 0, axe: 0, rod: 0 }, swords: [], equip: 0, stats: {} };
   const you = { hp: 100, hu: 80, sc: 0, rs: 0 };
   const wave = { n: 0, ph: 0, t: 0, left: 0 };
   const names = new Map(joined.players.map(p => [p.id, p.name]));
@@ -282,7 +287,7 @@ export async function startGame({ net, joined, user }) {
     c.classList.toggle('on', !!d);
     if (!d) return;
     const down = myDogHp && myDogHp.down;
-    c.innerHTML = '🐕 ' + esc(d.name) + ' · nv ' + d.level + (myDogHp ? (down ? ' · rust uit' : ' · ' + myDogHp.hp + '/' + myDogHp.max) : '') +
+    c.innerHTML = '🐕 ' + esc(d.name) + ' · nv ' + d.level + (myDogHp ? (down ? ' · rust uit' : ' · ' + myDogHp.hp + '/' + myDogHp.max) : '') + (myDogHp && myDogHp.boost ? ' · <b style="color:#6fe0ff">⚡ ' + myDogHp.boost + ' s</b>' : '') +
       (d.level < 10 ? '<span class="xp"><i style="width:' + Math.round(100 * d.xp / dogXpNeeded(d.level)) + '%"></i></span>' : '');
   }
   function renderInv() {
@@ -290,6 +295,8 @@ export async function startGame({ net, joined, user }) {
     $('meat').innerHTML = '🍖 Vlees: ' + inv.meat + ' <small style="opacity:.6">(R = eten)</small>';
     renderDogChip();
     $('potion').innerHTML = '🧪 Drank: ' + inv.potions + ' <small style="opacity:.6">(Q)</small>';
+    const fc = $('fishchip'); fc.classList.toggle('on', !!(inv.up.rod || inv.fish)); fc.innerHTML = '🐟 Vis: ' + inv.fish + ' <small style="opacity:.6">(G = hond voeren)</small>';
+    $('tb-fish').lastElementChild.textContent = inv.fish; $('tb-fish').classList.toggle('off', !inv.dog || !inv.fish);
     $('tb-eat').lastElementChild.textContent = inv.meat; $('tb-drink').lastElementChild.textContent = inv.potions;
     const all = items(), hb = $('hotbar'); hb.innerHTML = '';
     for (let i = 0; i < (isTouch ? Math.max(all.length, 2) : 9); i++) {     // op touch alleen de slots die je hebt
@@ -321,10 +328,10 @@ export async function startGame({ net, joined, user }) {
   const hand = new THREE.Group(); hand.scale.setScalar(0.5); handScene.add(hand);
   let heldMesh = null, heldKey = '';
   function rebuildHeld() {
-    const it = items()[inv.equip] || AXE, key = it.type === 'axe' ? 'axe' : it.rarity + ':' + it.base;
+    const it = items()[inv.equip] || AXE, key = fishing ? 'rod' : it.type === 'axe' ? 'axe' : it.rarity + ':' + it.base;
     if (key === heldKey && heldMesh) return; heldKey = key;
     if (heldMesh) hand.remove(heldMesh);
-    heldMesh = it.type === 'axe' ? M.makeAxeMesh() : M.makeSwordMesh(it);
+    heldMesh = fishing ? M.makeRodMesh() : it.type === 'axe' ? M.makeAxeMesh() : M.makeSwordMesh(it);
     heldMesh.traverse(o => { o.castShadow = false; }); hand.add(heldMesh);
   }
   function equipSlot(i) {
@@ -405,18 +412,18 @@ export async function startGame({ net, joined, user }) {
   function syncDogs(list) {
     const seen = new Set();
     for (const a of list) {
-      const [id, x, z, yaw, hp, maxhp, owner, state, level, name] = a; seen.add(id);
+      const [id, x, z, yaw, hp, maxhp, owner, state, level, name, , boost] = a; seen.add(id);
       let e = dogs.get(id);
       if (e && e.owner !== owner) { killEnt(dogs, id); e = null; }
       if (!e) e = makeDog(a);
-      e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp; e.state = state; e.level = level;
+      e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp; e.state = state; e.level = level; e.boost = boost | 0;
       const key = owner ? name + '|' + level + '|' + owner : '';
       if (key !== e.labelKey) {
         e.labelKey = key;
         if (e.label) { e.group.remove(e.label); e.label.material.map.dispose(); e.label = null; }
         if (owner) { const own = owner === myId; e.label = M.makeLabel(name + ' · nv ' + level + (own ? '' : ' (' + (names.get(owner) || '?') + ')'), own ? '#ffd27a' : '#ffffff'); e.label.position.y = 1.25; e.group.add(e.label); }
       }
-      if (owner === myId) { const was = myDogHp && myDogHp.down; myDogHp = { hp: hp, max: maxhp, down: state === 2 }; if (was !== myDogHp.down || Math.random() < 0.2) renderDogChip(); }
+      if (owner === myId) { const was = myDogHp && myDogHp.down; myDogHp = { hp: hp, max: maxhp, down: state === 2, boost: boost | 0 }; if (was !== myDogHp.down || Math.random() < 0.2) renderDogChip(); }
     }
     for (const id of [...dogs.keys()]) if (!seen.has(id)) killEnt(dogs, id);
     if (inv.dog && ![...dogs.values()].some(e => e.owner === myId)) myDogHp = null;
@@ -464,7 +471,7 @@ export async function startGame({ net, joined, user }) {
     const hint = $('prompt');
   });
   net.on('inv', m => {
-    inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
+    inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     renderInv(); rebuildHeld(); if (shopOpen) renderShop();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
@@ -508,6 +515,7 @@ export async function startGame({ net, joined, user }) {
     pendingReveal = null;
   });
   const floaters = [];
+  const bobbers = new Map();
   net.on('ev', m => {
     switch (m.k) {
       case 'chop': { const o = treeObjs[m.i]; if (!o) break; o.shake = 0.5; chips.emit(o.t.x, o.t.y + 1.1, o.t.z, 10, 2.6, 3.2, 0.7); leaves.emit(o.t.x, o.t.y + o.height * 0.8, o.t.z, 8, 2.4, 1.5, 1.4); if (Math.hypot(o.t.x - player.x, o.t.z - player.z) < 30) sfx.chop(); break; }
@@ -531,6 +539,32 @@ export async function startGame({ net, joined, user }) {
         break;
       }
       case 'doghurt': { const e = dogs.get(m.id); if (e && e.owner === myId && Math.hypot(e.x - player.x, e.z - player.z) < 30 && Math.random() < 0.5) sfx.yelp(); break; }
+      case 'cast': {
+        const b = M.makeBobber(); b.position.set(m.x, WATER, m.z); scene.add(b);
+        const old = bobbers.get(m.id); if (old) scene.remove(old.mesh);
+        bobbers.set(m.id, { mesh: b, x: m.x, z: m.z, dip: 0, t: 0 });
+        if (m.id === myId) { fishing = { x: m.x, z: m.z, bite: false }; rebuildHeld(); sfx.plop(); }
+        splash.emit(m.x, WATER + 0.05, m.z, 10, 1.2, 1.8, 0.5);
+        break;
+      }
+      case 'bite': {
+        if (fishing) fishing.bite = true;
+        const b = bobbers.get(myId); if (b) b.dip = 1.6;
+        sfx.bite(); if (navigator.vibrate) try { navigator.vibrate([60, 40, 60]); } catch {}
+        break;
+      }
+      case 'bob': { const b = bobbers.get(m.id); if (b) b.dip = 1.6; break; }
+      case 'caught': {
+        if (fishing) { splash.emit(fishing.x, WATER + 0.1, fishing.z, m.gold ? 40 : 22, 2, 3.2, 0.8); if (m.gold) sparkles.emit(fishing.x, WATER + 0.5, fishing.z, 30, 1.2, 2.5, 1.2); }
+        sfx.catch(m.gold);
+        break;
+      }
+      case 'fishend': {
+        const b = bobbers.get(m.id); if (b) { scene.remove(b.mesh); bobbers.delete(m.id); }
+        if (m.id === myId) { fishing = null; rebuildHeld(); }
+        break;
+      }
+      case 'dogboost': { const e = dogs.get(m.id); if (e) sparkles.emit(e.x, e.y + 0.6, e.z, 40, 1.4, 2.4, 1.4); if (e && e.owner === myId) sfx.happy(); break; }
       case 'doglvl': { const e = dogs.get(m.id); if (e) sparkles.emit(e.x, e.y + 0.8, e.z, 30, 1.2, 2, 1.2); if (e && e.owner === myId) sfx.happy(); break; }
       case 'hit': {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
@@ -595,6 +629,7 @@ export async function startGame({ net, joined, user }) {
     if (soft && e.code === 'Escape') { locked = false; drag.down = false; showVeil(true); for (const k in keys) keys[k] = false; return; }
     if (e.code === 'KeyE') interact();
     if (e.code === 'KeyQ') net.send({ t: 'drink' });
+    if (e.code === 'KeyG') feedDog();
     if (e.code === 'KeyR') net.send({ t: 'eat' });
     if (e.code === 'KeyF') startSwing();
     if (/^Digit[1-9]$/.test(e.code)) equipSlot(+e.code[5] - 1);
@@ -607,7 +642,7 @@ export async function startGame({ net, joined, user }) {
 
   const swing = { t: 1, cd: 0 };
   function startSwing() {
-    if (dead || shopOpen || swing.t < 1 || swing.cd > 0) return;
+    if (dead || shopOpen || fishing || swing.t < 1 || swing.cd > 0) return;
     const it = items()[inv.equip] || AXE;
     swing.t = 0; swing.cd = 0.5 / (it.speed || 1) * 0.92;
     sfx.swing(); net.send({ t: 'swing' });
@@ -629,7 +664,17 @@ export async function startGame({ net, joined, user }) {
     if (d > 5.6) return false;
     const f = fwd(); return (dx * f.x + dz * f.z) / (d || 1) > 0.15;
   }
-  function interact() { if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (nearShop()) openShop(); }
+  function findWater() {
+    const f = fwd();
+    for (let d = 2.5; d <= 6.5; d += 0.5) {
+      const x = player.x + f.x * d, z = player.z + f.z * d;
+      if (heightAt(x, z) < WATER - 0.25) return { x, z };
+    }
+    return null;
+  }
+  const feedDog = () => net.send({ t: 'feeddog' });
+  function interact() {
+    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (nearShop()) openShop(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
 
   /* ================================================================ winkel */
   const shopEl = $('shop');
@@ -724,6 +769,7 @@ export async function startGame({ net, joined, user }) {
     press('tb-use', () => interact());
     press('tb-eat', () => net.send({ t: 'eat' }));
     press('tb-drink', () => net.send({ t: 'drink' }));
+    press('tb-fish', feedDog);
     press('tb-sprint', () => { virt.toggle = !virt.toggle; $('tb-sprint').classList.toggle('on', virt.toggle); });
     press('tb-next', () => cycleWeapon(1));
     press('tb-menu', () => { home(); pauseGame(); });
@@ -757,6 +803,7 @@ export async function startGame({ net, joined, user }) {
       if (hit(2)) interact();
       if (hit(3)) net.send({ t: 'eat' });
       if (hit(6)) net.send({ t: 'drink' });
+      if (hit(12)) feedDog();
       if (hit(4)) cycleWeapon(-1);
       if (hit(5)) cycleWeapon(1);
     } else { virt.px = virt.py = 0; virt.pattack = virt.pjump = virt.psprint = false; }
@@ -864,6 +911,7 @@ export async function startGame({ net, joined, user }) {
       const happy = !down && (sit || (e.owner && e.speed < 1.5));
       mdl.tail.rotation.z = Math.sin(time * (happy ? 16 : 7)) * (happy ? 0.7 : 0.25);
       mdl.tongue.visible = !down;
+      mdl.aura.visible = e.boost > 0 && !down; if (mdl.aura.visible) { mdl.aura.rotation.z += dt * 3; mdl.aura.scale.setScalar(1 + Math.sin(time * 6) * 0.08); if (Math.random() < 0.15) sparkles.emit(e.x, e.y + 0.4, e.z, 1, 0.5, 1, 0.8); }
       if (e.barkT > 0) { e.barkT -= dt; mdl.head.rotation.x = -Math.abs(Math.sin(e.barkT * 18)) * 0.3; } else mdl.head.rotation.x = down ? 0 : Math.sin(time * 2 + e.id) * 0.05;
       e.bar.visible = !!e.owner && (e.hp < e.maxhp || down);
       if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
@@ -912,7 +960,15 @@ export async function startGame({ net, joined, user }) {
     if ((virt.attack || virt.pattack) && locked && !dead && !shopOpen) startSwing();
     const wd = locked && !dead && !shopOpen ? findWildDog() : null;
     const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
-    if (isTouch) { const tb = $('tb-use'); tb.classList.toggle('dim', !(ch || sh || wd)); tb.firstElementChild.textContent = wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : '✋'; }
+    const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
+    if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
+    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); tb.classList.toggle('dim', !(ch || sh || wd || fishOk)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : fishOk ? '🎣' : '✋'; }
+    if (fishing && locked && !dead) {
+      pr.innerHTML = fishing.bite ? '<b style="color:#ffd27a;font-size:1.25em">Beet! ' + (isTouch ? 'Tik nu op X' : 'Druk nu op E') + '</b>' : 'Wachten op een beet… ' + (isTouch ? '(X = binnenhalen)' : '(<b>E</b> = binnenhalen)');
+      pr.classList.add('on');
+    } else if (!wd && !ch && !sh && update.lastWat) {
+      pr.innerHTML = inv.up.rod ? (isTouch ? 'Vissen (X)' : '<b>E</b> · vissen') : 'Hier kun je vissen. Koop een vishengel in de winkel.'; pr.classList.add('on');
+    } else
     if (wd) {
       const txt = inv.dog ? 'Je hebt al een hond' : inv.meat > 0 ? 'hond vlees geven en temmen' : 'Deze hond wil vlees. Jaag eerst op een dier.';
       pr.innerHTML = inv.dog || inv.meat <= 0 ? txt : (isTouch ? 'Hond temmen (1 vlees)' : '<b>E</b> · ' + txt); pr.classList.add('on');
@@ -931,9 +987,16 @@ export async function startGame({ net, joined, user }) {
         chip.innerHTML = '<span class="arr" style="transform:rotate(' + ang.toFixed(0) + 'deg)">▲</span>🏪 Winkel · ' + Math.round(d) + ' m';
       }
     }
+    for (const b of bobbers.values()) {
+      b.t += dt; if (b.dip > 0) b.dip = Math.max(0, b.dip - dt);
+      const dip = b.dip > 0 ? -0.12 - Math.abs(Math.sin(b.t * 22)) * 0.1 : 0;
+      b.mesh.position.y = WATER + Math.sin(time * 0.6) * 0.06 + Math.sin(b.t * 2.4) * 0.025 + dip;
+      const r = b.mesh.userData.ring; r.scale.setScalar(1 + (b.t * 0.8 % 1) * 2); r.material.opacity = 0.5 * (1 - (b.t * 0.8 % 1));
+      if (b.dip > 0 && Math.random() < 0.3) splash.emit(b.x, WATER + 0.05, b.z, 2, 0.8, 1.2, 0.4);
+    }
     for (const c of clouds) { c.position.x += dt * 2.2; if (c.position.x > 480) c.position.x = -480; }
     water.position.y = WATER + Math.sin(time * 0.6) * 0.06;
-    chips.update(dt); leaves.update(dt); sparkles.update(dt); blood.update(dt);
+    chips.update(dt); leaves.update(dt); sparkles.update(dt); blood.update(dt); splash.update(dt);
   }
 
   /* ================================================================ start */
@@ -952,6 +1015,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
+  window.__game = { findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

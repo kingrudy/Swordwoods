@@ -153,6 +153,7 @@
   .rar { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:currentColor; box-shadow:0 0 8px currentColor; }
   #shopchip { display:none; } #shopchip.on { display:block; }
   #dogchip { display:none; } #dogchip.on { display:block; }
+  #fishchip { display:none; } #fishchip.on { display:block; }
   #dogchip .xp { display:block; height:4px; margin-top:4px; border-radius:2px; background:rgba(255,255,255,.15); overflow:hidden; }
   #dogchip .xp i { display:block; height:100%; background:var(--gold); }
   #shopchip .arr { display:inline-block; transition:transform .1s; color:var(--gold); margin-right:4px; }
@@ -189,6 +190,8 @@
   .tb { position:absolute; display:flex; align-items:center; justify-content:center; width:46px; height:46px; border-radius:50%; padding:0; border:2px solid rgba(255,255,255,.35); background:rgba(20,26,20,.6); color:var(--ink); font-size:20px; touch-action:none; -webkit-tap-highlight-color:transparent; backdrop-filter:blur(4px); }
   .tb small { position:absolute; right:-3px; top:-4px; min-width:20px; height:20px; padding:0 4px; border-radius:10px; background:var(--gold); color:#2b2110; font:700 12px system-ui; display:flex; align-items:center; justify-content:center; }
   #tb-drink { right:max(128px,calc(env(safe-area-inset-right) + 110px)); bottom:240px; }
+  #tb-fish { right:max(186px,calc(env(safe-area-inset-right) + 168px)); bottom:240px; }
+  #tb-fish.off { opacity:.4; }
   #tb-menu { right:max(12px,env(safe-area-inset-right)); top:max(10px,env(safe-area-inset-top)); }
   #tb-invite { right:max(66px,calc(env(safe-area-inset-right) + 54px)); top:max(10px,env(safe-area-inset-top)); }
   #rotate { display:none; }
@@ -327,6 +330,7 @@
     <div class="chip" id="score">⭐ Punten: 0</div>
     <div class="chip" id="shopchip"></div>
     <div class="chip" id="dogchip"></div>
+    <div class="chip" id="fishchip"></div>
     <div id="players"></div>
   </div>
   <div id="wave"></div>
@@ -361,6 +365,7 @@
   <button class="sb" id="tb-sprint" type="button" aria-label="Rennen"><b>L</b>Rennen</button>
   <button class="sb" id="tb-next" type="button" aria-label="Volgend wapen"><b>R</b>Wapen</button>
   <button class="tb" id="tb-drink" type="button" aria-label="Drankje">🧪<small>0</small></button>
+  <button class="tb" id="tb-fish" type="button" aria-label="Hond voeren met vis">🐟<small>0</small></button>
   <button class="tb" id="tb-invite" type="button" aria-label="Vrienden uitnodigen">📨</button>
   <button class="tb" id="tb-menu" type="button" aria-label="Menu">☰</button>
 </div>
@@ -374,12 +379,13 @@
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Lopen (<kbd>Shift</kbd> rennen, <kbd>Spatie</kbd> springen)</span>
       <span><kbd>Muis</kbd></span><span>Rondkijken</span>
       <span><kbd>Linkermuisknop</kbd></span><span>Slaan en hakken</span>
-      <span><kbd>E</kbd></span><span>Kist openen, winkel gebruiken of een hond temmen</span>
+      <span><kbd>E</kbd></span><span>Kist openen, winkel, hond temmen, vissen en binnenhalen</span>
       <span><kbd>R</kbd></span><span>Vlees eten tegen honger</span>
       <span><kbd>Q</kbd></span><span>Helende drank drinken</span>
+      <span><kbd>G</kbd></span><span>Je hond een vis geven (boost)</span>
       <span><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Scrollwiel</kbd></span><span>Bijl of zwaard kiezen</span>
       <span><kbd>F</kbd></span><span>Slaan (alternatief)</span>
-      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen, Start pauze</span>
+      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen, D-pad omhoog hond voeren, Start pauze</span>
     </div>
     <div class="row">
       <button class="btn primary" id="btn-resume" type="button">Verder spelen</button>

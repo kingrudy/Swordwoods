@@ -348,5 +348,28 @@ export function buildDog(furColor, collar = false) {
     const tag = sphere(0.03, goldMat, [8, 6]); tag.position.set(0, bodyY + 0.07, -0.37); g.add(tag);
   }
   shadows(root);
-  return { kind: 'quad', group: root, body: g, legs, head, tail, tongue, height: 1.0 };
+  const aura = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 8, 32), new THREE.MeshBasicMaterial({ color: 0x6fe0ff, transparent: true, opacity: 0.85, toneMapped: false }));
+  aura.rotation.x = -Math.PI / 2; aura.position.y = 0.06; aura.visible = false; root.add(aura);
+  return { kind: 'quad', group: root, body: g, legs, head, tail, tongue, aura, height: 1.0 };
+}
+
+/* ---------------------------------------------------------------- vissen */
+export function makeRodMesh() {
+  const g = new THREE.Group();
+  const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 10), std(0xb98a52)); cork.position.y = 0.05; g.add(cork);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.022, 1.45, 8), std(0x3b2a1a)); rod.position.y = 0.9; g.add(rod);
+  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 14), metalMat(0xb9c2cb, 0)); reel.rotation.z = Math.PI / 2; reel.position.set(0.06, 0.2, 0); g.add(reel);
+  const line = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 1.6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
+  line.position.set(0, 1.62 - 0.8, -0.35); line.rotation.x = 0.45; g.add(line);
+  return g;
+}
+export function makeBobber() {
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xe0413a, roughness: 0.4 }));
+  const bot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xf4efe2, roughness: 0.4 }));
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.12, 6), std(0x222222)); stick.position.y = 0.15;
+  g.add(top, bot, stick);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.2, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; g.add(ring); g.userData.ring = ring;
+  return g;
 }

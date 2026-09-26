@@ -74,6 +74,7 @@ export const SHOP = [
   { id: 'shield1', group: 'Uitrusting', name: 'Houten schild',   desc: '12% minder schade.',        cost: 20,  kind: 'shield', level: 1 },
   { id: 'shield2', group: 'Uitrusting', name: 'Beslagen schild', desc: '24% minder schade.',        cost: 60,  kind: 'shield', level: 2 },
   { id: 'shield3', group: 'Uitrusting', name: 'IJzeren schild',  desc: '36% minder schade.',        cost: 140, kind: 'shield', level: 3 },
+  { id: 'rod',     group: 'Uitrusting', name: 'Vishengel',     desc: 'Vis aan de waterkant (E). Vis geeft je hond een boost (G).', cost: 25, kind: 'rod' },
   { id: 'axe1',    group: 'Uitrusting', name: 'Scherpe bijl',    desc: 'Hakt sneller, doet meer schade.', cost: 15, kind: 'axe', level: 1 },
   { id: 'axe2',    group: 'Uitrusting', name: 'Gesmede bijl',    desc: 'Nog scherper.',             cost: 40,  kind: 'axe', level: 2 },
   { id: 'axe3',    group: 'Uitrusting', name: 'Meesterbijl',     desc: 'De beste bijl van de smid.', cost: 90, kind: 'axe', level: 3 },
@@ -89,3 +90,4 @@ export const DOG_MAX_LEVEL = 10;
 export const dogStats = level => ({ maxhp: 60 + 15 * (level - 1), dmg: 6 + 3 * (level - 1), speed: 8.5 });
 export const dogXpNeeded = level => 30 + level * 30;
 export const DOG_FURS = [0xc8903f, 0x3a2a20, 0xe8dcc8, 0x8a5a2b, 0x777777];   // kleurvarianten
+export const DOG_BOOST_SEC = 60, DOG_BOOST_MAX = 180;

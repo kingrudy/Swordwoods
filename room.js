@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer: spelers, monsterjacht in golven, dieren, honger, bomen en kisten.
 
 import { createWorld, HALF, WATER } from './public/world.js';
-import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded } from './public/items.js';
+import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX } from './public/items.js';
 
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 export const CFG = {
@@ -30,7 +30,8 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 export function ensureSave(u) {
   const s = u.save || (u.save = {});
   s.wood = s.wood | 0; s.meat = s.meat | 0; s.potions = clamp(s.potions | 0, 0, MAX_POTIONS);
-  s.up = Object.assign({ shield: 0, axe: 0 }, s.up || {}); s.up.shield = clamp(s.up.shield | 0, 0, 3); s.up.axe = clamp(s.up.axe | 0, 0, 3);
+  s.fish = Math.max(0, s.fish | 0);
+  s.up = Object.assign({ shield: 0, axe: 0, rod: 0 }, s.up || {}); s.up.rod = clamp(s.up.rod | 0, 0, 1); s.up.shield = clamp(s.up.shield | 0, 0, 3); s.up.axe = clamp(s.up.axe | 0, 0, 3);
   if (!Array.isArray(s.swords)) s.swords = [];
   s.equip = clamp(s.equip | 0, 0, s.swords.length);
   if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
@@ -75,7 +76,7 @@ export class Room {
   }
   sendInv(P) {
     const s = P.u.save;
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats });
   }
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
 
@@ -103,6 +104,7 @@ export class Room {
   }
 
   removePlayer(P) {
+    this.endFishing(P);
     if (P.dog) { this.dogs.delete(P.dog.id); P.dog = null; }
     this.players.delete(P.id);
     this.markDirty();
@@ -134,6 +136,9 @@ export class Room {
       case 'drink': this.drink(P); break;
       case 'buy': this.buy(P, String(m.id)); break;
       case 'tame': this.tame(P, m.id | 0); break;
+      case 'cast': this.cast(P, num(m.x, NaN), num(m.z, NaN)); break;
+      case 'reel': this.reel(P); break;
+      case 'feeddog': this.feedDog(P); break;
     }
   }
 
@@ -223,6 +228,9 @@ export class Room {
     const fail = msg => this.toast(P, msg, '#ff9c8a');
     switch (it.kind) {
       case 'meat': s.meat += it.n; break;
+      case 'rod':
+        if (s.up.rod) return fail('Je hebt al een vishengel.');
+        s.up.rod = 1; break;
       case 'potion':
         if (s.potions >= MAX_POTIONS) return fail('Je draagt al ' + MAX_POTIONS + ' drankjes.');
         s.potions++; break;
@@ -504,6 +512,7 @@ export class Room {
         if (P.starve >= 1.5) { P.starve = 0; this.hurt(P, 4, null); if (P.dead) continue; }
       } else if (P.hunger >= 40 && this.T - P.lastHurt > 6 && P.hp < 100) P.hp = Math.min(100, P.hp + 1.5 * dt);
       if (P.pendingHit >= 0 && this.T >= P.pendingHit) { P.pendingHit = -1; this.resolveHit(P); }
+      this.updateFishing(P);
     }
 
     const w = this.wave;
@@ -558,6 +567,58 @@ export class Room {
     this.toast(P, 'Je hebt een hond! Hij heet ' + name + ' en helpt je in gevechten.', '#f2c14e');
     this.sendInv(P); this.markDirty();
   }
+  // ------------------------------------------------------------ vissen
+  cast(P, x, z) {
+    const s = P.u.save, w = this.world;
+    if (P.dead || P.fishing || !s.up.rod) return;
+    if (!Number.isFinite(x) || !Number.isFinite(z) || len(x - P.x, z - P.z) > 7) return;
+    if (w.heightAt(x, z) > WATER - 0.15) { this.toast(P, 'Gooi je hengel uit in het water.', '#bbb'); return; }
+    P.fishing = { x, z, biteAt: this.T + 3 + Math.random() * 6, bite: false, until: 0 };
+    this.bc({ t: 'ev', k: 'cast', id: P.id, x: r1(x), z: r1(z) });
+  }
+  endFishing(P, caught = false) {
+    if (!P.fishing) return;
+    P.fishing = null;
+    this.bc({ t: 'ev', k: 'fishend', id: P.id, caught });
+  }
+  updateFishing(P) {
+    const f = P.fishing; if (!f) return;
+    if (P.dead || len(f.x - P.x, f.z - P.z) > 9) { this.endFishing(P); return; }
+    if (!f.bite && this.T >= f.biteAt) {
+      f.bite = true; f.until = this.T + 2.0;
+      P.conn.send({ t: 'ev', k: 'bite' });
+      this.bc({ t: 'ev', k: 'bob', id: P.id }, P);
+    } else if (f.bite && this.T > f.until) {
+      this.toast(P, 'Te laat, de vis is ontsnapt. Probeer het opnieuw.', '#bbb');
+      this.endFishing(P);
+    }
+  }
+  reel(P) {
+    const f = P.fishing; if (!f) return;
+    if (!f.bite) { this.toast(P, 'Te vroeg! Wacht tot de dobber onder gaat.', '#bbb'); this.endFishing(P); return; }
+    const s = P.u.save, gold = Math.random() < 0.12, n = gold ? 3 : 1;
+    s.fish += n; s.stats.fish = (s.stats.fish | 0) + n;
+    this.toast(P, gold ? 'Een goudvis! Die telt voor 3 vissen.' : 'Vis gevangen! Geef hem aan je hond met G.', gold ? '#f2c14e' : '#6fc6e8');
+    P.conn.send({ t: 'ev', k: 'caught', gold });
+    this.endFishing(P, true);
+    this.sendInv(P); this.markDirty();
+  }
+  feedDog(P) {
+    const s = P.u.save, d = P.dog;
+    if (P.dead) return;
+    if (!d) { this.toast(P, 'Je hebt nog geen hond om te voeren.', '#bbb'); return; }
+    if (s.fish <= 0) { this.toast(P, s.up.rod ? 'Je hebt geen vis. Ga vissen aan de waterkant.' : 'Je hebt geen vis. Koop een vishengel in de winkel.', '#ff9c8a'); return; }
+    s.fish--;
+    d.boostUntil = Math.min(this.T + DOG_BOOST_MAX, Math.max(this.T, d.boostUntil || 0) + DOG_BOOST_SEC);
+    if (d.state === 'down') { d.state = 'follow'; }
+    d.hp = d.maxhp;
+    if (len(d.x - P.x, d.z - P.z) > 12) { d.x = P.x + 1.5; d.z = P.z + 1.5; }
+    this.bc({ t: 'ev', k: 'dogboost', id: d.id });
+    this.toast(P, d.name + ' smult van de vis: sterker en sneller voor ' + Math.round(d.boostUntil - this.T) + ' seconden.', '#6fc6e8');
+    this.dogXp(d, 10);
+    this.sendInv(P); this.markDirty();
+  }
+
   hurtDog(d, dmg) {
     if (d.state !== 'follow') return;
     d.hp -= dmg; d.lastFight = this.T;
@@ -625,15 +686,16 @@ export class Room {
         }
         d.target = best;
       }
-      const speed = dogStats(d.level).speed;
+      const boosted = (d.boostUntil || 0) > this.T;
+      const speed = dogStats(d.level).speed + (boosted ? 2.5 : 0);
       if (d.target && !P.dead) {
         const e = d.target.e, r = d.target.isMon ? MONSTERS[e.type].r : ANIMALS[e.type].r;
         const dx = e.x - d.x, dz = e.z - d.z, dist = len(dx, dz), reach = r + 0.8;
         d.yaw = Math.atan2(-dx, -dz);
         if (dist > reach) { const st = Math.min(dist - reach * 0.8, (speed + 1) * dt); this.move(d, d.x + dx / dist * st, d.z + dz / dist * st, 0.35); }
         else if (this.T >= d.nextAtk) {
-          d.nextAtk = this.T + 0.85; d.lastFight = this.T;
-          const dmg = d.dmg * (0.9 + Math.random() * 0.2);
+          d.nextAtk = this.T + (boosted ? 0.55 : 0.85); d.lastFight = this.T;
+          const dmg = d.dmg * (boosted ? 1.5 : 1) * (0.9 + Math.random() * 0.2);
           e.hp -= dmg; e.stun = 0.12;
           if (!d.target.isMon) { e.angry = e.type === 2; e.hurtT = this.T; }
           this.bc({ t: 'ev', k: 'hit', e: d.target.isMon ? 'm' : 'a', id: e.id, dmg: Math.round(dmg), x: r1(e.x), z: r1(e.z), dog: d.id });
@@ -661,7 +723,7 @@ export class Room {
 
   snapshot() {
     const p = [], m = [], a = [], d = [];
-    for (const e of this.dogs.values()) d.push([e.id, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), e.maxhp, e.owner ? e.owner.id : 0, e.state === 'wild' ? (e.sit ? 3 : 0) : e.state === 'down' ? 2 : 1, e.level, e.name, e.fur]);
+    for (const e of this.dogs.values()) d.push([e.id, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), e.maxhp, e.owner ? e.owner.id : 0, e.state === 'wild' ? (e.sit ? 3 : 0) : e.state === 'down' ? 2 : 1, e.level, e.name, e.fur, e.boostUntil > this.T ? Math.ceil(e.boostUntil - this.T) : 0]);
     for (const P of this.players.values()) p.push([P.id, r1(P.x), r1(P.y), r1(P.z), r2(P.yaw), Math.round(P.hp), eqCode(this.eqItem(P)), P.dead ? 1 : 0, P.swings]);
     for (const e of this.monsters.values()) m.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
     for (const e of this.animals.values()) a.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
