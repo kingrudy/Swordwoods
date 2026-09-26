@@ -148,7 +148,7 @@ export async function startGame({ net, joined, user }) {
     const o = M.buildChest(); o.group.position.set(c.x, c.y - 0.03, c.z); o.group.rotation.y = c.rotY; scene.add(o.group);
     return { c, ...o, opened: false, opening: false, t: 0 };
   });
-  function chestOpenInstant(i) { const o = chestObjs[i]; if (!o) return; o.opened = true; o.pivot.rotation.x = -1.9; o.beam.visible = false; }
+  function chestOpenInstant(i) { const o = chestObjs[i]; if (!o) return; o.opened = true; o.pivot.rotation.x = o.openAngle || -1.9; o.beam.visible = false; }
   function chestReset(i) { const o = chestObjs[i]; if (!o) return; o.opened = false; o.opening = false; o.pivot.rotation.x = 0; o.beam.visible = true; }
   for (const i of joined.felled) fellInstant(i);
   for (const i of joined.chests) chestOpenInstant(i);
@@ -345,13 +345,25 @@ export async function startGame({ net, joined, user }) {
     e.want = { name, height };
   }
   function onRigReady(name) {
-    for (const map of [remotes, mons]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); e.want = null; } }
+    if (name === 'chest') upgradeChests();
+    for (const map of [remotes, mons, anis]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); e.want = null; } }
     if (name === 'merchant' && !merchant) {
       merchant = CH.createRig('merchant', 1.8);
       if (merchant) { shopObj.npc.group.visible = false; merchant.group.position.copy(shopObj.npc.group.position); merchant.group.rotation.y = shopObj.npc.group.rotation.y; shopObj.group.add(merchant.group); merchant.loop('Idle'); }
     }
   }
   let merchant = null;
+  function upgradeChests() {
+    const t = CH.template('chest'); if (!t) return;
+    for (const o of chestObjs) {
+      if (o.upgraded) continue; o.upgraded = true;
+      for (const ch of [...o.group.children]) if (ch !== o.beam) o.group.remove(ch);
+      const m = t.scene.clone(true); m.traverse(x => { if (x.isMesh) { x.castShadow = true; x.receiveShadow = true; x.material.side = THREE.DoubleSide; } });
+      o.group.add(m);
+      const lid = m.getObjectByName('lidPivot');
+      if (lid) { o.pivot = lid; o.openAngle = -1.75; if (o.opened && !o.opening) lid.rotation.x = o.openAngle; }
+    }
+  }
   function rigLocomotion(e, run = 5.5, walk = 2.0, idle = 'Idle', walkClip = 'Walking_A', runClip = 'Running_A') {
     const r = e.model, sp = e.speed / (r.height / 1.85);
     if (sp < 0.35) r.loop(idle);
@@ -420,6 +432,7 @@ export async function startGame({ net, joined, user }) {
   }
   function makeAnimal(id, type) {
     const model = M.buildAnimal(type), e = makeEntBase(model); e.id = id; e.type = type;
+    if (type === 1) wantRig(e, 'deer', 1.5);
     e.bar = M.makeBar(0.7); scene.add(e.bar); e.barY = model.height + 0.3;
     anis.set(id, e); return e;
   }
@@ -615,7 +628,7 @@ export async function startGame({ net, joined, user }) {
       case 'mdie': { const e = mons.get(m.id);
         if (e && e.model.kind === 'rig') { e.dying = 1.8; e.model.once('Death_A', { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
         else killEnt(mons, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 30, 3.2, 3.5, 1); if (Math.hypot(m.x - player.x, m.z - player.z) < 40) sfx.kill(); break;
-      case 'adie': killEnt(anis, m.id); blood.emit(m.x, heightAt(m.x, m.z) + 0.4, m.z, 18, 2.5, 3, 0.8); break;
+      case 'adie': { const e = anis.get(m.id); if (e && e.model.kind === 'rig') { e.dying = 1.4; e.model.once('die', { hold: true }); if (e.bar) e.bar.visible = false; } else killEnt(anis, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.4, m.z, 18, 2.5, 3, 0.8); break;
     }
   });
   net.on('_close', () => { /* main.js toont de melding */ });
@@ -981,7 +994,19 @@ export async function startGame({ net, joined, user }) {
       if (e.label) e.label.visible = Math.hypot(e.x - player.x, e.z - player.z) < 40;
     }
     for (const e of anis.values()) {
-      moveEnt(e, dt); animateBody(e, dt); tickFlash(e, dt);
+      if (e.dying !== undefined) {
+        e.dying -= dt; if (e.model.update) e.model.update(dt);
+        if (e.dying < 0.5) e.group.position.y -= dt * 0.8;
+        if (e.dying <= 0) { e.dying = undefined; killEnt(anis, e.id); }
+        continue;
+      }
+      moveEnt(e, dt); tickFlash(e, dt);
+      if (e.model.kind === 'rig') {
+        if (e.speed < 0.3) e.model.loop('idle'); else e.model.loop('run', clamp(e.speed / 9, 0.35, 1.4));
+        const far = Math.hypot(e.x - player.x, e.z - player.z) > 55;
+        e.animAcc = (e.animAcc || 0) + dt;
+        if (!far || e.animAcc > 0.1) { e.model.update(e.animAcc); e.animAcc = 0; }
+      } else animateBody(e, dt);
       e.bar.visible = e.hp < e.maxhp;
       if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
@@ -1008,7 +1033,7 @@ export async function startGame({ net, joined, user }) {
 
     // kisten
     for (const o of chestObjs) {
-      if (o.opening) { o.t += dt; o.pivot.rotation.x = -ease(Math.min(1, o.t / 0.7)) * 1.9; if (o.t > 1) o.opening = false; }
+      if (o.opening) { o.t += dt; o.pivot.rotation.x = ease(Math.min(1, o.t / 0.7)) * (o.openAngle || -1.9); if (o.t > 1) o.opening = false; }
       else if (!o.opened && o.beam.visible) o.beam.scale.x = o.beam.scale.z = 1 + Math.sin(time * 2 + o.c.idx) * 0.12;
     }
     for (let i = floaters.length - 1; i >= 0; i--) {
@@ -1092,7 +1117,7 @@ export async function startGame({ net, joined, user }) {
     }
   }
 
-  CH.preload(['knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage', 'merchant'], onRigReady);
+  CH.preload(['chest', 'deer', 'knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage', 'merchant'], onRigReady);
 
   showVeil(true);
   setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);

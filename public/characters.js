@@ -28,15 +28,17 @@ export function loadModel(name) {
     const scene = g.scene;
     scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(scene), height = box.max.y - box.min.y;
-    const t = { scene, height }; templates.set(name, t); return t;
+    const t = { scene, height, clips: g.animations.length ? Object.fromEntries(g.animations.map(a => [a.name, a])) : null }; templates.set(name, t); return t;
   }));
   return pending.get(name);
 }
-export const isReady = name => clips && templates.has(name);
+export const isReady = name => templates.has(name) && !!(templates.get(name).clips || clips);
+export const template = name => templates.get(name);
 
 /** Maakt een geanimeerd figuur. height = gewenste lengte in meters. */
 export function createRig(name, height = 1.85, shadows = true) {
-  const t = templates.get(name); if (!t || !clips) return null;
+  const t = templates.get(name); if (!t) return null;
+  const clipsFor = t.clips || clips; if (!clipsFor) return null;
   const inner = SkeletonUtils.clone(t.scene);
   inner.scale.setScalar(height / t.height);
   inner.rotation.y = Math.PI;                 // modellen kijken naar +Z, het spel naar -Z
@@ -46,8 +48,8 @@ export function createRig(name, height = 1.85, shadows = true) {
   const mixer = new THREE.AnimationMixer(inner);
   const actions = {};
   const act = n => {
-    if (!clips[n]) return null;
-    return actions[n] || (actions[n] = mixer.clipAction(clips[n]));
+    if (!clipsFor[n]) return null;
+    return actions[n] || (actions[n] = mixer.clipAction(clipsFor[n]));
   };
   let base = null, oneShot = null, oneShotEnd = 0, locked = false;
   const rig = {
@@ -90,5 +92,5 @@ export function createRig(name, height = 1.85, shadows = true) {
 /** Laadt alles wat het spel nodig heeft; roept onReady aan zodra een figuur bruikbaar is. */
 export function preload(names, onReady) {
   loadAnims().then(() => { for (const n of names) if (templates.has(n)) onReady(n); }).catch(e => console.warn('animaties laden mislukt', e));
-  for (const n of names) loadModel(n).then(() => { if (clips) onReady(n); }).catch(e => console.warn('model laden mislukt', n, e));
+  for (const n of names) loadModel(n).then(() => { if (isReady(n)) onReady(n); }).catch(e => console.warn('model laden mislukt', n, e));
 }
