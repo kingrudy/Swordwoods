@@ -152,6 +152,9 @@
   .item.owned { opacity:.55; }
   .rar { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:currentColor; box-shadow:0 0 8px currentColor; }
   #shopchip { display:none; } #shopchip.on { display:block; }
+  #dogchip { display:none; } #dogchip.on { display:block; }
+  #dogchip .xp { display:block; height:4px; margin-top:4px; border-radius:2px; background:rgba(255,255,255,.15); overflow:hidden; }
+  #dogchip .xp i { display:block; height:100%; background:var(--gold); }
   #shopchip .arr { display:inline-block; transition:transform .1s; color:var(--gold); margin-right:4px; }
 
   /* ---------- mobiele besturing: gamepad-overlay ---------- */
@@ -323,6 +326,7 @@
     <div class="chip" id="potion">🧪 Drank: 0 <small style="opacity:.6">(Q)</small></div>
     <div class="chip" id="score">⭐ Punten: 0</div>
     <div class="chip" id="shopchip"></div>
+    <div class="chip" id="dogchip"></div>
     <div id="players"></div>
   </div>
   <div id="wave"></div>
@@ -370,7 +374,7 @@
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Lopen (<kbd>Shift</kbd> rennen, <kbd>Spatie</kbd> springen)</span>
       <span><kbd>Muis</kbd></span><span>Rondkijken</span>
       <span><kbd>Linkermuisknop</kbd></span><span>Slaan en hakken</span>
-      <span><kbd>E</kbd></span><span>Kist openen of winkel gebruiken</span>
+      <span><kbd>E</kbd></span><span>Kist openen, winkel gebruiken of een hond temmen</span>
       <span><kbd>R</kbd></span><span>Vlees eten tegen honger</span>
       <span><kbd>Q</kbd></span><span>Helende drank drinken</span>
       <span><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Scrollwiel</kbd></span><span>Bijl of zwaard kiezen</span>

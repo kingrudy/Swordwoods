@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer: spelers, monsterjacht in golven, dieren, honger, bomen en kisten.
 
 import { createWorld, HALF, WATER } from './public/world.js';
-import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS } from './public/items.js';
+import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded } from './public/items.js';
 
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 export const CFG = {
@@ -12,6 +12,7 @@ export const CFG = {
   hungerRate: num(process.env.HUNGER_RATE, 0.22),     // punten per seconde (100 -> 0 in ~7,5 min)
   treeRespawn: 240, chestRespawn: 600,
   animalTarget: 38,
+  strays: num(process.env.STRAY_DOGS, 3), strayRespawn: 180, dogDown: 20,
 };
 
 const worlds = new Map();
@@ -32,6 +33,8 @@ export function ensureSave(u) {
   s.up = Object.assign({ shield: 0, axe: 0 }, s.up || {}); s.up.shield = clamp(s.up.shield | 0, 0, 3); s.up.axe = clamp(s.up.axe | 0, 0, 3);
   if (!Array.isArray(s.swords)) s.swords = [];
   s.equip = clamp(s.equip | 0, 0, s.swords.length);
+  if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
+  if (s.dog) { s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
   s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0 }, s.stats || {});
   return s;
 }
@@ -48,7 +51,7 @@ export class Room {
 
   reset() {
     this.T = 0; this.tickN = 0; this.eid = 1;
-    this.monsters = new Map(); this.animals = new Map();
+    this.monsters = new Map(); this.animals = new Map(); this.dogs = new Map(); this.strayAt = 0;
     this.treeHp = Float32Array.from(this.world.trees, t => t.hp0);
     this.felled = new Map();      // idx -> respawn time
     this.chestOpen = new Map();   // idx -> reset time
@@ -56,6 +59,8 @@ export class Room {
     this.animalTimer = 0;
     this.rand = Math.random;
     for (let i = 0; i < CFG.animalTarget; i++) this.spawnAnimal(i < 8);
+    for (let i = 0; i < CFG.strays; i++) this.spawnStray();
+    for (const P of this.players.values()) if (P.u.save.dog) this.spawnOwnedDog(P);
     this.emptySince = this.players.size ? null : Date.now();
   }
 
@@ -70,7 +75,7 @@ export class Room {
   }
   sendInv(P) {
     const s = P.u.save;
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, up: s.up, swords: s.swords, equip: s.equip, stats: s.stats });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats });
   }
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
 
@@ -84,6 +89,7 @@ export class Room {
     };
     P.y = this.world.heightAt(P.x, P.z);
     this.players.set(P.id, P); this.emptySince = null;
+    if (s.dog) this.spawnOwnedDog(P);
     this.bc({ t: 'pjoin', id: P.id, name: P.name }, P);
     conn.send({
       t: 'joined',
@@ -97,6 +103,7 @@ export class Room {
   }
 
   removePlayer(P) {
+    if (P.dog) { this.dogs.delete(P.dog.id); P.dog = null; }
     this.players.delete(P.id);
     this.markDirty();
     this.bc({ t: 'pleave', id: P.id });
@@ -126,6 +133,7 @@ export class Room {
       case 'eat': this.eat(P); break;
       case 'drink': this.drink(P); break;
       case 'buy': this.buy(P, String(m.id)); break;
+      case 'tame': this.tame(P, m.id | 0); break;
     }
   }
 
@@ -411,14 +419,16 @@ export class Room {
     return b;
   }
 
+  targetOk(t) { return t && (t.isDog ? this.dogs.has(t.id) && t.state === 'follow' : !t.dead && this.players.has(t.id)); }
   updateMonsters(dt) {
     const alive = [...this.players.values()].filter(p => !p.dead);
+    for (const d of this.dogs.values()) if (d.state === 'follow') alive.push(d);
     const arr = [...this.monsters.values()];
     for (const m of arr) {
       if (m.stun > 0) { m.stun -= dt; continue; }
       const M = MONSTERS[m.type];
       m.retarget -= dt;
-      if (m.retarget <= 0 || !m.target || m.target.dead || !this.players.has(m.target.id)) {
+      if (m.retarget <= 0 || !this.targetOk(m.target)) {
         m.retarget = 0.6; m.target = this.nearest(alive, m.x, m.z, 400);
       }
       const tg = m.target; if (!tg) continue;
@@ -434,7 +444,7 @@ export class Room {
         this.move(m, m.x + dx / d * step, m.z + dz / d * step, M.r);
       } else if (this.T >= m.nextAtk) {
         m.nextAtk = this.T + M.atkCd;
-        this.hurt(tg, m.dmg, m);
+        if (tg.isDog) this.hurtDog(tg, m.dmg); else this.hurt(tg, m.dmg, m);
       }
     }
     // niet op elkaar stapelen
@@ -502,6 +512,7 @@ export class Room {
 
     this.updateMonsters(dt);
     this.updateAnimals(dt);
+    this.updateDogs(dt);
 
     if (this.tickN % 20 === 0) {
       for (const [i, t] of this.felled) if (this.T >= t) { this.felled.delete(i); this.treeHp[i] = this.world.trees[i].hp0; this.bc({ t: 'ev', k: 'treeBack', i }); }
@@ -510,12 +521,151 @@ export class Room {
     if (this.tickN % 2 === 0) this.snapshot();
   }
 
+  // ------------------------------------------------------------ honden
+  spawnStray() {
+    const w = this.world;
+    for (let i = 0; i < 10; i++) {
+      const pt = w.landPoint(Math.random, 0, 0, 55, HALF * 0.75, 0.8);
+      if (!pt || w.slopeAt(pt.x, pt.z) > 0.5) continue;
+      const d = { id: this.eid++, isDog: true, state: 'wild', owner: null, x: pt.x, z: pt.z, home: pt, yaw: Math.random() * 6.28,
+        level: 1, xp: 0, name: 'Zwerfhond', fur: Math.floor(Math.random() * DOG_FURS.length), hp: 60, maxhp: 60, dir: null, wt: 0, nextBark: 0, sit: false };
+      this.dogs.set(d.id, d); return d;
+    }
+    return null;
+  }
+  spawnOwnedDog(P) {
+    const sd = P.u.save.dog, st = dogStats(sd.level);
+    const d = { id: this.eid++, isDog: true, state: 'follow', owner: P, x: P.x + 1.5, z: P.z + 1.5, yaw: 0, level: sd.level, xp: sd.xp, name: sd.name, fur: sd.fur | 0,
+      hp: st.maxhp, maxhp: st.maxhp, dmg: st.dmg, nextAtk: 0, target: null, retarget: 0, lastFight: -99, downUntil: 0 };
+    this.dogs.set(d.id, d); P.dog = d;
+    return d;
+  }
+  tame(P, id) {
+    const d = this.dogs.get(id), s = P.u.save;
+    if (!d || d.state !== 'wild' || P.dead) return;
+    if (len(d.x - P.x, d.z - P.z) > 4) return;
+    if (s.dog) { this.toast(P, 'Je hebt al een hond: ' + s.dog.name + '.', '#bbb'); return; }
+    if (s.meat <= 0) { this.toast(P, 'De hond kijkt hongerig naar je. Neem een stuk vlees mee om hem te temmen.', '#ff9c8a'); return; }
+    s.meat--;
+    const used = new Set([...this.players.values()].map(p => p.u.save.dog && p.u.save.dog.name));
+    const free = DOG_NAMES.filter(n => !used.has(n)), name = (free.length ? free : DOG_NAMES)[Math.floor(Math.random() * (free.length || DOG_NAMES.length))];
+    s.dog = { name, level: 1, xp: 0, fur: d.fur };
+    s.stats.dogs = (s.stats.dogs | 0) + 1;
+    this.dogs.delete(d.id);
+    const nd = this.spawnOwnedDog(P); nd.x = d.x; nd.z = d.z; nd.yaw = d.yaw;
+    if (!this.strayAt) this.strayAt = this.T + CFG.strayRespawn;
+    this.bc({ t: 'ev', k: 'tamed', id: nd.id, by: P.id, name, x: r1(nd.x), z: r1(nd.z) });
+    this.toast(P, 'Je hebt een hond! Hij heet ' + name + ' en helpt je in gevechten.', '#f2c14e');
+    this.sendInv(P); this.markDirty();
+  }
+  hurtDog(d, dmg) {
+    if (d.state !== 'follow') return;
+    d.hp -= dmg; d.lastFight = this.T;
+    this.bc({ t: 'ev', k: 'doghurt', id: d.id });
+    if (d.hp <= 0) {
+      d.hp = 0; d.state = 'down'; d.downUntil = this.T + CFG.dogDown; d.target = null;
+      if (d.owner) this.toast(d.owner, d.name + ' is uitgeschakeld en rust even uit.', '#ff9c8a');
+    }
+  }
+  dogXp(d, n) {
+    if (!d.owner) return;
+    const sd = d.owner.u.save.dog; if (!sd) return;
+    d.xp += n;
+    while (d.level < DOG_MAX_LEVEL && d.xp >= dogXpNeeded(d.level)) {
+      d.xp -= dogXpNeeded(d.level); d.level++;
+      const st = dogStats(d.level); d.maxhp = st.maxhp; d.dmg = st.dmg; d.hp = st.maxhp;
+      this.toast(d.owner, d.name + ' is nu niveau ' + d.level + '!', '#f2c14e');
+      this.bc({ t: 'ev', k: 'doglvl', id: d.id });
+    }
+    if (d.level >= DOG_MAX_LEVEL) d.xp = 0;
+    sd.level = d.level; sd.xp = d.xp;
+    this.sendInv(d.owner); this.markDirty();
+  }
+  updateDogs(dt) {
+    const players = [...this.players.values()].filter(p => !p.dead);
+    let wild = 0;
+    for (const d of this.dogs.values()) {
+      if (d.state === 'wild') {
+        wild++;
+        const near = this.nearest(players, d.x, d.z, 9);
+        d.sit = !!near;
+        if (near) { d.yaw = Math.atan2(-(near.x - d.x), -(near.z - d.z)); }
+        else {
+          d.wt -= dt;
+          if (d.wt <= 0) { d.wt = 2 + Math.random() * 4; d.dir = Math.random() < 0.4 ? null : Math.random() * 6.28; }
+          if (d.dir !== null) {
+            let dx = Math.cos(d.dir), dz = Math.sin(d.dir);
+            if (len(d.x - d.home.x, d.z - d.home.z) > 14) { dx = d.home.x - d.x; dz = d.home.z - d.z; const l = len(dx, dz); dx /= l; dz /= l; }
+            d.yaw = Math.atan2(-dx, -dz);
+            this.move(d, d.x + dx * 1.6 * dt, d.z + dz * 1.6 * dt, 0.35);
+          }
+        }
+        if (this.T >= d.nextBark && this.nearest(players, d.x, d.z, 32)) {
+          d.nextBark = this.T + 3 + Math.random() * 4;
+          this.bc({ t: 'ev', k: 'bark', id: d.id, x: r1(d.x), z: r1(d.z) });
+        }
+        continue;
+      }
+      const P = d.owner; if (!P) continue;
+      if (d.state === 'down') {
+        if (this.T >= d.downUntil) { d.state = 'follow'; d.hp = Math.round(d.maxhp * 0.5); this.toast(P, d.name + ' staat weer op.', '#6fd37a'); }
+        continue;
+      }
+      if (this.T - d.lastFight > 5 && d.hp < d.maxhp) d.hp = Math.min(d.maxhp, d.hp + 3 * dt);
+      // doel zoeken: monsters bij de baas, of dieren die de baas net heeft geraakt / boze everzwijnen
+      d.retarget -= dt;
+      const valid = t => t && (t.isMon ? this.monsters.has(t.e.id) : this.animals.has(t.e.id)) && len(t.e.x - P.x, t.e.z - P.z) < 22;
+      if (d.retarget <= 0 || !valid(d.target)) {
+        d.retarget = 0.5; d.target = null;
+        let best = null, bd = 16;
+        for (const m of this.monsters.values()) { const dd = len(m.x - P.x, m.z - P.z); if (dd < bd) { bd = dd; best = { isMon: true, e: m }; } }
+        if (!best) for (const a of this.animals.values()) {
+          if (!(a.angry || this.T - a.hurtT < 6)) continue;
+          const dd = len(a.x - P.x, a.z - P.z); if (dd < bd) { bd = dd; best = { isMon: false, e: a }; }
+        }
+        d.target = best;
+      }
+      const speed = dogStats(d.level).speed;
+      if (d.target && !P.dead) {
+        const e = d.target.e, r = d.target.isMon ? MONSTERS[e.type].r : ANIMALS[e.type].r;
+        const dx = e.x - d.x, dz = e.z - d.z, dist = len(dx, dz), reach = r + 0.8;
+        d.yaw = Math.atan2(-dx, -dz);
+        if (dist > reach) { const st = Math.min(dist - reach * 0.8, (speed + 1) * dt); this.move(d, d.x + dx / dist * st, d.z + dz / dist * st, 0.35); }
+        else if (this.T >= d.nextAtk) {
+          d.nextAtk = this.T + 0.85; d.lastFight = this.T;
+          const dmg = d.dmg * (0.9 + Math.random() * 0.2);
+          e.hp -= dmg; e.stun = 0.12;
+          if (!d.target.isMon) { e.angry = e.type === 2; e.hurtT = this.T; }
+          this.bc({ t: 'ev', k: 'hit', e: d.target.isMon ? 'm' : 'a', id: e.id, dmg: Math.round(dmg), x: r1(e.x), z: r1(e.z), dog: d.id });
+          if (e.hp > 0) this.dogXp(d, 1);
+          if (e.hp <= 0) {
+            if (d.target.isMon) { this.dogXp(d, Math.round(MONSTERS[e.type].score * 0.8)); this.killMonster(e, P); }
+            else { this.dogXp(d, 4); this.killAnimal(e, P); }
+            d.target = null;
+          }
+        }
+        continue;
+      }
+      // volgen
+      const bx = P.x + Math.sin(P.yaw) * 2.2 + Math.cos(P.yaw) * 1.2, bz = P.z + Math.cos(P.yaw) * 2.2 - Math.sin(P.yaw) * 1.2;
+      const dx = bx - d.x, dz = bz - d.z, dist = len(dx, dz);
+      if (dist > 45) { d.x = bx; d.z = bz; continue; }
+      if (dist > 0.6) {
+        const st = Math.min(dist - 0.3, Math.min(speed + 1, 1.5 + dist * 1.6) * dt);
+        this.move(d, d.x + dx / dist * st, d.z + dz / dist * st, 0.35);
+        d.yaw = Math.atan2(-dx, -dz);
+      } else d.yaw = P.yaw;
+    }
+    if (wild < CFG.strays && this.strayAt && this.T >= this.strayAt) { this.spawnStray(); this.strayAt = wild + 1 < CFG.strays ? this.T + CFG.strayRespawn : 0; }
+  }
+
   snapshot() {
-    const p = [], m = [], a = [];
+    const p = [], m = [], a = [], d = [];
+    for (const e of this.dogs.values()) d.push([e.id, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), e.maxhp, e.owner ? e.owner.id : 0, e.state === 'wild' ? (e.sit ? 3 : 0) : e.state === 'down' ? 2 : 1, e.level, e.name, e.fur]);
     for (const P of this.players.values()) p.push([P.id, r1(P.x), r1(P.y), r1(P.z), r2(P.yaw), Math.round(P.hp), eqCode(this.eqItem(P)), P.dead ? 1 : 0, P.swings]);
     for (const e of this.monsters.values()) m.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
     for (const e of this.animals.values()) a.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
-    const head = JSON.stringify({ t: 's', p, m, a, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.monsters.size } }).slice(0, -1);
+    const head = JSON.stringify({ t: 's', p, m, a, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.monsters.size } }).slice(0, -1);
     for (const P of this.players.values()) {
       const you = { hp: Math.round(P.hp), hu: Math.round(P.hunger), sc: P.u.save.stats.score, rs: P.dead ? Math.max(0, Math.ceil(P.respawnAt - this.T)) : 0 };
       P.conn.send(head + ',"y":' + JSON.stringify(you) + '}');

@@ -82,3 +82,10 @@ export const SHOP = [
   { id: 'sword3',  group: 'Zwaarden',  name: 'Episch zwaard',    desc: 'Willekeurig zwaard, zeldzaamheid Episch.',   cost: 220, kind: 'sword', rarity: 3 },
   { id: 'sword4',  group: 'Zwaarden',  name: 'Legendarisch zwaard', desc: 'Willekeurig zwaard, zeldzaamheid Legendarisch.', cost: 600, kind: 'sword', rarity: 4 },
 ];
+
+// ---------------------------------------------------------------- hond (companion)
+export const DOG_NAMES = ['Bas', 'Max', 'Bobby', 'Luna', 'Rakker', 'Guus', 'Sam', 'Bello', 'Pip', 'Moos', 'Kees', 'Fleur', 'Tarzan', 'Joep', 'Nala', 'Bruno'];
+export const DOG_MAX_LEVEL = 10;
+export const dogStats = level => ({ maxhp: 60 + 15 * (level - 1), dmg: 6 + 3 * (level - 1), speed: 8.5 });
+export const dogXpNeeded = level => 30 + level * 30;
+export const DOG_FURS = [0xc8903f, 0x3a2a20, 0xe8dcc8, 0x8a5a2b, 0x777777];   // kleurvarianten

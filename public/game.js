@@ -1,7 +1,7 @@
 // Multiplayer-client: rendert de wereld, stuurt invoer naar de server en toont wat de server meldt.
 import * as THREE from 'three';
 import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
-import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS } from './items.js';
+import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS, DOG_FURS, dogXpNeeded } from './items.js';
 import * as M from './models.js';
 import { openInvite, closeInvite } from './invite.js';
 
@@ -233,6 +233,19 @@ export async function startGame({ net, joined, user }) {
     hurt: () => { noise(0.25, 0.3, 500); tone(110, 0.25, 'sawtooth', 0.12, -60); },
     fall: () => { noise(0.9, 0.3, 350); tone(80, 0.6, 'sine', 0.25, -40); },
     creak: () => tone(140, 0.5, 'sawtooth', 0.05, 90),
+    bark: (pan = 0, vol = 1) => {
+      const a = audio(); if (!a) return;
+      for (const [dl, f] of [[0, 520], [0.16, 470]]) {
+        const t = a.currentTime + dl, o = a.createOscillator(), g = a.createGain(), p = a.createStereoPanner ? a.createStereoPanner() : null;
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.45, t + 0.11);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13 * vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        const flt = a.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 900; flt.Q.value = 1.2;
+        o.connect(flt).connect(g); if (p) { p.pan.value = pan; g.connect(p).connect(a.destination); } else g.connect(a.destination);
+        o.start(t); o.stop(t + 0.15);
+      }
+    },
+    yelp: () => tone(900, 0.18, 'triangle', 0.06, 500),
+    happy: () => { for (let i = 0; i < 4; i++) tone(660 + i * 110, 0.12, 'triangle', 0.06, 0, i * 0.07); },
     coin: () => { tone(988, 0.08, 'square', 0.05); tone(1319, 0.16, 'square', 0.05, 0, 0.08); },
     drink: () => { noise(0.2, 0.1, 900); tone(260, 0.2, 'sine', 0.08, 140); },
     eat: () => { noise(0.08, 0.12, 1200); tone(300, 0.09, 'triangle', 0.08, 120, 0.09); },
@@ -263,9 +276,19 @@ export async function startGame({ net, joined, user }) {
   }
   const fmt = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 
+  let myDogHp = null;
+  function renderDogChip() {
+    const c = $('dogchip'), d = inv.dog;
+    c.classList.toggle('on', !!d);
+    if (!d) return;
+    const down = myDogHp && myDogHp.down;
+    c.innerHTML = '🐕 ' + esc(d.name) + ' · nv ' + d.level + (myDogHp ? (down ? ' · rust uit' : ' · ' + myDogHp.hp + '/' + myDogHp.max) : '') +
+      (d.level < 10 ? '<span class="xp"><i style="width:' + Math.round(100 * d.xp / dogXpNeeded(d.level)) + '%"></i></span>' : '');
+  }
   function renderInv() {
     $('wood').textContent = '🪵 Hout: ' + inv.wood;
     $('meat').innerHTML = '🍖 Vlees: ' + inv.meat + ' <small style="opacity:.6">(R = eten)</small>';
+    renderDogChip();
     $('potion').innerHTML = '🧪 Drank: ' + inv.potions + ' <small style="opacity:.6">(Q)</small>';
     $('tb-eat').lastElementChild.textContent = inv.meat; $('tb-drink').lastElementChild.textContent = inv.potions;
     const all = items(), hb = $('hotbar'); hb.innerHTML = '';
@@ -362,6 +385,42 @@ export async function startGame({ net, joined, user }) {
     anis.set(id, e); return e;
   }
   function killEnt(map, id) { const e = map.get(id); if (!e) return; scene.remove(e.group); if (e.bar) scene.remove(e.bar); map.delete(id); }
+  const dogs = new Map();
+  function makeDog(a) {
+    const [id, , , , , , owner, , , , fur] = a;
+    const model = M.buildDog(DOG_FURS[fur] ?? DOG_FURS[0], owner > 0);
+    const e = makeEntBase(model); e.id = id; e.owner = owner; e.bar = M.makeBar(0.7); scene.add(e.bar); e.barY = 1.15; e.labelKey = '';
+    dogs.set(id, e); return e;
+  }
+  function syncDogs(list) {
+    const seen = new Set();
+    for (const a of list) {
+      const [id, x, z, yaw, hp, maxhp, owner, state, level, name] = a; seen.add(id);
+      let e = dogs.get(id);
+      if (e && e.owner !== owner) { killEnt(dogs, id); e = null; }
+      if (!e) e = makeDog(a);
+      e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp; e.state = state; e.level = level;
+      const key = owner ? name + '|' + level + '|' + owner : '';
+      if (key !== e.labelKey) {
+        e.labelKey = key;
+        if (e.label) { e.group.remove(e.label); e.label.material.map.dispose(); e.label = null; }
+        if (owner) { const own = owner === myId; e.label = M.makeLabel(name + ' · nv ' + level + (own ? '' : ' (' + (names.get(owner) || '?') + ')'), own ? '#ffd27a' : '#ffffff'); e.label.position.y = 1.25; e.group.add(e.label); }
+      }
+      if (owner === myId) { const was = myDogHp && myDogHp.down; myDogHp = { hp: hp, max: maxhp, down: state === 2 }; if (was !== myDogHp.down || Math.random() < 0.2) renderDogChip(); }
+    }
+    for (const id of [...dogs.keys()]) if (!seen.has(id)) killEnt(dogs, id);
+    if (inv.dog && ![...dogs.values()].some(e => e.owner === myId)) myDogHp = null;
+  }
+  function findWildDog() {
+    const f = fwd(); let best = null, bd = 1e9;
+    for (const e of dogs.values()) {
+      if (e.owner) continue;
+      const dx = e.x - player.x, dz = e.z - player.z, d = Math.hypot(dx, dz);
+      if (d > 3.4 || (dx * f.x + dz * f.z) / (d || 1) < 0.3) continue;
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
   function syncList(map, list, make) {
     const seen = new Set();
     for (const a of list) {
@@ -388,14 +447,14 @@ export async function startGame({ net, joined, user }) {
       if (e.sw !== sw) { e.sw = sw; e.swingT = 0; }
     }
     for (const id of [...remotes.keys()]) if (!seen.has(id)) killEnt(remotes, id);
-    syncList(mons, m.m, makeMonster); syncList(anis, m.a, makeAnimal);
+    syncList(mons, m.m, makeMonster); syncList(anis, m.a, makeAnimal); if (m.d) syncDogs(m.d);
     Object.assign(you, m.y); Object.assign(wave, m.w);
     if (dead) $('dead-sub').textContent = you.rs > 0 ? 'Terug in het spel over ' + you.rs + ' s' : '';
     renderVitals();
     const hint = $('prompt');
   });
   net.on('inv', m => {
-    inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
+    inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     renderInv(); rebuildHeld(); if (shopOpen) renderShop();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
@@ -449,6 +508,20 @@ export async function startGame({ net, joined, user }) {
       case 'ate': sfx.eat(); break;
       case 'drank': sfx.drink(); break;
       case 'bought': sfx.coin(); break;
+      case 'bark': {
+        const dx = m.x - player.x, dz = m.z - player.z, d = Math.hypot(dx, dz);
+        if (d < 45) { const right = dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw); sfx.bark(clamp(right / Math.max(d, 1), -0.9, 0.9), clamp(1.4 - d / 35, 0.15, 1)); }
+        const e = dogs.get(m.id); if (e) e.barkT = 0.35;
+        break;
+      }
+      case 'tamed': {
+        sparkles.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 40, 1.6, 2.2, 1.4);
+        if (m.by === myId) { sfx.happy(); banner('Nieuw maatje!<small>' + esc(m.name) + ' loopt nu met je mee en helpt in gevechten</small>', 4200); }
+        else { const n = names.get(m.by); if (n) toast(esc(n) + ' heeft een hond getemd: ' + esc(m.name) + '.', '#f2c14e'); }
+        break;
+      }
+      case 'doghurt': { const e = dogs.get(m.id); if (e && e.owner === myId && Math.hypot(e.x - player.x, e.z - player.z) < 30 && Math.random() < 0.5) sfx.yelp(); break; }
+      case 'doglvl': { const e = dogs.get(m.id); if (e) sparkles.emit(e.x, e.y + 0.8, e.z, 30, 1.2, 2, 1.2); if (e && e.owner === myId) sfx.happy(); break; }
       case 'hit': {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
         addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg, m.e === 'm' ? '#ffe08a' : '#ffffff');
@@ -546,7 +619,7 @@ export async function startGame({ net, joined, user }) {
     if (d > 5.6) return false;
     const f = fwd(); return (dx * f.x + dz * f.z) / (d || 1) > 0.15;
   }
-  function interact() { if (dead || shopOpen) return; if (findChest()) tryOpen(); else if (nearShop()) openShop(); }
+  function interact() { if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (nearShop()) openShop(); }
 
   /* ================================================================ winkel */
   const shopEl = $('shop');
@@ -758,6 +831,21 @@ export async function startGame({ net, joined, user }) {
       e.bar.visible = e.hp < e.maxhp || e.type === 3;
       if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
+    for (const e of dogs.values()) {
+      moveEnt(e, dt);
+      const mdl = e.model, down = e.state === 2, sit = e.state === 3;
+      if (!down && !sit) animateBody(e, dt); else for (const l of mdl.legs) l.rotation.x = 0;
+      mdl.body.rotation.x = sit ? 0.5 : 0; mdl.body.position.y = sit ? 0.12 : 0;
+      if (sit) { mdl.legs[2].rotation.x = mdl.legs[3].rotation.x = -1.1; mdl.legs[0].rotation.x = mdl.legs[1].rotation.x = -0.45; }
+      e.group.rotation.z = down ? 1.35 : 0; if (down) e.group.position.y += 0.12;
+      const happy = !down && (sit || (e.owner && e.speed < 1.5));
+      mdl.tail.rotation.z = Math.sin(time * (happy ? 16 : 7)) * (happy ? 0.7 : 0.25);
+      mdl.tongue.visible = !down;
+      if (e.barkT > 0) { e.barkT -= dt; mdl.head.rotation.x = -Math.abs(Math.sin(e.barkT * 18)) * 0.3; } else mdl.head.rotation.x = down ? 0 : Math.sin(time * 2 + e.id) * 0.05;
+      e.bar.visible = !!e.owner && (e.hp < e.maxhp || down);
+      if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
+      if (e.label) e.label.visible = Math.hypot(e.x - player.x, e.z - player.z) < 40;
+    }
     for (const e of anis.values()) {
       moveEnt(e, dt); animateBody(e, dt);
       e.bar.visible = e.hp < e.maxhp;
@@ -799,8 +887,13 @@ export async function startGame({ net, joined, user }) {
 
     // aanwijzing
     if ((virt.attack || virt.pattack) && locked && !dead && !shopOpen) startSwing();
-    const pr = $('prompt'), ch = locked && !dead && !shopOpen ? findChest() : null, sh = !ch && locked && !dead && !shopOpen && nearShop();
-    if (isTouch) { const tb = $('tb-use'); tb.classList.toggle('dim', !(ch || sh)); tb.firstElementChild.textContent = sh ? '🏪' : ch ? '🧰' : '✋'; }
+    const wd = locked && !dead && !shopOpen ? findWildDog() : null;
+    const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
+    if (isTouch) { const tb = $('tb-use'); tb.classList.toggle('dim', !(ch || sh || wd)); tb.firstElementChild.textContent = wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : '✋'; }
+    if (wd) {
+      const txt = inv.dog ? 'Je hebt al een hond' : inv.meat > 0 ? 'hond vlees geven en temmen' : 'Deze hond wil vlees. Jaag eerst op een dier.';
+      pr.innerHTML = inv.dog || inv.meat <= 0 ? txt : (isTouch ? 'Hond temmen (1 vlees)' : '<b>E</b> · ' + txt); pr.classList.add('on');
+    } else
     if (ch) { pr.innerHTML = isTouch ? 'Kist openen' : '<b>E</b> · kist openen'; pr.classList.add('on'); }
     else if (sh) { pr.innerHTML = isTouch ? 'Winkel openen' : '<b>E</b> · winkel openen'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
@@ -827,6 +920,7 @@ export async function startGame({ net, joined, user }) {
   $('veil').querySelector('p').textContent = 'Kamer: ' + joined.room.name + '. Klik om te beginnen. Het spel loopt door als je pauzeert.';
   $('btn-resume').textContent = isTouch ? 'Tik om te starten' : 'Start';
   showVeil(true);
+  setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -835,6 +929,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
+  window.__game = { dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => { renderer.clear(); renderer.render(scene, camera); renderer.clearDepth(); renderer.render(handScene, handCam); } };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

@@ -312,3 +312,41 @@ export function buildShop() {
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.5, 16, 12, 1, true).translate(0, 8, 0), shopBeamMat); beam.position.y = 0.3; g.add(beam);
   return { group: g, npc, beam };
 }
+
+/* ---------------------------------------------------------------- hond */
+/** Hond met kwispelstaart, flaporen en (optioneel) halsband. Kijkt richting -Z. */
+export function buildDog(furColor, collar = false) {
+  const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
+  const fur = std(furColor), light = std(new THREE.Color(furColor).lerp(new THREE.Color(0xffffff), 0.45).getHex()), dark = std(0x1c1410);
+  const bodyY = 0.5;
+  const body = capsule(0.2, 0.46, fur, 10); body.rotation.x = Math.PI / 2; body.position.y = bodyY; g.add(body);
+  const belly = capsule(0.15, 0.3, light, 8); belly.rotation.x = Math.PI / 2; belly.position.set(0, bodyY - 0.07, 0.02); g.add(belly);
+  const legs = [];
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const p = new THREE.Group(); p.position.set(x * 0.12, bodyY - 0.08, z * 0.23);
+    const m = capsule(0.055, 0.3, fur, 6); m.position.y = -0.2; p.add(m);
+    const paw = sphere(0.06, light, [8, 6]); paw.position.y = -0.37; paw.scale.set(1, 0.6, 1.3); p.add(paw);
+    g.add(p); legs.push(p);
+  }
+  const head = new THREE.Group(); head.position.set(0, bodyY + 0.24, -0.38); g.add(head);
+  const skull = sphere(0.16, fur, [12, 10]); skull.scale.set(1, 0.95, 1.05); head.add(skull);
+  const muzzle = capsule(0.075, 0.12, light, 8); muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, -0.05, -0.16); head.add(muzzle);
+  const nose = sphere(0.035, dark, [8, 6]); nose.position.set(0, -0.02, -0.26); head.add(nose);
+  for (const x of [-1, 1]) {
+    const eye = sphere(0.025, dark, [8, 6]); eye.position.set(x * 0.07, 0.04, -0.13); head.add(eye);
+    const ear = new THREE.Group(); ear.position.set(x * 0.12, 0.08, 0.0); ear.rotation.z = x * 0.35;
+    const flap = capsule(0.045, 0.12, std(new THREE.Color(furColor).multiplyScalar(0.75).getHex()), 6); flap.position.y = -0.09; flap.scale.set(1, 1, 0.45); ear.add(flap);
+    head.add(ear);
+  }
+  const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.07), std(0xe07a8a)); tongue.position.set(0, -0.12, -0.21); tongue.rotation.x = 0.4; head.add(tongue);
+  const tail = new THREE.Group(); tail.position.set(0, bodyY + 0.08, 0.36); g.add(tail);
+  const tm = capsule(0.035, 0.24, fur, 6); tm.position.y = 0.13; tail.add(tm); tail.rotation.x = -0.7;
+  let collarMesh = null;
+  if (collar) {
+    collarMesh = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 6, 16), new THREE.MeshStandardMaterial({ color: 0xd0403a, roughness: 0.6 }));
+    collarMesh.position.set(0, bodyY + 0.15, -0.3); collarMesh.rotation.x = 1.2; g.add(collarMesh);
+    const tag = sphere(0.03, goldMat, [8, 6]); tag.position.set(0, bodyY + 0.07, -0.37); g.add(tag);
+  }
+  shadows(root);
+  return { kind: 'quad', group: root, body: g, legs, head, tail, tongue, height: 1.0 };
+}
