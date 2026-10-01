@@ -1,6 +1,7 @@
 // Inloggen, account maken en lobby. Het 3D-spel (three.js) wordt pas geladen zodra je een kamer betreedt.
 import { Net } from './net.js';
 import { RARITIES } from './items.js';
+import { renderTalents, renderQuests, renderAchievements } from './progressui.js';
 import { openInvite, takeInvitedRoom, clearInviteParam } from './invite.js';
 
 let invitedRoom = takeInvitedRoom();
@@ -73,9 +74,13 @@ function renderLobby() {
   const s = save.stats || {};
   const cells = [['Beste golf', s.bestWave | 0], ['Punten', s.score | 0], ['Monsters verslagen', s.kills | 0], ['Dieren gejaagd', s.animals | 0],
     ['Bomen omgehakt', s.trees | 0], ['Kisten geopend', s.chests | 0], ['Hout', save.wood | 0], ['Vlees', save.meat | 0], ['Drankjes', save.potions | 0], ['Hout uitgegeven', s.spent | 0], ['Schild', 'niveau ' + ((save.up && save.up.shield) | 0)], ['Bijl', 'niveau ' + ((save.up && save.up.axe) | 0)], ['Vis', save.fish | 0], ['Hond', save.dog ? save.dog.name + ' · niveau ' + save.dog.level : 'Nog niet gevonden'], ['Keer gevallen', s.deaths | 0], ['Speeltijd', fmtTime(s.playSec | 0)]];
+  cells.splice(8, 0, ['Erts', save.ore | 0]);
+  renderTalents($('lb-talents'), save, m => net.send(m));
+  renderQuests($('lb-quests'), save);
+  renderAchievements($('lb-ach'), save);
   $('my-stats').innerHTML = cells.map(([k, v]) => '<div class="stat"><b>' + esc(v) + '</b><span>' + k + '</span></div>').join('');
   $('my-swords').innerHTML = (save.swords || []).length
-    ? save.swords.map(w => '<span class="sw" style="color:' + RARITIES[w.rarity].color + '">' + esc(w.name) + ' · ' + w.damage + '</span>').join('')
+    ? save.swords.map(w => '<span class="sw" style="color:' + RARITIES[w.rarity].color + '">' + esc(w.name) + (w.f ? ' +' + w.f : '') + ' · ' + w.damage + '</span>').join('')
     : '<span class="empty">Nog geen zwaarden. Zoek kisten in het bos.</span>';
 }
 let lastRooms = '';
@@ -126,6 +131,7 @@ function setHandlers() {
   });
   net.on('authfail', () => { store.del(); show('auth'); loadLeaderboard(); });
   net.on('rooms', m => renderRooms(m.rooms));
+  net.on('save', m => { save = m.save; renderLobby(); });
   net.on('err', m => { $('lb-err').textContent = m.msg; });
   net.on('kicked', () => overlay('Elders ingelogd', 'Je account is op een ander apparaat of tabblad gestart.'));
   net.on('_close', () => { if (!$('overlay').classList.contains('on')) overlay('Verbinding verloren', 'De verbinding met de server is verbroken.'); });

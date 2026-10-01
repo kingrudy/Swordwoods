@@ -39,6 +39,14 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
 
+**Niveaus en talenten**: alles wat je doet levert ervaring op (monsters, dieren, bomen, kisten, vissen, erts, bouwen, golven en opdrachten). Elk nieuw niveau (tot 30) geeft een talentpunt dat je in het pauzemenu (tab Talenten) of in de lobby besteedt: Kracht (meer schade), Taaiheid (meer levens), Vlugheid (sneller lopen en rollen), IJzeren maag (minder honger), Houthakker (meer hout), Mijnwerker (meer erts) en Baasje (sterkere hond). Opnieuw verdelen kan altijd gratis.
+
+**Dagelijkse opdrachten**: elke dag (Nederlandse tijd) krijg je drie opdrachten, zoals "Versla 25 monsters" of "Vang 5 vissen". Ze staan rechts in beeld, in het pauzemenu en in de lobby. Voltooi je er een, dan krijg je meteen hout en ervaring.
+
+**Smid en erts**: naast de winkel staat Smid Gerrit. In het bos liggen ertsaders, rotsen met glinsterende kristallen (op de kaart als 🔷 zodra je ze gezien hebt). Sla erop om erts te hakken (een zware slag geeft meer kans; een ader is na een paar keer leeg en groeit na 5 minuten terug). Bij de smid smeed je een zwaard tot +5 (elke stap ±10% meer schade) of smelt je een oud zwaard om tot erts.
+
+**Prestaties**: in de lobby staan 20 prestaties, van "Eerste bloed" tot "Koning van het woud" (golf 20). Anderen in je kamer zien het als je er een haalt.
+
 **Vechten**: tik kort voor een gewone slag; **houd de muisknop (of A) vast** tot het kruisje oranje wordt en laat los voor een **zware slag**: ruim twee keer zoveel schade, raakt tot vier vijanden in een boog en duwt ze terug. Met de **rechtermuisknop** (mobiel 🛡️, controller LT) blokkeer je met je schild: van voren 70% minder schade en pijlen helemaal, maar je loopt langzamer en kunt niet slaan. Met **C** (mobiel 🌀, controller LB) maak je een **ontwijkrol**: een halve seconde onkwetsbaar, eens per seconde.
 
 **Monsters**: naast kobolds, wolven en het Bosmonster komen er vanaf golf 3 **Skeletschutters** (houden afstand en schieten met een kruisboog; ontwijk of blokkeer de pijlen), vanaf golf 5 **Sluipers** (bijna onzichtbaar tot ze dichtbij zijn, en springen dan naar voren) en vanaf golf 6 **Hondenjagers** (gaan eerst op je hond af). De **Woudreus** laat wortels onder spelers uit de grond schieten (een rode cirkel waarschuwt; rol weg of je zit even vast) en roept kobolds op. Soms heeft een golf een **modificatie**: Snelle golf, Gepantserd, Zwerm of Woeste golf, met 50% meer hout en punten als beloning.
@@ -64,6 +72,6 @@ Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaa
 ## Beheer
 - Data: volume `swordwoods-data` (bestand `db.json`). Maak hier een back-up van. Wachtwoorden zijn gehasht (scrypt).
 - Zet er bij internetgebruik een reverse proxy met HTTPS voor (Caddy, Traefik, nginx). WebSockets (`/ws`) moeten doorgelaten worden. Zonder HTTPS gaan wachtwoorden onversleuteld over het netwerk.
-- Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`, `MAX_SPEED`. Voor testen: `ALLOW_CHEATS=1` zet chatcommando's aan (`/spawn <type> [aantal]`, `/golf [modificatie]`, `/hout <n>`, `/god`); nooit aanzetten op een openbare server.
+- Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`, `MAX_SPEED`. Voor testen: `ALLOW_CHEATS=1` zet chatcommando's aan (`/spawn <type> [aantal]`, `/golf [modificatie]`, `/hout <n>`, `/erts <n>`, `/xp <n>`, `/zwaard <0-4>`, `/god`); nooit aanzetten op een openbare server.
 - Gezondheidscheck: `/api/health`. Ranglijst: `/api/leaderboard`.
 - De positie van spelers wordt door de client bepaald; de server controleert gevechten, loot, honger én snelheid: wie sneller beweegt dan rennen (`MAX_SPEED`, standaard 12 m/s) wordt teruggezet. Chat is beperkt tot 140 tekens en één bericht per 0,8 seconde.

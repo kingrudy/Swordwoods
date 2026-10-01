@@ -475,3 +475,55 @@ export function makeRoots() {
   return g;
 }
 export const warnRingMat = new THREE.MeshBasicMaterial({ color: 0xff3a1a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+
+/* ---------------------------------------------------------------- ertsader en smidse */
+const oreRockMat = std(0x6f6a62, { roughness: 0.95 });
+const oreMat = new THREE.MeshStandardMaterial({ color: 0xc9a46a, metalness: 0.85, roughness: 0.25, emissive: 0x6a4a1a, emissiveIntensity: 0.35 });
+const richMat = new THREE.MeshStandardMaterial({ color: 0x9fd0ff, metalness: 0.7, roughness: 0.2, emissive: 0x2a6aa0, emissiveIntensity: 0.6 });
+export function buildOreRock(scale = 1, rich = false, seed = 1) {
+  const g = new THREE.Group(), rnd = mulberryLocal(seed * 7 + 1);
+  const rock = new THREE.Mesh(makeBlobGeo(1, 0.32, seed * 1.7, 0.75, [10, 8]), oreRockMat);
+  rock.scale.set(1.1 * scale, 0.85 * scale, 1.0 * scale); rock.position.y = 0.25 * scale; rock.castShadow = true; rock.receiveShadow = true; g.add(rock);
+  const veins = new THREE.Group();
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * Math.PI * 2, up = 0.2 + rnd() * 0.7;
+    const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.1 + rnd() * 0.08, 0), rich && i % 2 ? richMat : oreMat);
+    c.position.set(Math.cos(a) * 0.9 * scale * (1 - up * 0.4), (0.25 + up * 0.55) * scale, Math.sin(a) * 0.85 * scale * (1 - up * 0.4));
+    c.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3); c.scale.y = 1.6; veins.add(c);
+  }
+  g.add(veins);
+  return { group: g, veins };
+}
+/** Smidse: aambeeld, vuurhaard met gloed, dak. Voorkant naar +Z. */
+export function buildSmithy() {
+  const g = new THREE.Group();
+  const plank = std(0x7a4f2a), dark = std(0x4a3222), stone = std(0x7d7a74, { roughness: 1 }), iron = metalMat(0x3a3d42, 0.02);
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
+  add(new THREE.BoxGeometry(4.0, 0.16, 3.2), stone, 0, 0.08, 0);
+  for (const [x, z] of [[-1.8, -1.4], [1.8, -1.4], [-1.8, 1.4], [1.8, 1.4]]) add(new THREE.CylinderGeometry(0.1, 0.12, 2.8, 8), dark, x, 1.5, z);
+  const roof = add(new THREE.BoxGeometry(4.4, 0.14, 3.7), plank, 0, 3.0, 0, 0.12, 0, 0);
+  // vuurhaard
+  add(new THREE.BoxGeometry(1.4, 1.0, 1.1), stone, -1.1, 0.5, -0.9);
+  add(new THREE.CylinderGeometry(0.28, 0.38, 2.3, 8), stone, -1.1, 2.1, -1.05);
+  const coals = add(new THREE.BoxGeometry(1.0, 0.08, 0.7), new THREE.MeshBasicMaterial({ color: 0xff6a1a, toneMapped: false }), -1.1, 1.03, -0.85);
+  coals.castShadow = false;
+  // aambeeld op een stronk
+  add(new THREE.CylinderGeometry(0.32, 0.36, 0.6, 10), dark, 0.6, 0.38, 0.5);
+  add(new THREE.BoxGeometry(0.75, 0.22, 0.32), iron, 0.6, 0.79, 0.5);
+  add(new THREE.ConeGeometry(0.16, 0.42, 6), iron, 1.12, 0.82, 0.5, 0, 0, -Math.PI / 2);
+  add(new THREE.BoxGeometry(0.4, 0.2, 0.26), iron, 0.6, 0.6, 0.5);
+  // wapenrek
+  add(new THREE.BoxGeometry(1.6, 0.08, 0.1), dark, 1.0, 1.7, -1.35);
+  for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.06, 1.1, 0.03), metalMat(0xb8bec6, 0.05), 0.45 + i * 0.36, 1.25, -1.3, 0, 0, 0.05);
+  // bord
+  const c = document.createElement('canvas'); c.width = 256; c.height = 96; const cx = c.getContext('2d');
+  cx.fillStyle = '#2f2a26'; cx.fillRect(0, 0, 256, 96); cx.strokeStyle = '#c9a46a'; cx.lineWidth = 6; cx.strokeRect(6, 6, 244, 84);
+  cx.fillStyle = '#ffd9a0'; cx.font = '700 46px system-ui, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText('SMID', 128, 50);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const board = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 0.08), [dark, dark, dark, dark, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }), dark]);
+  board.position.set(0, 2.55, 1.6); g.add(board);
+  const npc = buildHumanoid({ skin: 0xc98f6a, cloth: 0x5a3a28, hair: 0x2a1a10, scale: 1.05, bulk: 1.25 });
+  npc.group.position.set(0.05, 0.16, 1.1); npc.group.rotation.y = Math.PI; npc.armR.rotation.x = -1.2; g.add(npc.group);
+  const label = makeLabel('Smid Gerrit', '#ffd9a0'); label.position.y = 3.9; label.scale.multiplyScalar(1.5); g.add(label);
+  return { group: g, npc, anvil: new THREE.Vector3(0.6, 0.9, 0.5), forge: new THREE.Vector3(-1.1, 1.3, -0.8) };
+}

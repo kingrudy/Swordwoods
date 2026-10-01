@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { Room, ensureSave } from './room.js';
+import { Room, ensureSave, applyTalent, ensureDaily } from './room.js';
 
 const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -251,6 +251,7 @@ class Conn {
     }
     switch (m.t) {
       case 'rooms': this.send({ t: 'rooms', rooms: roomList() }); break;
+      case 'talent': { if (applyTalent(this.user.save, String(m.id))) { markDirty(); } this.send({ t: 'save', save: this.user.save }); break; }
       case 'look': { const l = m.v | 0; if (l >= 0 && l <= 3) { this.user.save.look = l; markDirty(); this.send({ t: 'look', v: l }); } break; }
       case 'create': {
         if (rooms.size >= 24) return this.send({ t: 'err', msg: 'Er zijn al te veel kamers. Kies een bestaande.' });
@@ -275,7 +276,7 @@ class Conn {
     const room = this.room; const P = this.player;
     this.room = null; this.player = null;
     if (P) room.removePlayer(P);
-    if (notify && !this.closed) this.send({ t: 'left', save: this.user.save, rooms: roomList() });
+    if (notify && !this.closed) { ensureDaily(this.user); this.send({ t: 'left', save: this.user.save, rooms: roomList() }); }
   }
 }
 

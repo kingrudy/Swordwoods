@@ -63,6 +63,8 @@ export function createHud(ctx) {
       case 'mydog': c.fillStyle = '#c8903f'; c.beginPath(); c.arc(0, 0, 3 * s, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.stroke(); break;
       case 'wilddog': c.fillStyle = '#e8dcc8'; c.beginPath(); c.arc(0, 0, 2.5 * s, 0, 7); c.fill(); break;
       case 'monster': c.fillStyle = m.boss ? '#ff5a2a' : '#e0413a'; c.beginPath(); c.arc(0, 0, (m.boss ? 4.5 : 2.5) * s, 0, 7); c.fill(); break;
+      case 'smith': c.fillStyle = '#ff8a3a'; c.fillRect(-4 * s, -4 * s, 8 * s, 8 * s); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(-4 * s, -4 * s, 8 * s, 8 * s); break;
+      case 'ore': c.fillStyle = '#9fd0ff'; c.beginPath(); c.moveTo(0, -3.5 * s); c.lineTo(3 * s, 0); c.lineTo(0, 3.5 * s); c.lineTo(-3 * s, 0); c.fill(); break;
       case 'build': c.fillStyle = m.color || '#b98a52'; c.fillRect(-2 * s, -2 * s, 4 * s, 4 * s); break;
       case 'bed': c.fillStyle = '#e58b7b'; c.fillRect(-3 * s, -2 * s, 6 * s, 4 * s); break;
     }
@@ -81,7 +83,7 @@ export function createHud(ctx) {
     for (const m of all) {
       const dx = (m.x - player.x) * scale, dz = (m.z - player.z) * scale;
       const d = Math.hypot(dx, dz); let px = dx, py = dz;
-      if (d > half - 8) { if (m.kind !== 'shop' && m.kind !== 'player' && m.kind !== 'trader') continue; px = dx / d * (half - 8); py = dz / d * (half - 8); }
+      if (d > half - 8) { if (m.kind !== 'shop' && m.kind !== 'player' && m.kind !== 'trader' && m.kind !== 'smith') continue; px = dx / d * (half - 8); py = dz / d * (half - 8); }
       mctx.save(); mctx.translate(px, py); mctx.rotate(-player.yaw); drawMarker(mctx, m, 0, 0); mctx.restore();
     }
     const now = performance.now() / 1000;

@@ -104,6 +104,40 @@ export function createWorld(seed) {
     chests.push(c); gAdd(c);
   }
 
+  // ---- smid naast de winkel (op een plek zonder bomen; eigen rng zodat bomen en kisten niet veranderen)
+  const smith = (() => {
+    let best = null;
+    for (let k = 0; k < 16; k++) {
+      const a = shop.rotY + Math.PI / 2 + (k % 2 ? 1 : -1) * Math.floor((k + 1) / 2) * 0.35;
+      for (const d of [8.5, 10, 12]) {
+        const x = shop.x + Math.sin(a) * d, z = shop.z + Math.cos(a) * d, h = heightAt(x, z);
+        if (h < 0.6 || slopeAt(x, z) > 0.4) continue;
+        let ok = true; gNear(x, z, o => { if (len(o.x - x, o.z - z) < 4.2) ok = false; });
+        for (const c of chests) if (len(c.x - x, c.z - z) < 5) ok = false;
+        if (ok) { best = { x, z, y: h }; break; }
+      }
+      if (best) break;
+    }
+    if (!best) best = { x: shop.x + 9, z: shop.z, y: heightAt(shop.x + 9, shop.z) };
+    best.rotY = Math.atan2(-best.x, -best.z); best.r = 2.2; best.solid = true; best.smith = true;
+    gAdd(best);
+    return best;
+  })();
+
+  // ---- ertsaders (eigen rng)
+  const orng = mulberry32(seed * 29 + 3), ores = [];
+  for (let tries = 0; tries < 8000 && ores.length < 44; tries++) {
+    const r = 25 + orng() * (HALF * 0.85 - 25), a = orng() * 6.28;
+    const x = r * Math.cos(a), z = r * Math.sin(a), h = heightAt(x, z);
+    if (h < 1.0 || slopeAt(x, z) > 0.7) continue;
+    let ok = true; gNear(x, z, o => { if (len(o.x - x, o.z - z) < 3.4) ok = false; });
+    for (const o of ores) if (len(o.x - x, o.z - z) < 14) ok = false;
+    if (!ok) continue;
+    const scale = 0.9 + orng() * 0.5;
+    const o = { idx: ores.length, x, z, y: h, scale, rotY: orng() * 6.28, r: 0.95 * scale, solid: true, ore: true, rich: orng() < 0.25 };
+    ores.push(o); gAdd(o);
+  }
+
   /** Willekeurig punt op land (voor dieren en monsters). rnd: () => 0..1 */
   function landPoint(rnd, cx = 0, cz = 0, rMin = 0, rMax = HALF * 0.85, minH = 0.2) {
     for (let i = 0; i < 40; i++) {
@@ -115,5 +149,5 @@ export function createWorld(seed) {
     return null;
   }
 
-  return { seed, heightAt, slopeAt, trees, chests, shop, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
+  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
 }

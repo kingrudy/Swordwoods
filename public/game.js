@@ -9,6 +9,8 @@ import * as CH from './characters.js';
 import { openInvite, closeInvite } from './invite.js';
 import { createHud } from './hud.js';
 import { createBuildSystem } from './buildmode.js';
+import { levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
+import { renderTalents, renderQuests } from './progressui.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -158,6 +160,17 @@ export async function startGame({ net, joined, user }) {
   shopObj.group.position.set(W.shop.x, W.shop.y - 0.05, W.shop.z); shopObj.group.rotation.y = W.shop.rotY; scene.add(shopObj.group);
   shopObj.group.updateMatrixWorld(true);
   G.addLantern(shopObj.group.localToWorld(new THREE.Vector3(0, 2.4, 2.4)), 0xffc070, 6, 18);
+  // smidse en ertsaders
+  const smithObj = M.buildSmithy();
+  smithObj.group.position.set(W.smith.x, W.smith.y - 0.05, W.smith.z); smithObj.group.rotation.y = W.smith.rotY; scene.add(smithObj.group);
+  smithObj.group.updateMatrixWorld(true);
+  const anvilPos = smithObj.group.localToWorld(smithObj.anvil.clone()), forgePos = smithObj.group.localToWorld(smithObj.forge.clone());
+  G.addLantern(forgePos.clone().add(new THREE.Vector3(0, 0.6, 0)), 0xff7a2a, 5, 14);
+  const oreObjs = W.ores.map(o => {
+    const r = M.buildOreRock(o.scale, o.rich, o.idx + 1); r.group.position.set(o.x, o.y - 0.15, o.z); r.group.rotation.y = o.rotY; scene.add(r.group);
+    return { o, ...r, empty: false, shake: 0 };
+  });
+  for (const i of joined.ores || []) if (oreObjs[i]) { oreObjs[i].empty = true; oreObjs[i].veins.visible = false; }
   await nextFrame();
 
   /* ================================================================ deeltjes en geluid */
@@ -252,7 +265,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ status en HUD */
   const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: Math.atan2(-(W.shop.x - joined.you.x), -(W.shop.z - joined.you.z)), pitch: 0, onGround: true, bob: 0 };   // start met zicht op de winkel
-  const inv = { wood: 0, meat: 0, potions: 0, fish: 0, up: { shield: 0, axe: 0, rod: 0 }, swords: [], equip: 0, stats: {} };
+  const inv = { wood: 0, meat: 0, potions: 0, fish: 0, ore: 0, xp: 0, tal: {}, daily: null, ach: {}, up: { shield: 0, axe: 0, rod: 0 }, swords: [], equip: 0, stats: {} };
   const you = { hp: 100, hu: 80, sc: 0, rs: 0 };
   const wave = { n: 0, ph: 0, t: 0, left: 0 };
   const names = new Map(joined.players.map(p => [p.id, p.name]));
@@ -290,6 +303,11 @@ export async function startGame({ net, joined, user }) {
     const fc = $('fishchip'); fc.classList.toggle('on', !!(inv.up.rod || inv.fish)); fc.innerHTML = '🐟 Vis: ' + inv.fish + ' <small style="opacity:.6">(G = hond voeren)</small>';
     $('tb-fish').lastElementChild.textContent = inv.fish; $('tb-fish').classList.toggle('off', !inv.dog || !inv.fish);
     $('tb-eat').lastElementChild.textContent = inv.meat; $('tb-drink').lastElementChild.textContent = inv.potions;
+    const oc = $('orechip'); oc.classList.toggle('on', inv.ore > 0); oc.innerHTML = '⛏️ Erts: ' + inv.ore + ' <small style="opacity:.6">(bij de smid)</small>';
+    const L = levelInfo(inv.xp), free = talentPoints(L.level) - spentPoints(inv.tal);
+    $('lvlchip').textContent = 'Niveau ' + L.level + (free > 0 ? ' · ' + free + ' talentpunt' + (free > 1 ? 'en' : '') + ' (pauzemenu)' : '');
+    $('xpbar').firstElementChild.style.width = (L.need ? Math.round(100 * L.into / L.need) : 100) + '%';
+    if (inv.daily) renderQuests($('questhud'), inv, true);
     const all = items(), hb = $('hotbar'); hb.innerHTML = '';
     for (let i = 0; i < (isTouch ? Math.max(all.length, 2) : 9); i++) {     // op touch alleen de slots die je hebt
       const it = all[i], d = document.createElement('div');
@@ -302,10 +320,10 @@ export async function startGame({ net, joined, user }) {
     }
     const cur = all[inv.equip] || AXE;
     $('itemname').innerHTML = cur.type === 'axe' ? '<b>Houthakkersbijl</b> · schade ' + AXE.damage
-      : '<b style="color:' + RARITIES[cur.rarity].color + '">' + esc(cur.name) + '</b> · ' + RARITIES[cur.rarity].name + ' · schade ' + cur.damage + ' · snelheid ' + cur.speed;
+      : '<b style="color:' + RARITIES[cur.rarity].color + '">' + esc(cur.name) + (cur.f ? ' +' + cur.f : '') + '</b> · ' + RARITIES[cur.rarity].name + ' · schade ' + cur.damage + ' · snelheid ' + cur.speed;
   }
   function renderVitals() {
-    $('hpbar').firstElementChild.style.width = clamp(you.hp, 0, 100) + '%'; $('hpbar').lastElementChild.textContent = 'Gezondheid ' + Math.max(0, Math.round(you.hp)) + (bs && !dead && bs.nearFire(player.x, player.z) ? ' · 🔥 warm' : '');
+    $('hpbar').firstElementChild.style.width = clamp(100 * you.hp / (you.mhp || 100), 0, 100) + '%'; $('hpbar').lastElementChild.textContent = 'Gezondheid ' + Math.max(0, Math.round(you.hp)) + (bs && !dead && bs.nearFire(player.x, player.z) ? ' · 🔥 warm' : '');
     $('hubar').firstElementChild.style.width = clamp(you.hu, 0, 100) + '%'; $('hubar').lastElementChild.textContent = 'Honger ' + Math.round(you.hu);
     $('hubar').classList.toggle('low', you.hu < 25);
     $('score').textContent = '⭐ Punten: ' + you.sc;
@@ -384,12 +402,16 @@ export async function startGame({ net, joined, user }) {
     if (name === 'chest') upgradeChests();
     if (name === 'crossbow') for (const e of mons.values()) if (e.needBow && e.model.kind === 'rig') { e.needBow = false; decorateMonster(e, e.model); }
     for (const map of [remotes, mons, anis]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); if (map === mons && e.type === 3 && name === 'forest_monster') bossLook(r); e.want = null; } }
+    if (name === 'barbarian' && !smithRig) {
+      smithRig = CH.createRig('barbarian', 1.95);
+      if (smithRig) { smithObj.npc.group.visible = false; smithRig.group.position.copy(smithObj.npc.group.position); smithRig.group.rotation.y = smithObj.npc.group.rotation.y; smithObj.group.add(smithRig.group); smithRig.loop('Idle'); }
+    }
     if (name === 'merchant' && !merchant) {
       merchant = CH.createRig('merchant', 1.8);
       if (merchant) { shopObj.npc.group.visible = false; merchant.group.position.copy(shopObj.npc.group.position); merchant.group.rotation.y = shopObj.npc.group.rotation.y; shopObj.group.add(merchant.group); merchant.loop('Idle'); }
     }
   }
-  let merchant = null;
+  let merchant = null, smithRig = null, smithHammerT = 3;
   function upgradeChests() {
     const t = CH.template('chest'); if (!t) return;
     for (const o of chestObjs) {
@@ -560,6 +582,9 @@ export async function startGame({ net, joined, user }) {
     const hint = $('prompt');
   });
   net.on('inv', m => {
+    inv.ore = m.ore | 0; inv.xp = m.xp | 0; inv.tal = m.tal || {}; inv.daily = m.daily || null; inv.ach = m.ach || {};
+    if (smithOpen) renderSmith();
+    if (veil.classList.contains('on')) renderPauseTabs();
     inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     renderInv(); rebuildHeld(); if (shopOpen) renderShop();
   });
@@ -588,6 +613,7 @@ export async function startGame({ net, joined, user }) {
     if (m.kind === 'wood') toast('🪵 <b>' + m.n + ' hout</b> in de kist.', '#c89a5e');
     else if (m.kind === 'meat') toast('🍖 <b>' + m.n + ' vlees</b> in de kist.', '#e58b7b');
     else if (m.kind === 'empty') toast('De kist is leeg. Alleen stof en spinnenwebben.', '#999');
+    else if (m.kind === 'ore') { toast('⛏️ <b>+' + m.n + ' erts</b>', '#c9a46a'); sfx.coin(); }
     else {
       const sw = m.sword, R = RARITIES[sw.rarity];
       let html = '<b>' + esc(sw.name) + '</b><br>' + R.name + ' · schade ' + sw.damage + ' · snelheid ' + sw.speed;
@@ -665,6 +691,18 @@ export async function startGame({ net, joined, user }) {
         if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.hit();
         break;
       }
+      case 'mine': { const r = oreObjs[m.i]; if (r) { r.shake = 0.25; chips.emit(r.o.x, r.o.y + 0.8, r.o.z, 10, 2.5, 2.5, 0.6); sparkles.emit(r.o.x, r.o.y + 0.9, r.o.z, 4, 2, 2, 0.4); if (Math.hypot(r.o.x - player.x, r.o.z - player.z) < 25) tone(1600 + Math.random() * 300, 0.09, 'triangle', 0.05); } break; }
+      case 'oreGone': { const r = oreObjs[m.i]; if (r) { r.empty = true; r.veins.visible = false; } break; }
+      case 'oreBack': { const r = oreObjs[m.i]; if (r) { r.empty = false; r.veins.visible = true; } break; }
+      case 'forged': sparkles.emit(anvilPos.x, anvilPos.y + 0.2, anvilPos.z, 40, 3, 3, 0.8); sfx.clang(); setTimeout(() => sfx.clang(), 180); if (smithOpen) renderSmith(); break;
+      case 'plvl': {
+        const e = m.id === myId ? null : remotes.get(m.id);
+        const x = e ? e.x : player.x, z = e ? e.z : player.z; sparkles.emit(x, heightAt(x, z) + 1, z, 60, 1.6, 3, 1.4);
+        if (m.id === myId) { banner('Niveau ' + m.lvl + '!<small>Besteed je talentpunt in het pauzemenu</small>', 3800); sfx.happy(); }
+        break;
+      }
+      case 'quest': sfx.happy(); break;
+      case 'ach': { const A = ACHIEVEMENTS.find(a => a.id === m.id); if (A) { banner(A.icon + ' ' + esc(A.name) + '<small>Prestatie behaald: ' + esc(A.desc) + '</small>', 4200); sfx.reveal(3); } break; }
       case 'shot': {
         const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once(CLIPS.archer.attack, { speed: 1.3 });
         const a = M.makeArrow(), y = heightAt(m.x, m.z) + 1.25; a.position.set(m.x, y, m.z); a.lookAt(m.x + m.vx, y, m.z + m.vz); scene.add(a);
@@ -813,7 +851,7 @@ export async function startGame({ net, joined, user }) {
   function doRoll() {
     const now = performance.now() / 1000;
     if (dead || shopOpen || player.roll || now < rollReadyAt || now < (player.rootUntil || 0) || !locked) return;
-    rollReadyAt = now + ROLL_CD;
+    rollReadyAt = now + ROLL_CD - 0.1 * tal(inv, 'vlug');
     const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
     const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;
     const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x + virt.px;
@@ -850,7 +888,7 @@ export async function startGame({ net, joined, user }) {
   }
   const feedDog = () => net.send({ t: 'feeddog' });
   function interact() {
-    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (nearShop()) openShop(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
+    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
 
   /* ================================================================ winkel */
   const shopEl = $('shop');
@@ -879,10 +917,52 @@ export async function startGame({ net, joined, user }) {
   }
   function closeShop(relock = true) {
     if (!shopOpen) return;
-    shopOpen = false; shopEl.classList.remove('on');
+    shopOpen = false; smithOpen = false; shopEl.classList.remove('on'); $('smith').classList.remove('on');
     if (relock && !isTouch && !soft) requestLock();
   }
   $('shop-close').onclick = () => closeShop(true);
+  /* ---------------- smid */
+  let smithOpen = false;
+  function nearSmith() {
+    const dx = W.smith.x - player.x, dz = W.smith.z - player.z, d = Math.hypot(dx, dz);
+    if (d > 5.2) return false;
+    const f = fwd(); return (dx * f.x + dz * f.z) / (d || 1) > 0.1;
+  }
+  function renderSmith() {
+    $('smith-res').textContent = '⛏️ ' + inv.ore + ' erts · 🪵 ' + inv.wood + ' hout';
+    $('smith-list').innerHTML = inv.swords.length ? inv.swords.map((w, i) => {
+      const f = w.f | 0, c = forgeCost(f), max = f >= FORGE_MAX, can = !max && inv.ore >= c.ore && inv.wood >= c.wood;
+      return '<div class="sw-row"><div><b style="color:' + RARITIES[w.rarity].color + '">' + esc(w.name) + (f ? ' +' + f : '') + '</b><small>' + RARITIES[w.rarity].name + ' · schade ' + w.damage +
+        (max ? ' · volledig gesmeed' : ' → ' + (w.damage + forgeGain(w))) + (inv.equip === i + 1 ? ' · in je hand' : '') + '</small></div>' +
+        '<button class="buy" type="button" data-forge="' + i + '"' + (can ? '' : ' disabled') + '>' + (max ? '+' + FORGE_MAX : 'Smeed +' + (f + 1) + ' · ' + c.ore + ' erts, ' + c.wood + ' hout') + '</button>' +
+        '<button class="buy melt" type="button" data-melt="' + i + '">Omsmelten · +' + meltValue(w) + ' erts</button></div>';
+    }).join('') : '<p class="empty">Je hebt nog geen zwaarden. Zoek kisten in het bos of koop er een bij Bram.</p>';
+    $('smith-list').insertAdjacentHTML('beforeend', '<p class="q-note">Erts hak je uit ertsaders: rotsen met glinsterende kristallen. Een zware slag geeft meer kans.</p>');
+  }
+  function openSmith() {
+    if (shopOpen || dead) return;
+    shopOpen = true; smithOpen = true; player.vx = player.vz = 0; virt.x = virt.y = 0; virt.jump = false;
+    renderSmith(); $('smith').classList.add('on'); showVeil(false);
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  $('smith-close').onclick = () => closeShop(true);
+  $('smith-list').addEventListener('click', e => {
+    const f = e.target.closest('[data-forge]'), m = e.target.closest('[data-melt]');
+    if (f && !f.disabled) net.send({ t: 'forge', i: +f.dataset.forge });
+    if (m) { const i = +m.dataset.melt; if (m.dataset.sure) net.send({ t: 'melt', i }); else { m.dataset.sure = '1'; m.textContent = 'Zeker? Tik nog eens'; } }
+  });
+  /* ---------------- pauzemenu: talenten en opdrachten */
+  let ptab = isTouch ? 'tal' : 'keys';
+  function renderPauseTabs() {
+    for (const b of document.querySelectorAll('#ptabs [data-pt]')) b.classList.toggle('on', b.dataset.pt === ptab);
+    for (const t of ['keys', 'tal', 'quest']) $('pt-' + t).classList.toggle('on', t === ptab);
+    const free = talentPoints(levelInfo(inv.xp).level) - spentPoints(inv.tal);
+    $('pt-free').textContent = free > 0 ? '(' + free + ')' : '';
+    if (ptab === 'tal') renderTalents($('pt-tal'), inv, m => net.send(m));
+    if (ptab === 'quest') renderQuests($('pt-quest'), inv);
+  }
+  $('ptabs').addEventListener('click', e => { const b = e.target.closest('[data-pt]'); if (b) { ptab = b.dataset.pt; renderPauseTabs(); } });
+  new MutationObserver(() => { if (veil.classList.contains('on')) renderPauseTabs(); }).observe(veil, { attributes: true, attributeFilter: ['class'] });
   $('shop-list').addEventListener('click', e => { const b = e.target.closest('[data-buy]'); if (b && !b.disabled) net.send({ t: 'buy', id: b.dataset.buy }); });
 
   /* ================================================================ aanraakbesturing */
@@ -996,7 +1076,12 @@ export async function startGame({ net, joined, user }) {
   /* ================================================================ minikaart, chat, fps */
   hud = createHud({
     W, WORLD, WATER, player, net, myId, names, isTouch, chestObjs, remotes, dogs, mons, colorForName: M.colorForName,
-    extraMarkers: () => bs ? bs.markers() : [],
+    extraMarkers: () => {
+      const out = bs ? bs.markers() : [];
+      out.push({ x: W.smith.x, z: W.smith.z, kind: 'smith' });
+      for (const r of oreObjs) if (!r.empty && (r.seen || (r.seen = Math.abs(r.o.x - player.x) < 40 && Math.abs(r.o.z - player.z) < 40))) out.push({ x: r.o.x, z: r.o.z, kind: 'ore' });
+      return out;
+    },
     sfxChat: () => tone(880, 0.08, 'triangle', 0.05),
     onChatOpen: () => { for (const k in keys) keys[k] = false; player.vx = player.vz = 0; },
   });
@@ -1027,7 +1112,7 @@ export async function startGame({ net, joined, user }) {
       let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
       const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
       const rooted = performance.now() / 1000 < (player.rootUntil || 0);
-      const sp = rooted ? 0 : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
+      const sp = rooted ? 0 : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
       if (player.roll) {
         const R = player.roll; R.t += dt; const v = 15 * (1 - 0.45 * R.t / 0.38);
         player.vx = R.dx * v; player.vz = R.dz * v;
@@ -1218,6 +1303,7 @@ export async function startGame({ net, joined, user }) {
     }
     if (Math.floor(time * 2) !== Math.floor((time - dt) * 2)) for (const o of treeObjs) if (!o.felled && !o.fall) o.group.visible = Math.hypot(o.t.x - player.x, o.t.z - player.z) < 250;
 
+    for (const r of oreObjs) if (r.shake > 0) { r.shake = Math.max(0, r.shake - dt); r.group.position.x = r.o.x + Math.sin(time * 60) * r.shake * 0.12; }
     // kisten
     for (const o of chestObjs) {
       if (o.opening) { o.t += dt; o.pivot.rotation.x = ease(Math.min(1, o.t / 0.7)) * (o.openAngle || -1.9); if (o.t > 1) o.opening = false; }
@@ -1237,7 +1323,7 @@ export async function startGame({ net, joined, user }) {
     const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
     const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
     if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
-    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); tb.classList.toggle('dim', !(ch || sh || wd || fishOk)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : fishOk ? '🎣' : '✋'; }
+    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && nearSmith(); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
     if (isTouch && Math.floor(time * 4) !== Math.floor((time - dt) * 4)) $('tb-roll').classList.toggle('cd', performance.now() / 1000 < rollReadyAt);
     if (bs.active && locked && !dead && !shopOpen) { /* bouwmodus regelt de aanwijzing */ }
     else if (performance.now() / 1000 < (player.rootUntil || 0) && !dead) { pr.innerHTML = '<b style="color:#9adf6a">Vastgegroeid!</b>'; pr.classList.add('on'); }
@@ -1253,6 +1339,7 @@ export async function startGame({ net, joined, user }) {
     } else
     if (ch) { pr.innerHTML = isTouch ? 'Kist openen' : '<b>E</b> · kist openen'; pr.classList.add('on'); }
     else if (sh) { pr.innerHTML = isTouch ? 'Winkel openen' : '<b>E</b> · winkel openen'; pr.classList.add('on'); }
+    else if (locked && !dead && !shopOpen && nearSmith()) { pr.innerHTML = isTouch ? 'Smid (X)' : '<b>E</b> · naar de smid'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
     else pr.classList.remove('on');
 
@@ -1266,6 +1353,10 @@ export async function startGame({ net, joined, user }) {
       }
     }
     if (merchant) merchant.update(dt);
+    if (smithRig && Math.hypot(W.smith.x - player.x, W.smith.z - player.z) < 60) {      // de smid slaat af en toe op het aambeeld
+      smithHammerT -= dt; if (smithHammerT <= 0) { smithHammerT = 2.5 + Math.random() * 3; smithRig.once('1H_Melee_Attack_Chop', { speed: 0.9 }); setTimeout(() => { sparkles.emit(anvilPos.x, anvilPos.y + 0.1, anvilPos.z, 12, 2, 2.5, 0.5); if (Math.hypot(W.smith.x - player.x, W.smith.z - player.z) < 25) tone(1900, 0.12, 'square', 0.025, -400); }, 420); }
+      smithRig.update(dt);
+    }
     for (const b of bobbers.values()) {
       b.t += dt; if (b.dip > 0) b.dip = Math.max(0, b.dip - dt);
       const dip = b.dip > 0 ? -0.12 - Math.abs(Math.sin(b.t * 22)) * 0.1 : 0;
