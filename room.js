@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer: spelers, monsterjacht in golven, dieren, honger, bomen en kisten.
 
 import { createWorld, HALF, WATER } from './public/world.js';
-import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX } from './public/items.js';
+import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX, WAVE_MODS, HEAVY_MUL, ROLL_CD, ROLL_IFRAME, BLOCK_MELEE } from './public/items.js';
 import { BUILDS, BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, pushOut, canPlace, boundR } from './public/builds.js';
 
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
@@ -15,6 +15,7 @@ export const CFG = {
   animalTarget: 38,
   maxSpeed: num(process.env.MAX_SPEED, 12),   // m/s: rennen is 9, met marge voor springen en vertraging
   strays: num(process.env.STRAY_DOGS, 3), strayRespawn: 180, dogDown: 20,
+  cheats: process.env.ALLOW_CHEATS === '1',   // alleen voor testen: /spawn <type> [n], /golf [mod], /hout <n>
 };
 
 const worlds = new Map();
@@ -67,7 +68,8 @@ export class Room {
     this.treeHp = Float32Array.from(this.world.trees, t => t.hp0);
     this.felled = new Map();      // idx -> respawn time
     this.chestOpen = new Map();   // idx -> reset time
-    this.wave = { n: 0, ph: 0, t: CFG.firstWave };   // ph 0 = wachten, 1 = gevecht
+    this.wave = { n: 0, ph: 0, t: CFG.firstWave, mod: null };   // ph 0 = wachten, 1 = gevecht
+    this.projs = []; this.hazards = [];
     this.animalTimer = 0;
     this.rand = Math.random;
     for (let i = 0; i < CFG.animalTarget; i++) this.spawnAnimal(i < 8);
@@ -132,7 +134,8 @@ export class Room {
         let x = num(m.x, P.x), z = num(m.z, P.z);
         // anti-valsspelen: niet verder dan rennen (+ marge) sinds het vorige bericht
         const since = Math.min(2, Math.max(0.05, this.T - (P.lastInT ?? this.T - 0.1)));
-        const allowed = CFG.maxSpeed * since + 1.5, moved = len(x - P.x, z - P.z);
+        const rolling = this.T < (P.rollUntil || 0) + 0.3;
+        const allowed = CFG.maxSpeed * since + 1.5 + (rolling ? 9 : 0), moved = len(x - P.x, z - P.z);
         P.lastInT = this.T;
         if (moved > allowed) {
           P.cheatHits = (P.cheatHits || 0) + 1;
@@ -140,13 +143,21 @@ export class Room {
           x = P.x; z = P.z;
         }
         const r = len(x, z), lim = HALF - 6, k = r > lim ? lim / r : 1;
+        if (this.T < (P.rootUntil || 0)) { x = P.x; z = P.z; }       // vastgegroeid door de Woudreus
+        P.vx = (x * k - P.x) / since; P.vz = (z * k - P.z) / since;
         P.x = x * k; P.z = z * k;
         const h = this.world.heightAt(P.x, P.z);
         P.y = clamp(num(m.y, h), h - 1, h + 14);
         P.yaw = num(m.yaw, P.yaw); P.pitch = clamp(num(m.pitch, 0), -1.5, 1.5);
         break;
       }
-      case 'swing': this.swing(P); break;
+      case 'swing': this.swing(P, !!m.heavy); break;
+      case 'roll': {
+        if (P.dead || this.T < (P.rollCd || 0) || this.T < (P.rootUntil || 0)) return;
+        P.rollCd = this.T + ROLL_CD; P.iframe = this.T + ROLL_IFRAME; P.rollUntil = this.T + 0.5; P.blocking = false;
+        this.bc({ t: 'ev', k: 'roll', id: P.id }, P); break;
+      }
+      case 'block': { const on = !!m.on && !P.dead; if (on !== !!P.blocking) { P.blocking = on; this.bc({ t: 'ev', k: 'block', id: P.id, on }, P); } break; }
       case 'open': this.openChest(P, m.i | 0); break;
       case 'equip': {
         const s = P.u.save, i = m.i | 0;
@@ -161,6 +172,7 @@ export class Room {
         if (this.T - (P.lastChat || -9) < 0.8) return;
         const text = String(m.text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 140);
         if (!text) return;
+        if (CFG.cheats && text.startsWith('/')) { this.cheat(P, text.slice(1).split(/\s+/)); return; }
         P.lastChat = this.T;
         this.bc({ t: 'chat', id: P.id, name: P.name, text, ping: m.ping ? { x: r1(P.x), z: r1(P.z) } : null });
         break;
@@ -178,26 +190,32 @@ export class Room {
     return s.equip === 0 ? AXE : (s.swords[s.equip - 1] || AXE);
   }
 
-  swing(P) {
-    if (P.dead || this.T < P.nextSwing) return;
+  swing(P, heavy = false) {
+    if (P.dead || P.blocking || this.T < P.nextSwing) return;
     const it = this.eqItem(P);
-    P.nextSwing = this.T + 0.5 / (it.speed || 1) * 0.92;
+    P.nextSwing = this.T + 0.5 / (it.speed || 1) * 0.92 * (heavy ? 1.5 : 1);
     P.swings = (P.swings + 1) & 255;
-    P.pendingHit = this.T + 0.2;
+    P.pendingHit = this.T + (heavy ? 0.3 : 0.2); P.heavy = heavy;
   }
 
   resolveHit(P) {
-    const it = this.eqItem(P), s = P.u.save;
+    const it = this.eqItem(P), s = P.u.save, heavy = !!P.heavy; P.heavy = false;
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
     let best = null, bd = 1e9, kind = null;
+    const reachM = heavy ? 3.4 : 2.9, dotM = heavy ? 0.15 : 0.4, extra = [];
     const test = (e, r, reach, minDot, k) => {
       const dx = e.x - P.x, dz = e.z - P.z, d = len(dx, dz);
       if (d > reach + r || d < 0.0001) return;
       if ((dx * fx + dz * fz) / d < minDot) return;
+      if (heavy && k !== 't') extra.push([e, k]);
       if (d < bd) { bd = d; best = e; kind = k; }
     };
-    for (const m of this.monsters.values()) test(m, MONSTERS[m.type].r, 2.9, 0.4, 'm');
-    for (const a of this.animals.values()) test(a, ANIMALS[a.type].r, 2.9, 0.4, 'a');
+    for (const m of this.monsters.values()) test(m, MONSTERS[m.type].r, reachM, dotM, 'm');
+    for (const a of this.animals.values()) test(a, ANIMALS[a.type].r, reachM, dotM, 'a');
+    if (heavy && extra.length > 1) {           // zware slag raakt tot 4 vijanden tegelijk
+      extra.sort((a, b) => len(a[0].x - P.x, a[0].z - P.z) - len(b[0].x - P.x, b[0].z - P.z));
+      for (const [e, k] of extra.slice(1, 4)) this.hitEnemy(P, it, e, k, true);
+    }
     if (!best) {
       for (const t of this.world.trees) {
         if (this.felled.has(t.idx)) continue;
@@ -206,15 +224,9 @@ export class Room {
       }
     }
     if (!best) return;
-    const full = P.hunger >= 80 ? 1.15 : 1;   // goed gevoed = iets sterker
-    if (kind === 'm' || kind === 'a') {
-      const dmg = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2);
-      best.hp -= dmg; best.stun = 0.18;
-      if (kind === 'a') { best.angry = true; best.hurtT = this.T; }
-      this.bc({ t: 'ev', k: 'hit', e: kind, id: best.id, dmg: Math.round(dmg), x: r1(best.x), z: r1(best.z) });
-      if (best.hp <= 0) { if (kind === 'm') this.killMonster(best, P); else this.killAnimal(best, P); }
-    } else {
-      const dmg = it.type === 'axe' ? 1 + s.up.axe : Math.max(0.15, it.damage / 60);
+    if (kind === 'm' || kind === 'a') this.hitEnemy(P, it, best, kind, heavy);
+    else {
+      const dmg = (it.type === 'axe' ? 1 + s.up.axe : Math.max(0.15, it.damage / 60)) * (heavy ? 2 : 1);
       this.treeHp[best.idx] -= dmg;
       this.bc({ t: 'ev', k: 'chop', i: best.idx });
       if (this.treeHp[best.idx] <= 0) {
@@ -227,6 +239,30 @@ export class Room {
         this.sendInv(P); this.markDirty();
       }
     }
+  }
+
+  cheat(P, [cmd, a, b]) {
+    const sc = this.waveScale || { hp: 1, dmg: 1, spd: 1 };
+    if (cmd === 'spawn') for (let i = 0; i < Math.min(10, +b || 1); i++) {
+      const t = Math.max(0, Math.min(MONSTERS.length - 1, a | 0)), ang = Math.random() * 6.28, x = P.x + Math.cos(ang) * 12, z = P.z + Math.sin(ang) * 12;
+      this.spawnMonster(t, x, z, sc.hp, sc.dmg, sc.spd); this.wave.ph = 1;
+    }
+    if (cmd === 'golf') { this.monsters.clear(); this.startWave(a || null); }
+    if (cmd === 'god') P.god = !P.god;
+    if (cmd === 'hout') { P.u.save.wood += Math.min(10000, a | 0); this.sendInv(P); }
+  }
+
+  hitEnemy(P, it, e, kind, heavy) {
+    const s = P.u.save, full = P.hunger >= 80 ? 1.15 : 1;   // goed gevoed = iets sterker
+    const dmg = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1);
+    e.hp -= dmg; e.stun = heavy ? 0.5 : 0.18;
+    if (heavy && !(kind === 'm' && e.type === 3)) {          // terugduwen (niet de baas)
+      const dx = e.x - P.x, dz = e.z - P.z, d = len(dx, dz) || 1, r = kind === 'm' ? MONSTERS[e.type].r : ANIMALS[e.type].r;
+      this.move(e, e.x + dx / d * 1.4, e.z + dz / d * 1.4, r);
+    }
+    if (kind === 'a') { e.angry = true; e.hurtT = this.T; }
+    this.bc({ t: 'ev', k: 'hit', e: kind, id: e.id, dmg: Math.round(dmg), x: r1(e.x), z: r1(e.z), heavy: heavy ? 1 : 0 });
+    if (e.hp <= 0) { if (kind === 'm') this.killMonster(e, P); else this.killAnimal(e, P); }
   }
 
   eat(P) {
@@ -319,8 +355,18 @@ export class Room {
   }
 
   // ------------------------------------------------------------ schade en dood
-  hurt(P, dmg, src) {
-    if (P.dead) return;
+  hurt(P, dmg, src, kind = 'melee') {
+    if (P.dead || P.god) return;
+    if (src && this.T < (P.iframe || 0)) { P.conn.send({ t: 'ev', k: 'dodged' }); return; }
+    if (src && P.blocking) {
+      const dx = src.x - P.x, dz = src.z - P.z, d = len(dx, dz) || 1;
+      if ((dx * -Math.sin(P.yaw) + dz * -Math.cos(P.yaw)) / d > 0.35) {
+        dmg *= kind === 'arrow' ? 0 : BLOCK_MELEE;
+        if (kind !== 'arrow' && src.stun !== undefined) src.stun = Math.max(src.stun, 0.35);
+        this.bc({ t: 'ev', k: 'blocked', id: P.id, x: r1(P.x), z: r1(P.z) });
+        if (dmg <= 0) return;
+      }
+    }
     dmg *= 1 - SHIELD_REDUCE[P.u.save.up.shield];
     P.hp -= dmg; P.lastHurt = this.T;
     P.conn.send({ t: 'hurt', dmg: Math.round(dmg), x: src ? r1(src.x) : null, z: src ? r1(src.z) : null });
@@ -328,7 +374,7 @@ export class Room {
   }
 
   die(P) {
-    P.hp = 0; P.dead = true; P.respawnAt = this.T + CFG.respawn; P.pendingHit = -1;
+    P.hp = 0; P.dead = true; P.blocking = false; P.respawnAt = this.T + CFG.respawn; P.pendingHit = -1;
     const s = P.u.save; s.stats.deaths++; s.wood = Math.floor(s.wood / 2);
     P.conn.send({ t: 'dead', in: CFG.respawn });
     this.bc({ t: 'ev', k: 'pdead', id: P.id });
@@ -348,7 +394,7 @@ export class Room {
   }
 
   wipe() {
-    this.monsters.clear();
+    this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.wave.mod = null;
     this.wave.n = Math.max(0, this.wave.n - 1); this.wave.ph = 0; this.wave.t = CFG.wipeDelay;
     this.bc({ t: 'wave', ph: 0, n: this.wave.n, wipe: true, next: this.wave.t });
   }
@@ -356,12 +402,15 @@ export class Room {
   // ------------------------------------------------------------ golven en monsters
   pickAlive() { const a = [...this.players.values()].filter(p => !p.dead); return a[Math.floor(Math.random() * a.length)] || null; }
 
-  startWave() {
+  startWave(forceMod = null) {
     const w = this.wave; w.n++; w.ph = 1;
     const n = w.n, alive = [...this.players.values()].filter(p => !p.dead).length || 1;
-    const scale = { hp: 1 + 0.30 * (n - 1), dmg: 1 + 0.12 * (n - 1), spd: Math.min(1.4, 1 + 0.02 * (n - 1)) };
+    const mod = forceMod ? WAVE_MODS.find(x => x.id === forceMod) : (n >= 3 && n % 5 !== 0 && Math.random() < 0.45 ? WAVE_MODS[Math.floor(Math.random() * WAVE_MODS.length)] : null);
+    w.mod = mod ? mod.id : null;
+    const scale = { hp: (1 + 0.30 * (n - 1)) * (mod?.hp || 1), dmg: (1 + 0.12 * (n - 1)) * (mod?.dmg || 1), spd: Math.min(1.4, 1 + 0.02 * (n - 1)) * (mod?.spd || 1) };
+    this.waveScale = scale;
     const hpMul = scale.hp * (1 + 0.15 * (alive - 1));
-    const count = Math.min(70, Math.round((3 + 1.6 * n) * (0.7 + 0.3 * alive)));
+    const count = Math.min(80, Math.round((3 + 1.6 * n) * (0.7 + 0.3 * alive) * (mod?.count || 1)));
     const pool = MONSTERS.map((m, i) => ({ m, i })).filter(x => x.m.minWave <= n);
     const total = pool.reduce((a, x) => a + x.m.weight, 0);
     const list = [];
@@ -377,25 +426,32 @@ export class Room {
       const P = this.pickAlive(), cx = P ? P.x : 0, cz = P ? P.z : 0;
       const pt = this.world.landPoint(Math.random, cx, cz, 38, 58, 0.0) || this.world.landPoint(Math.random, 0, 0, 20, 90, 0.0);
       if (!pt) continue;
-      const M = MONSTERS[type], bossMul = type === 3 ? (1 + 0.25 * (n / 5 - 1)) : 1;
-      const m = {
-        id: this.eid++, type, x: pt.x, z: pt.z, yaw: 0,
-        hp: M.hp * hpMul * bossMul, maxhp: M.hp * hpMul * bossMul,
-        dmg: M.dmg * scale.dmg * bossMul, speed: M.speed * scale.spd, nextAtk: 0, stun: 0, retarget: 0, target: null,
-      };
-      this.monsters.set(m.id, m); spawned++;
+      const bossMul = type === 3 ? (1 + 0.25 * (n / 5 - 1)) : 1;
+      this.spawnMonster(type, pt.x, pt.z, hpMul * bossMul, scale.dmg * bossMul, scale.spd); spawned++;
     }
-    this.bc({ t: 'wave', ph: 1, n, boss, count: spawned });
+    this.bc({ t: 'wave', ph: 1, n, boss, count: spawned, mod: w.mod });
+  }
+
+  spawnMonster(type, x, z, hpMul, dmgMul, spdMul) {
+    const M = MONSTERS[type];
+    const m = {
+      id: this.eid++, type, x, z, yaw: 0, hp: M.hp * hpMul, maxhp: M.hp * hpMul,
+      dmg: M.dmg * dmgMul, speed: M.speed * spdMul, nextAtk: 0, stun: 0, retarget: 0, target: null,
+      abRoots: this.T + 6, abSummon: this.T + 12, lungeCd: 0, lungeUntil: 0, strafe: Math.random() < 0.5 ? 1 : -1,
+    };
+    this.monsters.set(m.id, m);
+    return m;
   }
 
   endWave() {
-    const w = this.wave; w.ph = 0; w.t = CFG.waveGap;
+    const w = this.wave, modW = w.mod ? 1.5 : 1; w.ph = 0; w.t = CFG.waveGap; w.mod = null;
+    this.projs.length = 0; this.hazards.length = 0;
     for (const P of this.players.values()) {
       if (P.dead) continue;
       const s = P.u.save; s.stats.bestWave = Math.max(s.stats.bestWave, w.n);
-      const bonus = w.n * 25; s.stats.score += bonus;
+      const bonus = Math.round(w.n * 25 * modW); s.stats.score += bonus;
       P.hp = Math.min(100, P.hp + 30);
-      const wb = w.n * 3; s.wood += wb;
+      const wb = Math.round(w.n * 3 * modW); s.wood += wb;
       this.toast(P, 'Golf ' + w.n + ' verslagen! +' + bonus + ' punten en +' + wb + ' hout', '#f2c14e');
       if (Math.random() < 0.4) this.giveSword(P, rollSword(Math.min(1, w.n / 12)), 'wave');
       this.sendInv(P);
@@ -479,7 +535,9 @@ export class Room {
       const M = MONSTERS[m.type];
       m.retarget -= dt;
       if (m.retarget <= 0 || !this.targetOk(m.target)) {
-        m.retarget = 0.6; m.target = this.nearest(alive, m.x, m.z, 400);
+        m.retarget = 0.6;
+        const dogT = M.hunter ? this.nearest([...this.dogs.values()].filter(d => d.state === 'follow'), m.x, m.z, 80) : null;   // hondenjager: eerst de honden
+        m.target = dogT || this.nearest(alive, m.x, m.z, 400);
       }
       const tg = m.target; if (!tg) continue;
       let dx = tg.x - m.x, dz = tg.z - m.z, d = len(dx, dz);
@@ -488,6 +546,13 @@ export class Room {
         if (pt) { m.x = pt.x; m.z = pt.z; dx = tg.x - m.x; dz = tg.z - m.z; d = len(dx, dz); }
       }
       m.yaw = Math.atan2(-dx, -dz);
+      if (m.type === 3) this.bossAbilities(m, alive);
+      if (M.ranged && !m.siege) { this.archerAI(m, M, tg, dx, dz, d, dt); continue; }
+      let speed = m.speed;
+      if (M.stealth) {                              // sluiper: springt het laatste stuk naar voren
+        if (d < 6 && d > 1.6 && this.T >= m.lungeCd) { m.lungeCd = this.T + 4; m.lungeUntil = this.T + 0.45; this.bc({ t: 'ev', k: 'lunge', id: m.id }); }
+        if (this.T < m.lungeUntil) speed *= 2.6;
+      }
       const reach = M.r + 0.9;
       if (m.siege && (!this.builds.has(m.siege.id) || len(m.siege.x - m.x, m.siege.z - m.z) > boundR(BUILD_BY_ID[m.siege.kind]) + M.r + 1.2)) m.siege = null;
       if (m.siege && d > reach) {                 // bouwwerk in de weg: eerst kapotslaan
@@ -503,20 +568,89 @@ export class Room {
         continue;
       }
       if (d > reach) {
-        const step = Math.min(d - reach * 0.8, m.speed * dt), ox = m.x, oz = m.z;
+        const step = Math.min(d - reach * 0.8, speed * dt), ox = m.x, oz = m.z;
         this.move(m, m.x + dx / d * step, m.z + dz / d * step, M.r);
         if (m.blockedBy && len(m.x - ox, m.z - oz) < step * 0.35) { m.stuck = (m.stuck || 0) + dt; if (m.stuck > 0.6) { m.siege = m.blockedBy; m.stuck = 0; } }
         else m.stuck = 0;
       } else if (this.T >= m.nextAtk) {
         m.nextAtk = this.T + M.atkCd;
         this.bc({ t: 'ev', k: 'matk', id: m.id });
-        if (tg.isDog) this.hurtDog(tg, m.dmg); else this.hurt(tg, m.dmg, m);
+        if (tg.isDog) this.hurtDog(tg, m.dmg * (M.hunter ? 1.5 : 1)); else this.hurt(tg, m.dmg, m);
       }
     }
+    this.updateProjectiles(dt); this.updateHazards();
     // niet op elkaar stapelen
     for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
       const a = arr[i], b = arr[j], dx = b.x - a.x, dz = b.z - a.z, d = len(dx, dz), min = MONSTERS[a.type].r + MONSTERS[b.type].r;
       if (d < min && d > 0.001) { const push = (min - d) * 0.5; a.x -= dx / d * push; a.z -= dz / d * push; b.x += dx / d * push; b.z += dz / d * push; }
+    }
+  }
+
+  archerAI(m, M, tg, dx, dz, d, dt) {
+    // blijft op 9-17 m afstand, loopt zijwaarts en schiet pijlen die je kunt ontwijken of blokkeren
+    let mx = 0, mz = 0;
+    if (d > 17) { mx = dx / d; mz = dz / d; }
+    else if (d < 9) { mx = -dx / d; mz = -dz / d; }
+    else { mx = -dz / d * m.strafe * 0.5; mz = dx / d * m.strafe * 0.5; if (Math.random() < dt * 0.3) m.strafe *= -1; }
+    if (mx || mz) { const ox = m.x, oz = m.z; this.move(m, m.x + mx * m.speed * dt, m.z + mz * m.speed * dt, M.r); if (len(m.x - ox, m.z - oz) < 0.01) m.strafe *= -1; }
+    if (d < 22 && this.T >= m.nextAtk) {
+      m.nextAtk = this.T + M.atkCd * (0.85 + Math.random() * 0.3);
+      const lead = Math.min(0.6, d / 26) * 0.6, ax = tg.x + (tg.vx || 0) * lead, az = tg.z + (tg.vz || 0) * lead;
+      const ddx = ax - m.x, ddz = az - m.z, dd = len(ddx, ddz) || 1, sp = 26;
+      const pr = { x: m.x + ddx / dd * 0.6, z: m.z + ddz / dd * 0.6, vx: ddx / dd * sp, vz: ddz / dd * sp, life: 1.1, dmg: m.dmg, src: m };
+      this.projs.push(pr);
+      this.bc({ t: 'ev', k: 'shot', id: m.id, x: r2(pr.x), z: r2(pr.z), vx: r2(pr.vx), vz: r2(pr.vz) });
+    }
+  }
+  updateProjectiles(dt) {
+    for (let i = this.projs.length - 1; i >= 0; i--) {
+      const p = this.projs[i]; let hit = false;
+      const steps = 3;
+      for (let k = 0; k < steps && !hit; k++) {
+        p.x += p.vx * dt / steps; p.z += p.vz * dt / steps;
+        for (const P of this.players.values()) if (!P.dead && Math.abs(P.x - p.x) < 0.7 && Math.abs(P.z - p.z) < 0.7 && len(P.x - p.x, P.z - p.z) < 0.65) { this.hurt(P, p.dmg, { x: p.x - p.vx * 0.1, z: p.z - p.vz * 0.1 }, 'arrow'); hit = true; break; }
+        if (hit) break;
+        for (const d of this.dogs.values()) if (d.state === 'follow' && len(d.x - p.x, d.z - p.z) < 0.5) { this.hurtDog(d, p.dmg * 0.7); hit = true; break; }
+        if (hit) break;
+        for (const b of this.builds.values()) if (BUILD_BY_ID[b.kind].solid && len(b.x - p.x, b.z - p.z) < 3 && pushOut(b, p.x, p.z, 0.05)) { this.hurtBuild(b, p.dmg * 0.4, null); hit = true; break; }
+        if (!hit && this.world.heightAt(p.x, p.z) > 0 && this.world.slopeAt(p.x, p.z) > 1.4) hit = true;
+      }
+      p.life -= dt;
+      if (hit || p.life <= 0) this.projs.splice(i, 1);
+    }
+  }
+  bossAbilities(m, alive) {
+    const near = alive.filter(p => !p.isDog && len(p.x - m.x, p.z - m.z) < 30);
+    if (this.T >= m.abRoots && near.length) {         // wortels schieten onder spelers uit de grond
+      m.abRoots = this.T + 8 + Math.random() * 3;
+      const pts = near.slice(0, 6).map(p => [r1(p.x), r1(p.z)]);
+      for (const [x, z] of pts) this.hazards.push({ x, z, r: 2.4, at: this.T + 1.3, dmg: 18 * (this.waveScale?.dmg || 1) });
+      this.bc({ t: 'ev', k: 'roots', id: m.id, pts, delay: 1.3 });
+    }
+    if (this.T >= m.abSummon && near.length) {        // roept kobolds op
+      m.abSummon = this.T + 18 + Math.random() * 6;
+      const summoned = [...this.monsters.values()].filter(x => x.summoned).length;
+      const sc = this.waveScale || { hp: 1, dmg: 1, spd: 1 };
+      const pts = [];
+      for (let i = 0; i < 3 && summoned + i < 8; i++) {
+        const a = Math.random() * 6.28, x = m.x + Math.cos(a) * 3.5, z = m.z + Math.sin(a) * 3.5;
+        if (this.world.heightAt(x, z) < WATER + 0.9) continue;
+        const k = this.spawnMonster(0, x, z, sc.hp * 0.8, sc.dmg, sc.spd); k.summoned = true; pts.push([r1(x), r1(z)]);
+      }
+      if (pts.length) this.bc({ t: 'ev', k: 'summon', id: m.id, pts });
+    }
+  }
+  updateHazards() {
+    for (let i = this.hazards.length - 1; i >= 0; i--) {
+      const h = this.hazards[i]; if (this.T < h.at) continue;
+      this.hazards.splice(i, 1);
+      for (const P of this.players.values()) {
+        if (P.dead || len(P.x - h.x, P.z - h.z) > h.r) continue;
+        if (this.T < (P.iframe || 0)) { P.conn.send({ t: 'ev', k: 'dodged' }); continue; }
+        this.hurt(P, h.dmg, null); P.rootUntil = this.T + 1.5;
+        P.conn.send({ t: 'rooted', s: 1.5 });
+      }
+      for (const d of this.dogs.values()) if (d.state === 'follow' && len(d.x - h.x, d.z - h.z) < h.r) this.hurtDog(d, h.dmg * 0.6);
     }
   }
 
@@ -862,7 +996,7 @@ export class Room {
     for (const P of this.players.values()) p.push([P.id, r1(P.x), r1(P.y), r1(P.z), r2(P.yaw), Math.round(P.hp), eqCode(this.eqItem(P)), P.dead ? 1 : 0, P.swings]);
     for (const e of this.monsters.values()) m.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
     for (const e of this.animals.values()) a.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
-    const head = JSON.stringify({ t: 's', p, m, a, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.monsters.size } }).slice(0, -1);
+    const head = JSON.stringify({ t: 's', p, m, a, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.monsters.size, mod: this.wave.mod } }).slice(0, -1);
     for (const P of this.players.values()) {
       const you = { hp: Math.round(P.hp), hu: Math.round(P.hunger), sc: P.u.save.stats.score, rs: P.dead ? Math.max(0, Math.ceil(P.respawnAt - this.T)) : 0 };
       P.conn.send(head + ',"y":' + JSON.stringify(you) + '}');

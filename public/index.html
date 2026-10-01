@@ -88,7 +88,8 @@
   /* ---------- HUD ---------- */
   #hud { position:fixed; inset:0; pointer-events:none; user-select:none; display:none; z-index:3; }
   #hud.on { display:block; }
-  #cross { position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.85); box-shadow:0 0 0 1.5px rgba(0,0,0,.45); }
+  #cross { position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.85); box-shadow:0 0 0 1.5px rgba(0,0,0,.45); transition:background .1s; }
+  #cross.full { background:#ff9a3a; box-shadow:0 0 0 1.5px rgba(0,0,0,.45), 0 0 10px #ff9a3a; }
   #prompt { position:absolute; left:50%; top:58%; transform:translateX(-50%); padding:6px 14px; border-radius:999px; background:var(--panel); backdrop-filter:blur(6px); font-size:15px; opacity:0; transition:opacity .15s; white-space:nowrap; }
   #prompt.on { opacity:1; }
   #prompt b { color:var(--gold); }
@@ -202,6 +203,11 @@
   #tb-drink { right:max(128px,calc(env(safe-area-inset-right) + 110px)); bottom:240px; }
   #tb-fish { right:max(186px,calc(env(safe-area-inset-right) + 168px)); bottom:240px; }
   #tb-fish.off { opacity:.4; }
+  .pb-s { width:54px; height:54px; background:rgba(40,50,70,.62); } .pb-s i { font-size:22px; }
+  #tb-block { right:max(240px,calc(env(safe-area-inset-right) + 228px)); bottom:max(100px,calc(env(safe-area-inset-bottom) + 88px)); }
+  #tb-roll { right:max(240px,calc(env(safe-area-inset-right) + 228px)); bottom:max(26px,calc(env(safe-area-inset-bottom) + 14px)); }
+  #tb-roll.cd { opacity:.45; }
+  body.building #tb-block, body.building #tb-roll { display:none; }
   #tb-menu { right:max(12px,env(safe-area-inset-right)); top:max(10px,env(safe-area-inset-top)); }
   #tb-invite { right:max(66px,calc(env(safe-area-inset-right) + 54px)); top:max(10px,env(safe-area-inset-top)); }
   #rotate { display:none; }
@@ -432,6 +438,8 @@
   <button class="sb" id="tb-sprint" type="button" aria-label="Rennen"><b>L</b>Rennen</button>
   <button class="sb" id="tb-next" type="button" aria-label="Volgend wapen"><b>R</b>Wapen</button>
   <button class="tb" id="tb-drink" type="button" aria-label="Drankje">🧪<small>0</small></button>
+  <button class="pb pb-s" id="tb-block" type="button" aria-label="Blokkeren"><i>🛡️</i><em>blok</em></button>
+  <button class="pb pb-s" id="tb-roll" type="button" aria-label="Ontwijkrol"><i>🌀</i><em>rol</em></button>
   <button class="tb" id="tb-fish" type="button" aria-label="Hond voeren met vis">🐟<small>0</small></button>
   <button class="tb" id="tb-build" type="button" aria-label="Bouwen">🔨</button>
   <button class="tb" id="tb-chat" type="button" aria-label="Chat">💬</button>
@@ -447,7 +455,9 @@
     <div class="keys">
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Lopen (<kbd>Shift</kbd> rennen, <kbd>Spatie</kbd> springen)</span>
       <span><kbd>Muis</kbd></span><span>Rondkijken</span>
-      <span><kbd>Linkermuisknop</kbd></span><span>Slaan en hakken</span>
+      <span><kbd>Linkermuisknop</kbd></span><span>Slaan en hakken; ingedrukt houden en loslaten = zware slag (raakt meerdere vijanden)</span>
+      <span><kbd>Rechtermuisknop</kbd></span><span>Blokkeren met je schild (van voren 70% minder schade, pijlen helemaal)</span>
+      <span><kbd>C</kbd></span><span>Ontwijkrol: even onkwetsbaar, ook voor wortels van de Woudreus</span>
       <span><kbd>E</kbd></span><span>Kist openen, winkel, hond temmen, vissen en binnenhalen</span>
       <span><kbd>R</kbd></span><span>Vlees eten tegen honger</span>
       <span><kbd>Q</kbd></span><span>Helende drank drinken</span>
@@ -456,7 +466,7 @@
       <span><kbd>F</kbd></span><span>Slaan (alternatief)</span>
       <span><kbd>B</kbd></span><span>Bouwen met hout (klik = plaatsen, <kbd>1</kbd>–<kbd>7</kbd> kiezen, <kbd>7</kbd> afbreken)</span>
       <span><kbd>M</kbd> / <kbd>Enter</kbd></span><span>Grote kaart / chatten met je kamer (snelberichten zetten een 📍 op de kaart)</span>
-      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen, D-pad omhoog hond voeren, D-pad omlaag bouwen, Start pauze</span>
+      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan (vasthouden = zware slag), B springen, X gebruiken, Y eten, LT blokkeren, LB rollen, RB wapen, D-pad links drank, D-pad omhoog hond voeren, D-pad omlaag bouwen, Start pauze</span>
     </div>
     <div class="gfx"><span>Graphics</span><div class="row" id="gfx-row"></div></div>
     <label class="fpsrow"><input type="checkbox" id="fps-toggle"> Toon beelden per seconde (fps)</label>

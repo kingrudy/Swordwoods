@@ -48,7 +48,7 @@ export function createHud(ctx) {
       if (e.owner === myId) out.push({ x: e.x, z: e.z, kind: 'mydog' });
       else if (!e.owner && seenDogs.has(e.id)) out.push({ x: e.x, z: e.z, kind: 'wilddog' });
     }
-    for (const e of ctx.mons.values()) if (Math.hypot(e.x - player.x, e.z - player.z) < 70) out.push({ x: e.x, z: e.z, kind: 'monster', boss: e.type === 3 });
+    for (const e of ctx.mons.values()) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 70 && !(e.type === 5 && d > 9)) out.push({ x: e.x, z: e.z, kind: 'monster', boss: e.type === 3 }); }
     for (const m of (ctx.extraMarkers ? ctx.extraMarkers() : [])) out.push(m);
     return out;
   }

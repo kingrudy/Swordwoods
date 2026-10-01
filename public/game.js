@@ -1,7 +1,7 @@
 // Multiplayer-client: rendert de wereld, stuurt invoer naar de server en toont wat de server meldt.
 import * as THREE from 'three';
 import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
-import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS, DOG_FURS, dogXpNeeded } from './items.js';
+import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS, DOG_FURS, dogXpNeeded, WAVE_MODS, ROLL_CD } from './items.js';
   let fishing = null;   // eigen hengel in het water: { x, z, bite }
 import * as M from './models.js';
 import { createGraphics, QUALITY } from './graphics.js';
@@ -216,6 +216,11 @@ export async function startGame({ net, joined, user }) {
   }
   const sfx = {
     swing: () => noise(0.16, 0.06, 2500),
+    heavy: () => { noise(0.3, 0.12, 1400); tone(90, 0.3, 'sawtooth', 0.08, -40); },
+    roll: () => noise(0.3, 0.08, 600),
+    clang: () => { tone(1400, 0.18, 'square', 0.05, -300); tone(2100, 0.25, 'triangle', 0.04, -500); noise(0.08, 0.1, 4000); },
+    arrow: () => noise(0.12, 0.05, 3500),
+    rumble: () => { noise(0.9, 0.25, 220); tone(55, 0.9, 'sine', 0.2, -20); },
     chop: () => { noise(0.12, 0.28, 700); tone(150, 0.12, 'triangle', 0.22, -70); },
     hit: () => { noise(0.1, 0.22, 1800); tone(220, 0.1, 'square', 0.08, -120); },
     hurt: () => { noise(0.25, 0.3, 500); tone(110, 0.25, 'sawtooth', 0.12, -60); },
@@ -306,13 +311,16 @@ export async function startGame({ net, joined, user }) {
     $('score').textContent = '⭐ Punten: ' + you.sc;
     const w = $('wave');
     w.classList.toggle('fight', wave.ph === 1);
-    w.innerHTML = wave.ph === 1 ? '<b>Golf ' + wave.n + '</b> · ' + wave.left + (wave.left === 1 ? ' vijand' : ' vijanden') + ' over'
+    const wm = wave.ph === 1 && wave.mod ? WAVE_MODS.find(x => x.id === wave.mod) : null;
+    w.innerHTML = wave.ph === 1 ? '<b>Golf ' + wave.n + '</b>' + (wm ? ' · <span style="color:#ff9a6a">' + wm.name + '</span>' : '') + ' · ' + wave.left + (wave.left === 1 ? ' vijand' : ' vijanden') + ' over'
       : (wave.n === 0 ? 'Eerste golf begint over <b>' + fmt(wave.t) + '</b>' : 'Golf ' + (wave.n + 1) + ' begint over <b>' + fmt(wave.t) + '</b>');
     $('players').innerHTML = lastPlayers.map(p => '<div class="pl' + (p.dead ? ' dead' : '') + '"><span>' + esc(names.get(p.id) || '?') + (p.id === myId ? ' (jij)' : '') + '</span><span class="hpb"><i style="width:' + clamp(p.id === myId ? you.hp : p.hp, 0, 100) + '%"></i></span></div>').join('');
   }
 
   /* ================================================================ vastgehouden item */
   const hand = new THREE.Group(); hand.scale.setScalar(0.5); handScene.add(hand);
+  const shieldHand = new THREE.Group(); shieldHand.scale.setScalar(0.55); shieldHand.visible = false; shieldHand.userData.lvl = -1; handScene.add(shieldHand);
+  let blockT = 0;
   let heldMesh = null, heldKey = '';
   function rebuildHeld() {
     const it = items()[inv.equip] || AXE, key = fishing ? 'rod' : it.type === 'axe' ? 'axe' : it.rarity + ':' + it.base;
@@ -334,13 +342,27 @@ export async function startGame({ net, joined, user }) {
     return { group: g, body: model.group, model, x: 0, z: 0, y: 0, yaw: 0, tx: 0, tz: 0, ty: 0, tyaw: 0, phase: 0, speed: 0, hp: 1, maxhp: 1, first: true };
   }
   /* ---------------- geanimeerde 3D-figuren (worden ingewisseld zodra ze geladen zijn) */
-  const RIG_FOR_MONSTER = (type, id) => type === 0 ? (id % 2 ? 'skeleton_rogue' : 'skeleton_minion') : type >= 2 ? 'forest_monster' : null;
-  const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10 };   // bosmonster: hoogte inclusief de boom op zijn rug
+  const RIG_FOR_MONSTER = (type, id) => ({ 0: id % 2 ? 'skeleton_rogue' : 'skeleton_minion', 2: 'forest_monster', 3: 'forest_monster', 4: 'skeleton_mage', 5: 'rogue_hooded', 6: 'skeleton_warrior' })[type] || null;
+  const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10, 4: 1.7, 5: 1.75, 6: 2.15 };   // bosmonster: hoogte inclusief de boom op zijn rug
   const CLIPS = {
     skeleton: { idle: 'Idle_Combat', walk: 'Walking_D_Skeletons', run: 'Running_C', walkSpeed: 2.2, runSpeed: 5.2, attack: '1H_Melee_Attack_Chop', atkSpeed: 1.4, die: 'Death_A', hit: 'Hit_A', spawn: 'Spawn_Ground_Skeletons' },
     forest: { idle: 'Idle', walk: 'Walk', run: 'Walk', walkSpeed: 1.6, runSpeed: 99, attack: 'Attack', atkSpeed: 1.0, die: 'Dying', hit: null, spawn: null },
   };
-  const clipsOf = e => e.type >= 2 ? CLIPS.forest : CLIPS.skeleton;
+  CLIPS.archer = { ...CLIPS.skeleton, attack: '1H_Ranged_Shoot', atkSpeed: 1.3 };
+  CLIPS.hunter = { ...CLIPS.skeleton, attack: '2H_Melee_Attack_Chop', atkSpeed: 1.25 };
+  CLIPS.sneak = { idle: 'Idle_Combat', walk: 'Walking_A', run: 'Running_A', walkSpeed: 2.0, runSpeed: 5.5, attack: 'Dualwield_Melee_Attack_Slice', atkSpeed: 1.3, die: 'Death_A', hit: 'Hit_A', spawn: null };
+  const clipsOf = e => e.type === 2 || e.type === 3 ? CLIPS.forest : e.type === 4 ? CLIPS.archer : e.type === 5 ? CLIPS.sneak : e.type === 6 ? CLIPS.hunter : CLIPS.skeleton;
+  function decorateMonster(e, rig) {
+    if (e.type === 4) {                     // kruisboog in de rechterhand
+      const t = CH.template('crossbow'), cb = t && t.scene.getObjectByName('1H_Crossbow');
+      if (cb && rig.handR) { const c = cb.clone(true); c.position.set(0, 0, 0); rig.handR.add(c); } else e.needBow = true;
+    }
+    if (e.type === 5 || e.type === 6) rig.inner.traverse(o => {
+      if (!o.isMesh) return;
+      if (e.type === 5) { o.material.color.multiply(new THREE.Color(0x5a4a6e)); o.material.transparent = true; (e.stealthMats ||= []).push(o.material); }
+      else o.material.color.multiply(new THREE.Color(0xffb8a8));
+    });
+  }
   let bossSkin = null;
   function bossLook(rig) {          // de baas krijgt de tweede huid
     const apply = tex => rig.inner.traverse(o => { if (o.isMesh && o.material.name === 'Monster') { o.material.map = tex; o.material.needsUpdate = true; } });
@@ -349,8 +371,9 @@ export async function startGame({ net, joined, user }) {
   }
   function setRig(e, rig) {
     e.group.remove(e.body); e.body = rig.group; e.group.add(rig.group);
-    e.model = rig; e.flashMats = null;
+    e.model = rig; e.flashMats = null; e.stealthMats = null;
     if (e.item) mountItem(e);
+    if (e.isMon) decorateMonster(e, rig);
   }
   function wantRig(e, name, height, fresh = false) {
     if (!name) return;
@@ -359,6 +382,7 @@ export async function startGame({ net, joined, user }) {
   }
   function onRigReady(name) {
     if (name === 'chest') upgradeChests();
+    if (name === 'crossbow') for (const e of mons.values()) if (e.needBow && e.model.kind === 'rig') { e.needBow = false; decorateMonster(e, e.model); }
     for (const map of [remotes, mons, anis]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); if (map === mons && e.type === 3 && name === 'forest_monster') bossLook(r); e.want = null; } }
     if (name === 'merchant' && !merchant) {
       merchant = CH.createRig('merchant', 1.8);
@@ -437,7 +461,7 @@ export async function startGame({ net, joined, user }) {
     mountItem(e);
   }
   function makeMonster(id, type) {
-    const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 0 ? 0.85 : 1;
+    const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.isMon = true; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 0 ? 0.85 : 1;
     e.bar = M.makeBar(0.9 + model.height * 0.18); scene.add(e.bar); e.barY = model.height + 0.35;
     if (type === 3) { const l = M.makeLabel(MONSTERS[3].name, '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
     wantRig(e, RIG_FOR_MONSTER(type, id), RIG_HEIGHT[type], true);
@@ -510,6 +534,8 @@ export async function startGame({ net, joined, user }) {
     }
     for (const id of [...map.keys()]) if (!seen.has(id) && !map.get(id).dying) killEnt(map, id);
   }
+  const fx = [];      // pijlen, waarschuwingen en wortels
+  net.on('rooted', m => { player.rootUntil = performance.now() / 1000 + m.s; player.roll = null; shake = Math.max(shake, 0.3); toast('🌿 Vastgegroeid door wortels!', '#9adf6a'); });
   function addPopup(x, y, z, text, color) {
     const s = M.makePopup(text, color); s.position.set(x, y, z); scene.add(s); popups.push({ s, t: 0, x, y, z });
   }
@@ -544,7 +570,7 @@ export async function startGame({ net, joined, user }) {
     $('vignette').classList.add('on'); setTimeout(() => $('vignette').classList.remove('on'), 90);
     shake = 0.35; sfx.hurt();
   });
-  net.on('dead', m => { dead = true; $('dead').classList.add('on'); $('dead-sub').textContent = 'Terug in het spel over ' + m.in + ' s'; });
+  net.on('dead', m => { dead = true; blocking = false; charge.start = null; player.roll = null; $('dead').classList.add('on'); $('dead-sub').textContent = 'Terug in het spel over ' + m.in + ' s'; });
   net.on('respawn', m => {
     dead = false; $('dead').classList.remove('on');
     player.x = m.x; player.z = m.z; player.y = heightAt(m.x, m.z); player.vx = player.vz = player.vy = 0; player.onGround = true;
@@ -552,7 +578,8 @@ export async function startGame({ net, joined, user }) {
   });
   net.on('wave', m => {
     if (m.ph === 1) {
-      banner('GOLF ' + m.n + (m.boss ? '<small>Een baas nadert: ' + MONSTERS[3].name + '</small>' : '<small>' + m.count + ' monsters komen eraan</small>'), 4200);
+      const mod = WAVE_MODS.find(x => x.id === m.mod);
+      banner('GOLF ' + m.n + (m.boss ? '<small>Een baas nadert: ' + MONSTERS[3].name + '</small>' : mod ? '<small style="color:#ff9a6a">' + mod.name + ': ' + mod.desc + ' · meer beloning</small>' : '<small>' + m.count + ' monsters komen eraan</small>'), 4600);
       sfx.horn();
     } else if (m.wipe) banner('Iedereen is gevallen<small>Golf ' + (m.n + 1) + ' begint opnieuw</small>', 4200);
     else if (m.cleared) banner('Golf ' + m.n + ' verslagen<small>De volgende golf komt over ' + fmt(m.next) + '</small>', 4200);
@@ -631,15 +658,44 @@ export async function startGame({ net, joined, user }) {
       case 'doglvl': { const e = dogs.get(m.id); if (e) sparkles.emit(e.x, e.y + 0.8, e.z, 30, 1.2, 2, 1.2); if (e && e.owner === myId) sfx.happy(); break; }
       case 'hit': {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
-        addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg, m.e === 'm' ? '#ffe08a' : '#ffffff');
+        addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg + (m.heavy ? '!' : ''), m.heavy ? '#ff9a3a' : m.e === 'm' ? '#ffe08a' : '#ffffff');
+        if (m.heavy && Math.hypot(m.x - player.x, m.z - player.z) < 6) shake = Math.max(shake, 0.18);
         blood.emit(m.x, gy + (e ? e.model.height * 0.5 : 0.7), m.z, 8, 2.2, 2.5, 0.6);
         if (e) { flash(e); if (m.e === 'm' && e.model.kind === 'rig' && !e.model.busy && !e.dying) { const cs = clipsOf(e); if (cs.hit) e.model.once(cs.hit, { speed: 1.6 }); } }
         if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.hit();
         break;
       }
+      case 'shot': {
+        const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once(CLIPS.archer.attack, { speed: 1.3 });
+        const a = M.makeArrow(), y = heightAt(m.x, m.z) + 1.25; a.position.set(m.x, y, m.z); a.lookAt(m.x + m.vx, y, m.z + m.vz); scene.add(a);
+        fx.push({ kind: 'arrow', mesh: a, vx: m.vx, vz: m.vz, life: 1.1 });
+        if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.arrow();
+        break;
+      }
+      case 'roots': {
+        for (const [x, z] of m.pts) {
+          const ring = new THREE.Mesh(new THREE.RingGeometry(2.1, 2.4, 40), M.warnRingMat.clone()); ring.rotation.x = -Math.PI / 2;
+          const fill = new THREE.Mesh(new THREE.CircleGeometry(2.4, 40), M.warnRingMat.clone()); fill.rotation.x = -Math.PI / 2; fill.material.opacity = 0.18;
+          const g = new THREE.Group(); g.add(ring, fill); g.position.set(x, heightAt(x, z) + 0.08, z); scene.add(g);
+          fx.push({ kind: 'warn', mesh: g, fill, t: 0, delay: m.delay, x, z });
+        }
+        if (m.pts.some(([x, z]) => Math.hypot(x - player.x, z - player.z) < 3)) toast('⚠️ Wortels onder je voeten! Rol weg (C / 🌀).', '#ff9a6a');
+        break;
+      }
+      case 'summon': for (const [x, z] of m.pts) sparkles.emit(x, heightAt(x, z) + 0.5, z, 30, 1.5, 3, 1.2); { const e = mons.get(m.id); if (e && e.model.kind === 'rig') e.model.once(CLIPS.forest.attack, { speed: 0.8 }); } break;
+      case 'lunge': { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once('Dodge_Forward', { speed: 1.4 }); break; }
+      case 'roll': { const e = remotes.get(m.id); if (e && e.model.kind === 'rig') e.model.once('Dodge_Forward', { speed: 1.5 }); break; }
+      case 'block': { const e = remotes.get(m.id); if (e) e.blocking = m.on; break; }
+      case 'blocked': {
+        sparkles.emit(m.x, heightAt(m.x, m.z) + 1.2, m.z, 14, 2.5, 2, 0.4);
+        if (m.id === myId) { sfx.clang(); shake = Math.max(shake, 0.1); addPopup(player.x + fwd().x * 1.6, player.y + 1.6, player.z + fwd().z * 1.6, 'Geblokt', '#9ad8ff'); }
+        else { const e = remotes.get(m.id); if (e && e.model.kind === 'rig') e.model.once('Block_Hit', { speed: 1.4 }); if (Math.hypot(m.x - player.x, m.z - player.z) < 25) sfx.clang(); }
+        break;
+      }
+      case 'dodged': addPopup(player.x + fwd().x * 1.6, player.y + 1.5, player.z + fwd().z * 1.6, 'Ontweken!', '#7affc8'); break;
       case 'matk': { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) { const cs = clipsOf(e); e.model.once(cs.attack, { speed: cs.atkSpeed }); } break; }
       case 'mdie': { const e = mons.get(m.id);
-        if (e && e.model.kind === 'rig') { e.dying = e.type >= 2 ? 2.0 : 1.8; e.model.once(clipsOf(e).die, { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
+        if (e && e.model.kind === 'rig') { e.dying = e.type === 2 || e.type === 3 ? 2.0 : 1.8; e.model.once(clipsOf(e).die, { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
         else killEnt(mons, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 30, 3.2, 3.5, 1); if (Math.hypot(m.x - player.x, m.z - player.z) < 40) sfx.kill(); break;
       case 'adie': { const e = anis.get(m.id); if (e && e.model.kind === 'rig') { e.dying = 1.4; e.model.once('die', { hold: true }); if (e.bar) e.bar.visible = false; } else killEnt(anis, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.4, m.z, 18, 2.5, 3, 0.8); break;
     }
@@ -671,7 +727,7 @@ export async function startGame({ net, joined, user }) {
     locked = document.pointerLockElement === renderer.domElement;
     if (locked) soft = false;
     showVeil(!locked && !shopOpen);
-    if (!locked) { for (const k in keys) keys[k] = false; if (hud && hud.chatOpen && !isTouch) hud.closeChat(); }
+    if (!locked) { for (const k in keys) keys[k] = false; if (hud && hud.chatOpen && !isTouch) hud.closeChat(); setBlock(false); charge.start = null; }
   });
   document.addEventListener('mousemove', e => {
     if (!locked || isTouch || shopOpen) return;
@@ -680,10 +736,20 @@ export async function startGame({ net, joined, user }) {
     player.pitch = clamp(player.pitch - clamp(e.movementY, -120, 120) * 0.0022, -1.45, 1.45);
   });
   document.addEventListener('mousedown', e => {
-    if (!locked || e.button !== 0 || isTouch || shopOpen) return;
-    if (soft) { drag.down = true; drag.moved = 0; } else startSwing();
+    if (!locked || isTouch || shopOpen) return;
+    if (e.button === 2) { setBlock(true); return; }
+    if (e.button !== 0) return;
+    if (soft) { drag.down = true; drag.moved = 0; }
+    beginCharge(e.timeStamp);
   });
-  document.addEventListener('mouseup', e => { if (!isTouch && soft && drag.down && e.button === 0) { drag.down = false; if (drag.moved < 6) startSwing(); } });
+  document.addEventListener('mouseup', e => {
+    if (isTouch) return;
+    if (e.button === 2) { setBlock(false); return; }
+    if (e.button !== 0) return;
+    if (soft && drag.down) { drag.down = false; if (drag.moved >= 6) { charge.start = null; return; } }
+    releaseCharge(e.timeStamp);
+  });
+  document.addEventListener('contextmenu', e => { if (locked) e.preventDefault(); });
   document.addEventListener('wheel', e => { if (!locked || shopOpen) return; if (bs.active) { bs.cycle(e.deltaY > 0 ? 1 : -1); return; } const n = items().length; equipSlot((inv.equip + (e.deltaY > 0 ? 1 : -1) + n) % n); }, { passive: true });
   addEventListener('keydown', e => {
     if (hud && hud.chatOpen) { if (e.code === 'Escape') { e.preventDefault(); hud.closeChat(); } return; }   // typen in de chat
@@ -703,6 +769,7 @@ export async function startGame({ net, joined, user }) {
     if (e.code === 'KeyG') feedDog();
     if (e.code === 'KeyR') net.send({ t: 'eat' });
     if (e.code === 'KeyF') startSwing();
+    if (e.code === 'KeyC') doRoll();
     if (e.code === 'KeyM') hud.toggleBig();
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyT') { e.preventDefault(); hud.openChat(); }
     if (e.code === 'KeyB') bs.toggle();
@@ -715,12 +782,46 @@ export async function startGame({ net, joined, user }) {
   });
 
   const swing = { t: 1, cd: 0 };
-  function startSwing() {
+  function startSwing(heavy = false) {
     if (bs && bs.active && !dead && !shopOpen) { bs.place(); return; }
-    if (dead || shopOpen || fishing || swing.t < 1 || swing.cd > 0) return;
+    if (dead || shopOpen || fishing || blocking || player.roll || swing.t < 1 || swing.cd > 0) return;
     const it = items()[inv.equip] || AXE;
-    swing.t = 0; swing.cd = 0.5 / (it.speed || 1) * 0.92;
-    sfx.swing(); net.send({ t: 'swing' });
+    swing.t = 0; swing.heavy = heavy; swing.cd = 0.5 / (it.speed || 1) * 0.92 * (heavy ? 1.5 : 1);
+    if (heavy) { sfx.heavy(); shake = Math.max(shake, 0.12); } else sfx.swing();
+    net.send(heavy ? { t: 'swing', heavy: true } : { t: 'swing' });
+  }
+  /* ---------------- zware slag (vasthouden), blokkeren en ontwijkrol */
+  const charge = { start: null };
+  const HEAVY_HOLD = 0.45;
+  let blocking = false, rollReadyAt = 0;
+  function beginCharge(ts = performance.now()) {
+    if (bs && bs.active) { if (!dead && !shopOpen) bs.place(); return; }
+    if (dead || shopOpen || fishing || blocking) return;
+    charge.start = ts;
+  }
+  function releaseCharge(ts = performance.now()) {          // tijdstempels van de invoer zelf: niet afhankelijk van een drukke hoofdthread
+    if (charge.start === null) return;
+    const held = (ts - charge.start) / 1000; charge.start = null;
+    startSwing(held >= HEAVY_HOLD);
+  }
+  const chargeLevel = () => charge.start === null ? 0 : clamp((performance.now() - charge.start) / 1000 / HEAVY_HOLD, 0, 1);
+  function setBlock(on) {
+    if (on && (dead || shopOpen || (bs && bs.active) || fishing)) return;
+    if (on === blocking) return;
+    blocking = on; charge.start = null; net.send({ t: 'block', on });
+  }
+  function doRoll() {
+    const now = performance.now() / 1000;
+    if (dead || shopOpen || player.roll || now < rollReadyAt || now < (player.rootUntil || 0) || !locked) return;
+    rollReadyAt = now + ROLL_CD;
+    const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+    const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;
+    const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x + virt.px;
+    let dx = f.x * iz + rx * ix, dz = f.z * iz + rz * ix, l = Math.hypot(dx, dz);
+    if (l < 0.2) { dx = -f.x; dz = -f.z; l = 1; }              // geen richting: achteruit rollen
+    player.roll = { t: 0, dx: dx / l, dz: dz / l };
+    if (blocking) setBlock(false);
+    net.send({ t: 'roll' }); sfx.roll();
   }
   const fwd = () => ({ x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) });
   function findChest() {
@@ -835,11 +936,13 @@ export async function startGame({ net, joined, user }) {
     tz.addEventListener('pointerup', end); tz.addEventListener('pointercancel', end);
     const press = (id, down, up) => {
       const b = $(id);
-      b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); b.classList.add('down'); if (navigator.vibrate) try { navigator.vibrate(8); } catch {} down(); });
-      const rel = () => { if (b.classList.contains('down')) { b.classList.remove('down'); if (up) up(); } };
+      b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); b.classList.add('down'); if (navigator.vibrate) try { navigator.vibrate(8); } catch {} down(e); });
+      const rel = e => { if (b.classList.contains('down')) { b.classList.remove('down'); if (up) up(e); } };
       b.addEventListener('pointerup', rel); b.addEventListener('pointercancel', rel); b.addEventListener('pointerleave', rel);
     };
-    press('tb-atk', () => { virt.attack = true; startSwing(); }, () => { virt.attack = false; });
+    press('tb-atk', e => beginCharge(e.timeStamp), e => releaseCharge(e.timeStamp));
+    press('tb-block', () => setBlock(true), () => setBlock(false));
+    press('tb-roll', () => doRoll());
     press('tb-jump', () => { virt.jump = true; }, () => { virt.jump = false; });
     press('tb-use', () => interact());
     press('tb-eat', () => net.send({ t: 'eat' }));
@@ -876,15 +979,18 @@ export async function startGame({ net, joined, user }) {
     if (locked && !dead && !shopOpen) {
       virt.px = dz(p.axes[0]); virt.py = dz(p.axes[1]);
       player.yaw -= dz(p.axes[2]) * 2.6 * dt; player.pitch = clamp(player.pitch - dz(p.axes[3]) * 2.0 * dt, -1.45, 1.45);
-      virt.pattack = b(0) || b(7); virt.pjump = b(1); virt.psprint = b(10);
+      const atk = b(0) || b(7);
+      if (atk && !virt.pattack) beginCharge(); else if (!atk && virt.pattack) releaseCharge();
+      virt.pattack = atk; virt.pjump = b(1); virt.psprint = b(10);
+      if (b(6) !== blocking && !bs.active) setBlock(b(6));
       if (hit(2)) interact();
       if (hit(3)) net.send({ t: 'eat' });
-      if (hit(6)) net.send({ t: 'drink' });
+      if (hit(14)) net.send({ t: 'drink' });
       if (hit(12)) feedDog();
       if (hit(13)) bs.toggle();
-      if (hit(4)) { if (bs.active) bs.cycle(-1); else cycleWeapon(-1); }
-      if (hit(5)) { if (bs.active) bs.cycle(1); else cycleWeapon(1); }
-    } else { virt.px = virt.py = 0; virt.pattack = virt.pjump = virt.psprint = false; }
+      if (hit(4)) { if (bs.active) bs.cycle(-1); else doRoll(); }
+      if (hit(5) || hit(15)) { if (bs.active) bs.cycle(1); else cycleWeapon(1); }
+    } else { virt.px = virt.py = 0; if (virt.pattack) charge.start = null; virt.pattack = virt.pjump = virt.psprint = false; }
     gp.prev = p.buttons.map((_, i) => b(i));
   }
   /* ================================================================ minikaart, chat, fps */
@@ -920,8 +1026,13 @@ export async function startGame({ net, joined, user }) {
       let wx = f.x * iz + rx * ix, wz = f.z * iz + rz * ix;
       let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
       const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
-      const sp = (run ? 9 : 5.4) * wl, k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
-      player.vx += (wx * sp - player.vx) * k; player.vz += (wz * sp - player.vz) * k;
+      const rooted = performance.now() / 1000 < (player.rootUntil || 0);
+      const sp = rooted ? 0 : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
+      if (player.roll) {
+        const R = player.roll; R.t += dt; const v = 15 * (1 - 0.45 * R.t / 0.38);
+        player.vx = R.dx * v; player.vz = R.dz * v;
+        if (R.t >= 0.38) { player.roll = null; player.vx *= 0.4; player.vz *= 0.4; }
+      } else { player.vx += (wx * sp - player.vx) * k; player.vz += (wz * sp - player.vz) * k; }
       let nx = player.x + player.vx * dt, nz = player.z + player.vz * dt;
       const deep = (x, z) => heightAt(x, z) < WATER - 0.35;
       if (deep(nx, player.z)) nx = player.x; if (deep(nx, nz)) nz = player.z;
@@ -944,7 +1055,7 @@ export async function startGame({ net, joined, user }) {
     const speed = Math.hypot(player.vx, player.vz);
     const bobY = player.onGround ? Math.sin(player.bob * 2) * 0.045 * Math.min(1, speed / 5) : 0;
     shake = Math.max(0, shake - dt);
-    const eye = dead ? 0.4 : 1.7;
+    const eye = dead ? 0.4 : 1.7 - (player.roll ? Math.sin(Math.min(1, player.roll.t / 0.38) * Math.PI) * 0.75 : 0) - (blocking ? 0.08 : 0);
     camera.position.set(player.x + (Math.random() - 0.5) * shake * 0.2, player.y + eye + bobY, player.z + (Math.random() - 0.5) * shake * 0.2);
     camera.rotation.y = player.yaw; camera.rotation.x = dead ? -0.9 : player.pitch;
     G.update(dt, time, player.x, player.y, player.z);
@@ -956,17 +1067,23 @@ export async function startGame({ net, joined, user }) {
     // zwaai-animatie (eigen hand)
     const it = items()[inv.equip] || AXE;
     swing.cd = Math.max(0, swing.cd - dt);
-    if (swing.t < 1) swing.t = Math.min(1, swing.t + dt * (it.speed || 1) / 0.5);
-    const t = swing.t; let off = 0, thrust = 0;
+    if (swing.t < 1) swing.t = Math.min(1, swing.t + dt * (it.speed || 1) / (swing.heavy ? 0.75 : 0.5));
+    const t = swing.t, H = swing.heavy && t < 1 ? 1.6 : 1; let off = 0, thrust = 0;
     if (t < 1) {
-      if (t < 0.2) off = lerp(0, 0.4, ease(t / 0.2));
-      else if (t < 0.45) { const u = ease((t - 0.2) / 0.25); off = lerp(0.4, -1.25, u); thrust = u; }
-      else { off = lerp(-1.25, 0, ease((t - 0.45) / 0.55)); thrust = 1 - ease((t - 0.45) / 0.55); }
+      if (t < 0.2) off = lerp(0, 0.4 * H, ease(t / 0.2));
+      else if (t < 0.45) { const u = ease((t - 0.2) / 0.25); off = lerp(0.4 * H, -1.25 * H, u); thrust = u; }
+      else { off = lerp(-1.25 * H, 0, ease((t - 0.45) / 0.55)); thrust = 1 - ease((t - 0.45) / 0.55); }
     }
+    const chg = chargeLevel();
+    if (chg) off += 0.55 * ease(chg) + (chg >= 1 ? Math.sin(time * 40) * 0.015 : 0);       // opladen: bijl naar achteren
+    blockT = clamp(blockT + (blocking ? dt : -dt) * 7, 0, 1);
     const sway = Math.sin(player.bob * 2) * 0.012 * Math.min(1, speed / 5);
-    hand.position.set(0.34 + sway, -0.3 + Math.abs(sway) - thrust * 0.05, -0.55 - thrust * 0.1);
-    hand.rotation.set(-0.35 + off, -0.25 * thrust, 0.32 - thrust * 0.5 + (it.type === 'sword' ? 0.1 : 0));
+    hand.position.set(0.34 + sway + blockT * 0.12, -0.3 + Math.abs(sway) - thrust * 0.05 - blockT * 0.22, -0.55 - thrust * 0.1);
+    hand.rotation.set(-0.35 + off - blockT * 0.3, -0.25 * thrust * H, 0.32 - thrust * 0.5 * H + (it.type === 'sword' ? 0.1 : 0));
     hand.visible = !dead;
+    shieldHand.visible = blockT > 0.01 && !dead;
+    if (shieldHand.visible) { const e2 = ease(blockT); shieldHand.position.set(lerp(-0.75, -0.2, e2), lerp(-0.9, -0.28, e2), -0.62); shieldHand.rotation.set(0, lerp(0.9, 0.25, e2), 0); }
+    if (shieldHand.userData.lvl !== inv.up.shield) { shieldHand.userData.lvl = inv.up.shield; shieldHand.clear(); shieldHand.add(M.makeShieldMesh(inv.up.shield)); }
 
     // wezens
     for (const e of remotes.values()) {
@@ -978,7 +1095,7 @@ export async function startGame({ net, joined, user }) {
         else if (!e.dead && e.wasDead) r.unlock();
         e.wasDead = e.dead;
         if (e.swingT === 0) r.once('1H_Melee_Attack_Chop', { speed: 1.35 });
-        if (!e.dead) rigLocomotion(e);
+        if (!e.dead) { if (e.blocking) r.loop('Blocking'); else rigLocomotion(e); }
         r.update(dt);
       } else {
         animateBody(e, dt);
@@ -1014,7 +1131,15 @@ export async function startGame({ net, joined, user }) {
         e.animAcc = (e.animAcc || 0) + dt;
         if (!far || e.animAcc > 0.1) { e.model.update(e.animAcc); e.animAcc = 0; }
       } else animateBody(e, dt);
-      if (e.bar) e.bar.visible = e.hp < e.maxhp || e.type === 3;
+      let hidden = false;
+      if (e.type === 5) {                 // sluiper: bijna onzichtbaar tot hij dichtbij is
+        const d = Math.hypot(e.x - player.x, e.z - player.z), a = clamp((10 - d) / 5, 0.1, 1);
+        hidden = a < 0.5;
+        if (e.stealthMats) for (const m of e.stealthMats) { m.opacity = a; m.depthWrite = a > 0.95; }
+        else e.group.visible = !hidden;
+        if (e.alphaOld !== a > 0.95) { e.alphaOld = a > 0.95; e.group.traverse(o => { if (o.isMesh) o.castShadow = a > 0.95; }); }
+      }
+      if (e.bar) e.bar.visible = !hidden && (e.hp < e.maxhp || e.type === 3);
       if (e.bar && e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
     for (const e of dogs.values()) {
@@ -1049,6 +1174,28 @@ export async function startGame({ net, joined, user }) {
       } else animateBody(e, dt);
       e.bar.visible = e.hp < e.maxhp;
       if (e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
+    }
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i];
+      if (f.kind === 'arrow') {
+        f.mesh.position.x += f.vx * dt; f.mesh.position.z += f.vz * dt; f.life -= dt;
+        const near = Math.hypot(f.mesh.position.x - player.x, f.mesh.position.z - player.z) < 0.6;
+        if (f.life <= 0 || near) { scene.remove(f.mesh); fx.splice(i, 1); }
+      } else if (f.kind === 'warn') {
+        f.t += dt; const k = Math.min(1, f.t / f.delay);
+        f.fill.scale.setScalar(Math.max(0.01, k)); f.mesh.children[0].material.opacity = 0.35 + Math.sin(time * 20) * 0.2;
+        if (k >= 1) {
+          scene.remove(f.mesh); fx.splice(i, 1);
+          const r = M.makeRoots(); r.position.set(f.x, heightAt(f.x, f.z) - 2.6, f.z); scene.add(r);
+          fx.push({ kind: 'roots', mesh: r, t: 0, y0: heightAt(f.x, f.z) });
+          chips.emit(f.x, heightAt(f.x, f.z) + 0.3, f.z, 30, 3, 4, 1); leaves.emit(f.x, heightAt(f.x, f.z) + 0.5, f.z, 15, 2, 3, 1);
+          if (Math.hypot(f.x - player.x, f.z - player.z) < 30) sfx.rumble();
+        }
+      } else if (f.kind === 'roots') {
+        f.t += dt; const up = f.t < 0.18 ? f.t / 0.18 : f.t < 1.4 ? 1 : Math.max(0, 1 - (f.t - 1.4) / 0.6);
+        f.mesh.position.y = f.y0 - 2.6 * (1 - up);
+        if (f.t > 2.0) { scene.remove(f.mesh); fx.splice(i, 1); }
+      }
     }
     for (let i = popups.length - 1; i >= 0; i--) {
       const p = popups[i]; p.t += dt; p.s.position.y = p.y + p.t * 1.6; p.s.material.opacity = 1 - clamp((p.t - 0.5) / 0.4, 0, 1);
@@ -1085,13 +1232,15 @@ export async function startGame({ net, joined, user }) {
     }
 
     // aanwijzing
-    if ((virt.attack || virt.pattack) && locked && !dead && !shopOpen) startSwing();
+    { const c = chargeLevel(), cr = $('cross'); cr.style.transform = c ? 'scale(' + (1 + c * 2.2).toFixed(2) + ')' : ''; cr.classList.toggle('full', c >= 1); }
     const wd = locked && !dead && !shopOpen ? findWildDog() : null;
     const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
     const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
     if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
     if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); tb.classList.toggle('dim', !(ch || sh || wd || fishOk)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : fishOk ? '🎣' : '✋'; }
+    if (isTouch && Math.floor(time * 4) !== Math.floor((time - dt) * 4)) $('tb-roll').classList.toggle('cd', performance.now() / 1000 < rollReadyAt);
     if (bs.active && locked && !dead && !shopOpen) { /* bouwmodus regelt de aanwijzing */ }
+    else if (performance.now() / 1000 < (player.rootUntil || 0) && !dead) { pr.innerHTML = '<b style="color:#9adf6a">Vastgegroeid!</b>'; pr.classList.add('on'); }
     else if (fishing && locked && !dead) {
       pr.innerHTML = fishing.bite ? '<b style="color:#ffd27a;font-size:1.25em">Beet! ' + (isTouch ? 'Tik nu op X' : 'Druk nu op E') + '</b>' : 'Wachten op een beet… ' + (isTouch ? '(X = binnenhalen)' : '(<b>E</b> = binnenhalen)');
       pr.classList.add('on');
@@ -1158,7 +1307,7 @@ export async function startGame({ net, joined, user }) {
     }
   }
 
-  CH.preload(['chest', 'deer', 'knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'forest_monster', 'merchant'], onRigReady);
+  CH.preload(['chest', 'deer', 'knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'forest_monster', 'merchant', 'crossbow', 'skeleton_mage', 'skeleton_warrior', 'rogue_hooded'], onRigReady);
 
   showVeil(true);
   setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);
@@ -1170,6 +1319,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { hud, bs, net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { hud, bs, fx, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

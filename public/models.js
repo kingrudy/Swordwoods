@@ -210,6 +210,9 @@ export function buildMonster(type) {
     case 0: return { kind: 'biped', ...buildHumanoid({ skin: 0x6b9a3a, cloth: 0x7a5230, scale: 0.85, ears: true, eye: 0xff3322, club: true, hairStyle: false }), height: 1.9 };
     case 1: return { kind: 'quad', ...buildQuadruped({ fur: 0x3b3f47, r: 0.27, bodyLen: 0.8, legH: 0.5, legR: 0.075, headR: 0.19, snout: 0.26, ears: { r: 0.07, len: 0.2, tilt: 0.1 }, tail: { r: 0.09, len: 3 }, eye: 0xffd21a }), height: 1.35 };
     case 2: return { kind: 'biped', ...buildHumanoid({ skin: 0x7d8578, cloth: 0x4d4b3f, scale: 1.9, bulk: 1.5, tusks: true, eye: 0xff8a1a, club: true, hairStyle: false }), height: 3.9 };
+    case 4: return { kind: 'biped', ...buildHumanoid({ skin: 0xe8e2cf, cloth: 0x4a4458, scale: 0.9, eye: 0x7ad0ff, hairStyle: false }), height: 1.8 };
+    case 5: return { kind: 'biped', ...buildHumanoid({ skin: 0x2a2433, cloth: 0x1a1622, scale: 0.95, eye: 0xc070ff, hairStyle: false }), height: 1.8 };
+    case 6: return { kind: 'biped', ...buildHumanoid({ skin: 0xd9cfba, cloth: 0x7a2a22, scale: 1.15, bulk: 1.2, eye: 0xff5a2a, club: true, hairStyle: false }), height: 2.2 };
     default: return { kind: 'biped', ...buildHumanoid({ skin: 0x5a3d6b, cloth: 0x2a1f33, scale: 3.6, bulk: 1.55, tusks: true, eye: 0xff4a10, club: true, hairStyle: false }), height: 7.6 };
   }
 }
@@ -446,3 +449,29 @@ export function buildStructure(kind, ownerColor = 0x3b6ea5) {
   }
   return { group: g, flames };
 }
+
+/* ---------------------------------------------------------------- schild (eigen hand) en pijl */
+export function makeShieldMesh(level = 0) {
+  const g = new THREE.Group();
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 24), std(level >= 2 ? 0x6a7a8a : 0x8a5a2b, { metalness: level >= 2 ? 0.5 : 0, roughness: 0.6 }));
+  face.rotation.x = Math.PI / 2; g.add(face);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 8, 28), metalMat(level >= 3 ? 0xd9a83a : 0x9aa3ad, 0.05)); g.add(rim);
+  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metalMat(0xb8bec6, 0.05)); boss.rotation.x = Math.PI / 2; boss.position.z = 0.03; g.add(boss);
+  for (const y of [-0.2, 0.2]) { const band = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.075), metalMat(0x9aa3ad, 0.02)); band.position.y = y; g.add(band); }
+  return g;
+}
+const arrowShaft = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4).rotateX(Math.PI / 2);
+const arrowHead = new THREE.ConeGeometry(0.05, 0.14, 5).rotateX(-Math.PI / 2).translate(0, 0, -0.46);
+const arrowMatA = std(0x6b4a2a), arrowMatH = metalMat(0xb8bec6, 0.1);
+export function makeArrow() { const g = new THREE.Group(); g.add(new THREE.Mesh(arrowShaft, arrowMatA), new THREE.Mesh(arrowHead, arrowMatH)); return g; }
+/** Wortelpunten die uit de grond schieten (Woudreus). */
+export function makeRoots() {
+  const g = new THREE.Group(), rnd = mulberryLocal(Math.floor(Math.random() * 1e6));
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * Math.PI * 2, r = rnd() * 1.9, h = 1.2 + rnd() * 1.4;
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.16 + rnd() * 0.1, h, 6).translate(0, h / 2, 0), barkMat);
+    c.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); c.rotation.set((rnd() - 0.5) * 0.7, 0, (rnd() - 0.5) * 0.7); c.castShadow = true; g.add(c);
+  }
+  return g;
+}
+export const warnRingMat = new THREE.MeshBasicMaterial({ color: 0xff3a1a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
