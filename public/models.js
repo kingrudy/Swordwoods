@@ -374,3 +374,75 @@ export function makeBobber() {
   ring.rotation.x = -Math.PI / 2; g.add(ring); g.userData.ring = ring;
   return g;
 }
+
+/* ---------------------------------------------------------------- bouwwerken */
+const bPlank = std(0x8a5a2b), bDark = std(0x5a3c25), bLight = std(0xb98a52), bStone = std(0x8b8b86, { roughness: 1 });
+const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa43a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+const flameCore = new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+function makeFlame(s = 1) {
+  const f = new THREE.Group();
+  const o = new THREE.Mesh(new THREE.ConeGeometry(0.26 * s, 0.8 * s, 8, 1, true).translate(0, 0.4 * s, 0), flameMat);
+  const c = new THREE.Mesh(new THREE.ConeGeometry(0.13 * s, 0.5 * s, 8, 1, true).translate(0, 0.25 * s, 0), flameCore);
+  f.add(o, c); f.userData.flame = true; return f;
+}
+/** Bouwwerk zoals in builds.js; middelpunt op de grond, breedte langs lokale X. ownerColor kleurt deken/vaandel. */
+export function buildStructure(kind, ownerColor = 0x3b6ea5) {
+  const g = new THREE.Group(), flames = [];
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, shadow = true) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = shadow; o.receiveShadow = true; g.add(o); return o; };
+  const rnd = mulberryLocal(kind.length * 977 + 13);
+  switch (kind) {
+    case 'campfire': {
+      for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; add(new THREE.DodecahedronGeometry(0.2 + rnd() * 0.07, 0), bStone, Math.cos(a) * 0.68, 0.12, Math.sin(a) * 0.68, rnd() * 3, rnd() * 3, 0); }
+      for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4, l = add(new THREE.CylinderGeometry(0.07, 0.08, 0.9, 6), bDark, Math.cos(a) * 0.18, 0.28, Math.sin(a) * 0.18); l.rotation.set(Math.sin(a) * 1.0, 0, -Math.cos(a) * 1.0); }
+      const f = makeFlame(1.2); f.position.y = 0.15; g.add(f); flames.push(f);
+      const ember = add(new THREE.CircleGeometry(0.45, 12), new THREE.MeshBasicMaterial({ color: 0xff6a1a, toneMapped: false }), 0, 0.03, 0, -Math.PI / 2, 0, 0, false);
+      ember.receiveShadow = false;
+      break;
+    }
+    case 'torch': {
+      add(new THREE.CylinderGeometry(0.05, 0.07, 1.6, 6), bDark, 0, 0.8, 0);
+      add(new THREE.CylinderGeometry(0.1, 0.07, 0.22, 8), std(0x3a2a1a), 0, 1.66, 0);
+      const f = makeFlame(0.55); f.position.y = 1.74; g.add(f); flames.push(f);
+      break;
+    }
+    case 'wall': {
+      for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(3.2, 0.48, 0.16), i % 2 ? bPlank : bLight, 0, 0.3 + i * 0.52, (i % 2 ? 0.04 : -0.04), 0, 0, (rnd() - 0.5) * 0.02);
+      for (const x of [-1.5, 0, 1.5]) add(new THREE.BoxGeometry(0.22, 2.3, 0.3), bDark, x, 1.15, 0);
+      add(new THREE.BoxGeometry(3.2, 0.12, 0.08), bDark, 0, 1.2, 0.13, 0, 0, 0.62);
+      break;
+    }
+    case 'palisade': {
+      const n = 9;
+      for (let i = 0; i < n; i++) {
+        const x = -1.6 + (i + 0.5) * 3.2 / n, h = 2.3 + rnd() * 0.4;
+        add(new THREE.CylinderGeometry(0.17, 0.18, h, 7), i % 2 ? bDark : bPlank, x, h / 2, (rnd() - 0.5) * 0.08);
+        add(new THREE.ConeGeometry(0.17, 0.42, 7), bLight, x, h + 0.2, 0);
+      }
+      for (const y of [0.7, 1.7]) add(new THREE.BoxGeometry(3.2, 0.14, 0.1), bDark, 0, y, 0.22);
+      for (const s of [-1, 1]) for (const x of [-0.9, 0.9]) add(new THREE.ConeGeometry(0.05, 0.7, 5), bLight, x, 0.9, s * 0.45, s * Math.PI / 2.6, 0, 0);
+      break;
+    }
+    case 'tower': {
+      for (const [x, z] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) add(new THREE.CylinderGeometry(0.13, 0.16, 4.4, 7), bDark, x, 2.2, z);
+      for (const y of [1.2, 2.6]) for (const r of [0, Math.PI / 2]) { add(new THREE.BoxGeometry(2.0, 0.1, 0.1), bPlank, Math.sin(r) * 0.92, y, Math.cos(r) * 0.92, 0, r, 0.5); add(new THREE.BoxGeometry(2.0, 0.1, 0.1), bPlank, -Math.sin(r) * 0.92, y, -Math.cos(r) * 0.92, 0, r, -0.5); }
+      add(new THREE.BoxGeometry(2.3, 0.16, 2.3), bLight, 0, 4.0, 0);
+      for (const r of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) add(new THREE.BoxGeometry(2.3, 0.6, 0.1), bPlank, Math.sin(r) * 1.1, 4.4, Math.cos(r) * 1.1, 0, r, 0);
+      add(new THREE.ConeGeometry(1.9, 1.1, 4), std(0x6b3a2a), 0, 5.25, 0, 0, Math.PI / 4, 0);
+      for (const x of [-0.5, 0.5]) add(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 5), bDark, x, 4.6, 0.95, 0, 0, 0.3 * x);   // pijlen in een koker
+      const flag = add(new THREE.PlaneGeometry(0.7, 0.42), new THREE.MeshStandardMaterial({ color: ownerColor, side: THREE.DoubleSide, roughness: 0.9 }), 0.36, 6.05, 0, 0, 0, 0, false);
+      add(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 5), bDark, 0, 5.9, 0);
+      g.userData.flag = flag;
+      break;
+    }
+    case 'bed': {
+      add(new THREE.BoxGeometry(1.2, 0.3, 2.2), bPlank, 0, 0.2, 0);
+      for (const [x, z] of [[-0.55, -1.05], [0.55, -1.05], [-0.55, 1.05], [0.55, 1.05]]) add(new THREE.BoxGeometry(0.1, 0.42, 0.1), bDark, x, 0.21, z);
+      add(new THREE.BoxGeometry(1.24, 0.75, 0.1), bDark, 0, 0.5, -1.12);
+      add(new THREE.BoxGeometry(1.08, 0.14, 2.0), std(0xe8e0cc), 0, 0.42, 0.04);
+      add(new THREE.BoxGeometry(1.12, 0.1, 1.35), std(ownerColor), 0, 0.5, 0.36);
+      add(new THREE.BoxGeometry(0.62, 0.14, 0.36), std(0xffffff), 0, 0.54, -0.78);
+      break;
+    }
+  }
+  return { group: g, flames };
+}

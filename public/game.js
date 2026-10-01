@@ -8,6 +8,7 @@ import { createGraphics, QUALITY } from './graphics.js';
 import * as CH from './characters.js';
 import { openInvite, closeInvite } from './invite.js';
 import { createHud } from './hud.js';
+import { createBuildSystem } from './buildmode.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -299,7 +300,7 @@ export async function startGame({ net, joined, user }) {
       : '<b style="color:' + RARITIES[cur.rarity].color + '">' + esc(cur.name) + '</b> · ' + RARITIES[cur.rarity].name + ' · schade ' + cur.damage + ' · snelheid ' + cur.speed;
   }
   function renderVitals() {
-    $('hpbar').firstElementChild.style.width = clamp(you.hp, 0, 100) + '%'; $('hpbar').lastElementChild.textContent = 'Gezondheid ' + Math.max(0, Math.round(you.hp));
+    $('hpbar').firstElementChild.style.width = clamp(you.hp, 0, 100) + '%'; $('hpbar').lastElementChild.textContent = 'Gezondheid ' + Math.max(0, Math.round(you.hp)) + (bs && !dead && bs.nearFire(player.x, player.z) ? ' · 🔥 warm' : '');
     $('hubar').firstElementChild.style.width = clamp(you.hu, 0, 100) + '%'; $('hubar').lastElementChild.textContent = 'Honger ' + Math.round(you.hu);
     $('hubar').classList.toggle('low', you.hu < 25);
     $('score').textContent = '⭐ Punten: ' + you.sc;
@@ -646,7 +647,7 @@ export async function startGame({ net, joined, user }) {
   net.on('_close', () => { /* main.js toont de melding */ });
 
   /* ================================================================ invoer */
-  let hud = null;
+  let hud = null, bs = null;
   const keys = {}; let locked = false, soft = false, shopOpen = false;
   const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false };
   const drag = { down: false, moved: 0 };
@@ -683,7 +684,7 @@ export async function startGame({ net, joined, user }) {
     if (soft) { drag.down = true; drag.moved = 0; } else startSwing();
   });
   document.addEventListener('mouseup', e => { if (!isTouch && soft && drag.down && e.button === 0) { drag.down = false; if (drag.moved < 6) startSwing(); } });
-  document.addEventListener('wheel', e => { if (!locked || shopOpen) return; const n = items().length; equipSlot((inv.equip + (e.deltaY > 0 ? 1 : -1) + n) % n); }, { passive: true });
+  document.addEventListener('wheel', e => { if (!locked || shopOpen) return; if (bs.active) { bs.cycle(e.deltaY > 0 ? 1 : -1); return; } const n = items().length; equipSlot((inv.equip + (e.deltaY > 0 ? 1 : -1) + n) % n); }, { passive: true });
   addEventListener('keydown', e => {
     if (hud && hud.chatOpen) { if (e.code === 'Escape') { e.preventDefault(); hud.closeChat(); } return; }   // typen in de chat
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
@@ -704,7 +705,8 @@ export async function startGame({ net, joined, user }) {
     if (e.code === 'KeyF') startSwing();
     if (e.code === 'KeyM') hud.toggleBig();
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyT') { e.preventDefault(); hud.openChat(); }
-    if (/^Digit[1-9]$/.test(e.code)) equipSlot(+e.code[5] - 1);
+    if (e.code === 'KeyB') bs.toggle();
+    if (/^Digit[1-9]$/.test(e.code)) { if (bs.active) bs.select(+e.code[5] - 1); else equipSlot(+e.code[5] - 1); }
   });
   addEventListener('keyup', e => { keys[e.code] = false; });
   addEventListener('resize', () => {
@@ -714,6 +716,7 @@ export async function startGame({ net, joined, user }) {
 
   const swing = { t: 1, cd: 0 };
   function startSwing() {
+    if (bs && bs.active && !dead && !shopOpen) { bs.place(); return; }
     if (dead || shopOpen || fishing || swing.t < 1 || swing.cd > 0) return;
     const it = items()[inv.equip] || AXE;
     swing.t = 0; swing.cd = 0.5 / (it.speed || 1) * 0.92;
@@ -843,7 +846,8 @@ export async function startGame({ net, joined, user }) {
     press('tb-drink', () => net.send({ t: 'drink' }));
     press('tb-fish', feedDog);
     press('tb-sprint', () => { virt.toggle = !virt.toggle; $('tb-sprint').classList.toggle('on', virt.toggle); });
-    press('tb-next', () => cycleWeapon(1));
+    press('tb-next', () => { if (bs.active) bs.cycle(1); else cycleWeapon(1); });
+    press('tb-build', () => bs.toggle());
     press('tb-menu', () => { home(); pauseGame(); });
     press('tb-invite', () => { home(); inviteFromGame(); });
     press('tb-chat', () => { home(); virt.x = virt.y = 0; hud.openChat(); });
@@ -877,16 +881,23 @@ export async function startGame({ net, joined, user }) {
       if (hit(3)) net.send({ t: 'eat' });
       if (hit(6)) net.send({ t: 'drink' });
       if (hit(12)) feedDog();
-      if (hit(4)) cycleWeapon(-1);
-      if (hit(5)) cycleWeapon(1);
+      if (hit(13)) bs.toggle();
+      if (hit(4)) { if (bs.active) bs.cycle(-1); else cycleWeapon(-1); }
+      if (hit(5)) { if (bs.active) bs.cycle(1); else cycleWeapon(1); }
     } else { virt.px = virt.py = 0; virt.pattack = virt.pjump = virt.psprint = false; }
     gp.prev = p.buttons.map((_, i) => b(i));
   }
   /* ================================================================ minikaart, chat, fps */
   hud = createHud({
     W, WORLD, WATER, player, net, myId, names, isTouch, chestObjs, remotes, dogs, mons, colorForName: M.colorForName,
+    extraMarkers: () => bs ? bs.markers() : [],
     sfxChat: () => tone(880, 0.08, 'triangle', 0.05),
     onChatOpen: () => { for (const k in keys) keys[k] = false; player.vx = player.vz = 0; },
+  });
+  bs = createBuildSystem({
+    scene, M, W, G, net, player, inv, myName: joined.you.name, heightAt, camera, joined, treeObjs, isTouch,
+    chips, sparkles, sfx, toast,
+    onToggle: on => { if (on) { swing.t = 1; } renderInv(); },
   });
   net.on('correct', m => { player.x = m.x; player.y = m.y; player.z = m.z; player.vx = player.vz = player.vy = 0; });
 
@@ -901,7 +912,7 @@ export async function startGame({ net, joined, user }) {
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
-    pollPad(dt); hud.update(dt);
+    pollPad(dt); hud.update(dt); bs.update(dt, time);
     if (locked && !dead && !shopOpen && !hud.chatOpen) {
       const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
       const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;   // joystick omhoog = vooruit
@@ -920,6 +931,7 @@ export async function startGame({ net, joined, user }) {
         const dx = nx - o.x, dz = nz - o.z, d = Math.hypot(dx, dz), min = o.r + 0.38;
         if (d < min && d > 0.0001) { nx = o.x + dx / d * min; nz = o.z + dz / d * min; }
       });
+      [nx, nz] = bs.collide(nx, nz, 0.38);
       player.x = nx; player.z = nz;
       const gnd = heightAt(player.x, player.z);
       if (player.onGround) {
@@ -1079,7 +1091,8 @@ export async function startGame({ net, joined, user }) {
     const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
     if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
     if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); tb.classList.toggle('dim', !(ch || sh || wd || fishOk)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : fishOk ? '🎣' : '✋'; }
-    if (fishing && locked && !dead) {
+    if (bs.active && locked && !dead && !shopOpen) { /* bouwmodus regelt de aanwijzing */ }
+    else if (fishing && locked && !dead) {
       pr.innerHTML = fishing.bite ? '<b style="color:#ffd27a;font-size:1.25em">Beet! ' + (isTouch ? 'Tik nu op X' : 'Druk nu op E') + '</b>' : 'Wachten op een beet… ' + (isTouch ? '(X = binnenhalen)' : '(<b>E</b> = binnenhalen)');
       pr.classList.add('on');
     } else if (!wd && !ch && !sh && update.lastWat) {
@@ -1157,6 +1170,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { hud, net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { hud, bs, net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

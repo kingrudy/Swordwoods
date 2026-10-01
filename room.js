@@ -2,6 +2,7 @@
 
 import { createWorld, HALF, WATER } from './public/world.js';
 import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX } from './public/items.js';
+import { BUILDS, BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, pushOut, canPlace, boundR } from './public/builds.js';
 
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 export const CFG = {
@@ -38,14 +39,22 @@ export function ensureSave(u) {
   if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
   if (s.dog) { s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
   if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) { let h = 0; for (const ch of String(u.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; s.look = h % 4; }
-  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0 }, s.stats || {});
+  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0 }, s.stats || {});
   return s;
 }
 
 export class Room {
-  constructor(id, name, max, permanent, markDirty) {
+  constructor(id, name, max, permanent, markDirty, store = null) {
     this.id = id; this.name = name; this.max = max; this.permanent = permanent; this.markDirty = markDirty;
-    this.seed = 1 + Math.floor(Math.random() * 9000);
+    this.store = store || {};                                  // blijvende kamerdata (vaste kamers: in db.json)
+    this.seed = Number.isInteger(this.store.seed) ? this.store.seed : 1 + Math.floor(Math.random() * 9000);
+    this.store.seed = this.seed;
+    this.builds = new Map(); this.bid = 1;
+    for (const b of Array.isArray(this.store.builds) ? this.store.builds : []) {
+      if (!BUILD_BY_ID[b.kind]) continue;
+      const B = BUILD_BY_ID[b.kind], o = { id: this.bid++, kind: b.kind, x: +b.x, z: +b.z, rot: +b.rot || 0, hp: Math.min(B.hp, +b.hp || B.hp), maxhp: B.hp, owner: String(b.owner || ''), nextShot: 0 };
+      if (Number.isFinite(o.x) && Number.isFinite(o.z)) this.builds.set(o.id, o);
+    }
     this.world = getWorld(this.seed);
     this.players = new Map(); this.nextPid = 1;
     this.emptySince = null;
@@ -100,6 +109,7 @@ export class Room {
       you: { id: P.id, name: P.name, x: P.x, y: P.y, z: P.z },
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look })),
       felled: [...this.felled.keys()], chests: [...this.chestOpen.keys()],
+      builds: [...this.builds.values()].map(b => this.btuple(b)),
     });
     this.sendInv(P);
     return P;
@@ -155,6 +165,8 @@ export class Room {
         this.bc({ t: 'chat', id: P.id, name: P.name, text, ping: m.ping ? { x: r1(P.x), z: r1(P.z) } : null });
         break;
       }
+      case 'build': this.build(P, String(m.kind), num(m.x, NaN), num(m.z, NaN), num(m.rot, 0)); break;
+      case 'unbuild': this.unbuild(P, m.id | 0); break;
       case 'cast': this.cast(P, num(m.x, NaN), num(m.z, NaN)); break;
       case 'reel': this.reel(P); break;
       case 'feeddog': this.feedDog(P); break;
@@ -327,7 +339,10 @@ export class Room {
   respawn(P) {
     const sp = this.world.spawn;
     P.dead = false; P.hp = 100; P.hunger = Math.max(P.hunger, 50);
-    P.x = sp.x + (Math.random() - 0.5) * 4; P.z = sp.z + (Math.random() - 0.5) * 4; P.y = this.world.heightAt(P.x, P.z);
+    P.x = sp.x + (Math.random() - 0.5) * 4; P.z = sp.z + (Math.random() - 0.5) * 4;
+    const bed = this.bedOf(P);
+    if (bed) { const a = bed.rot + Math.PI / 2; P.x = bed.x + Math.sin(a) * 1.3; P.z = bed.z + Math.cos(a) * 1.3; }
+    P.y = this.world.heightAt(P.x, P.z);
     P.lastInT = this.T;
     P.conn.send({ t: 'respawn', x: P.x, y: P.y, z: P.z });
   }
@@ -391,6 +406,7 @@ export class Room {
 
   killMonster(m, P) {
     this.monsters.delete(m.id);
+    if (!P) { this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type }); return; }
     const M = MONSTERS[m.type], s = P.u.save;
     s.stats.kills++; s.stats.score += M.score * this.wave.n;
     this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type });
@@ -438,6 +454,12 @@ export class Room {
       const dx = x - o.x, dz = z - o.z, d = len(dx, dz), min = o.r + r;
       if (d < min && d > 0.0001) { x = o.x + dx / d * min; z = o.z + dz / d * min; }
     });
+    e.blockedBy = null;
+    if (this.builds.size) for (const b of this.builds.values()) {
+      const B = BUILD_BY_ID[b.kind]; if (!B.solid) continue;
+      if (Math.abs(b.x - x) > boundR(B) + r + 0.2 || Math.abs(b.z - z) > boundR(B) + r + 0.2) continue;
+      const q = pushOut(b, x, z, r); if (q) { x = q[0]; z = q[1]; e.blockedBy = b; }
+    }
     e.x = x; e.z = z;
   }
 
@@ -467,9 +489,24 @@ export class Room {
       }
       m.yaw = Math.atan2(-dx, -dz);
       const reach = M.r + 0.9;
+      if (m.siege && (!this.builds.has(m.siege.id) || len(m.siege.x - m.x, m.siege.z - m.z) > boundR(BUILD_BY_ID[m.siege.kind]) + M.r + 1.2)) m.siege = null;
+      if (m.siege && d > reach) {                 // bouwwerk in de weg: eerst kapotslaan
+        const sb = m.siege;
+        m.yaw = Math.atan2(-(sb.x - m.x), -(sb.z - m.z));
+        if (this.T >= m.nextAtk) {
+          m.nextAtk = this.T + M.atkCd; m.siegeHits = (m.siegeHits || 0) + 1;
+          this.bc({ t: 'ev', k: 'matk', id: m.id });
+          this.hurtBuild(sb, m.dmg * (m.type === 3 ? 2.5 : 1.3), m);
+          if (m.siegeHits > 3) { m.siege = null; m.siegeHits = 0; }   // af en toe opnieuw proberen erlangs te lopen
+          if (!this.monsters.has(m.id)) continue;
+        }
+        continue;
+      }
       if (d > reach) {
-        const step = Math.min(d - reach * 0.8, m.speed * dt);
+        const step = Math.min(d - reach * 0.8, m.speed * dt), ox = m.x, oz = m.z;
         this.move(m, m.x + dx / d * step, m.z + dz / d * step, M.r);
+        if (m.blockedBy && len(m.x - ox, m.z - oz) < step * 0.35) { m.stuck = (m.stuck || 0) + dt; if (m.stuck > 0.6) { m.siege = m.blockedBy; m.stuck = 0; } }
+        else m.stuck = 0;
       } else if (this.T >= m.nextAtk) {
         m.nextAtk = this.T + M.atkCd;
         this.bc({ t: 'ev', k: 'matk', id: m.id });
@@ -526,7 +563,9 @@ export class Room {
     this.T += dt; this.tickN++;
     for (const P of this.players.values()) {
       if (P.dead) { if (this.T >= P.respawnAt) this.respawn(P); continue; }
-      P.hunger = Math.max(0, P.hunger - CFG.hungerRate * dt);
+      const warm = this.nearFire(P);
+      P.hunger = Math.max(0, P.hunger - CFG.hungerRate * dt * (warm ? 0.5 : 1));
+      if (warm && P.hp < 100) P.hp = Math.min(100, P.hp + 3 * dt);
       P.u.save.stats.playSec += dt;
       if (P.hunger <= 0) {
         P.starve += dt;
@@ -541,6 +580,7 @@ export class Room {
     else if (this.monsters.size === 0) this.endWave();
 
     this.updateMonsters(dt);
+    this.updateTowers();
     this.updateAnimals(dt);
     this.updateDogs(dt);
 
@@ -740,6 +780,80 @@ export class Room {
       } else d.yaw = P.yaw;
     }
     if (wild < CFG.strays && this.strayAt && this.T >= this.strayAt) { this.spawnStray(); this.strayAt = wild + 1 < CFG.strays ? this.T + CFG.strayRespawn : 0; }
+  }
+
+  // ------------------------------------------------------------ bouwen
+  btuple(b) { return [b.id, BUILD_BY_ID[b.kind].idx, r2(b.x), r2(b.z), r2(b.rot), Math.round(b.hp), b.maxhp, b.owner]; }
+  saveBuilds() {
+    this.store.builds = [...this.builds.values()].map(b => ({ kind: b.kind, x: r2(b.x), z: r2(b.z), rot: r2(b.rot), hp: Math.round(b.hp), owner: b.owner }));
+    this.markDirty();
+  }
+  bedOf(P) { for (const b of this.builds.values()) if (b.kind === 'bed' && b.owner === P.name) return b; return null; }
+  nearFire(P) {
+    for (const b of this.builds.values()) if (b.kind === 'campfire' && Math.abs(b.x - P.x) < FIRE_RADIUS && Math.abs(b.z - P.z) < FIRE_RADIUS && len(b.x - P.x, b.z - P.z) < FIRE_RADIUS) return true;
+    return false;
+  }
+  build(P, kind, x, z, rot) {
+    const B = BUILD_BY_ID[kind], s = P.u.save;
+    if (!B || P.dead || !Number.isFinite(x) || !Number.isFinite(z)) return;
+    const fail = msg => { P.conn.send({ t: 'buildfail', msg }); };
+    if (len(x - P.x, z - P.z) > BUILD_RANGE) return fail('Te ver weg');
+    if (s.wood < B.cost) return fail('Je hebt ' + B.cost + ' hout nodig');
+    if (this.builds.size >= BUILD_MAX_ROOM) return fail('Deze kamer zit vol met bouwwerken');
+    const mine = [...this.builds.values()].filter(b => b.owner === P.name);
+    if (mine.length >= BUILD_MAX_PLAYER) return fail('Je hebt al ' + BUILD_MAX_PLAYER + ' bouwwerken; breek er eerst een af');
+    const others = B.one ? [...this.builds.values()].filter(b => !(b.kind === kind && b.owner === P.name)) : this.builds.values();
+    const why = canPlace(this.world, others, kind, x, z, rot, this.felled);
+    if (why) return fail(why);
+    if (B.one) for (const b of mine) if (b.kind === kind) this.removeBuild(b, 'replace');
+    s.wood -= B.cost; s.stats.built = (s.stats.built || 0) + 1;
+    const b = { id: this.bid++, kind, x, z, rot, hp: B.hp, maxhp: B.hp, owner: P.name, nextShot: 0 };
+    this.builds.set(b.id, b);
+    this.bc({ t: 'ev', k: 'bnew', b: this.btuple(b), by: P.id });
+    this.sendInv(P); this.saveBuilds();
+  }
+  unbuild(P, id) {
+    const b = this.builds.get(id); if (!b || P.dead) return;
+    if (b.owner !== P.name) return this.toast(P, 'Dit is van ' + b.owner + '.', '#ff9c8a');
+    if (len(b.x - P.x, b.z - P.z) > BUILD_RANGE + 1) return;
+    const B = BUILD_BY_ID[b.kind], back = Math.floor(B.cost * BUILD_REFUND * (b.hp / b.maxhp));
+    P.u.save.wood += back;
+    this.removeBuild(b, 'remove');
+    this.toast(P, B.name + ' afgebroken' + (back ? ': +' + back + ' hout terug' : ''), '#c89a5e');
+    this.sendInv(P);
+  }
+  removeBuild(b, how) {
+    this.builds.delete(b.id);
+    for (const m of this.monsters.values()) if (m.siege === b) m.siege = null;
+    this.bc({ t: 'ev', k: 'bgone', id: b.id, x: r1(b.x), z: r1(b.z), how });
+    this.saveBuilds();
+  }
+  hurtBuild(b, dmg, m) {
+    b.hp -= dmg;
+    const B = BUILD_BY_ID[b.kind];
+    if (B.thorns && m) {                       // palissade: punten doen pijn
+      m.hp -= B.thorns * (1 + this.wave.n * 0.15);
+      if (m.hp <= 0) { const owner = [...this.players.values()].find(p => p.name === b.owner); this.killMonster(m, owner || null); }
+    }
+    if (b.hp <= 0) {
+      this.removeBuild(b, 'destroy');
+      const owner = [...this.players.values()].find(p => p.name === b.owner);
+      if (owner) this.toast(owner, 'Je ' + B.name.toLowerCase() + ' is vernield!', '#ff9c8a');
+    } else { this.bc({ t: 'ev', k: 'bhp', id: b.id, hp: Math.round(b.hp) }); if ((this.tickN & 63) === 0) this.saveBuilds(); }
+  }
+  updateTowers() {
+    if (!this.monsters.size) return;
+    for (const b of this.builds.values()) {
+      if (b.kind !== 'tower' || this.T < b.nextShot) continue;
+      const B = BUILD_BY_ID.tower;
+      const m = this.nearest(this.monsters.values(), b.x, b.z, B.range);
+      if (!m) { b.nextShot = this.T + 0.3; continue; }
+      b.nextShot = this.T + B.cd;
+      const dmg = B.dmg * (1 + this.wave.n * 0.08);
+      m.hp -= dmg; m.stun = Math.max(m.stun, 0.1);
+      this.bc({ t: 'ev', k: 'arrow', b: b.id, id: m.id, dmg: Math.round(dmg), x: r1(m.x), z: r1(m.z) });
+      if (m.hp <= 0) { const owner = [...this.players.values()].find(p => p.name === b.owner && !p.dead); this.killMonster(m, owner || null); }
+    }
   }
 
   snapshot() {

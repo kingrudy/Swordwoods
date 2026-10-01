@@ -259,7 +259,20 @@
   #fps { position:fixed; left:50%; bottom:2px; transform:translateX(-50%); z-index:4; font:600 11px ui-monospace,monospace; color:#9f9; text-shadow:0 1px 2px #000; pointer-events:none; }
   .fpsrow { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--dim); margin:0 0 16px; }
   #tb-chat { right:max(120px,calc(env(safe-area-inset-right) + 108px)); top:max(10px,env(safe-area-inset-top)); }
-  #tb-build { display:none; }
+  #tb-build { right:max(174px,calc(env(safe-area-inset-right) + 162px)); top:max(10px,env(safe-area-inset-top)); }
+  body.building #tb-build { background:rgba(242,193,78,.55); border-color:var(--gold); }
+  #buildbar, #buildname { display:none; }
+  body.building #buildbar { display:flex; gap:6px; pointer-events:auto; }
+  body.building #buildname { display:block; padding:5px 12px; border-radius:10px; background:var(--panel); backdrop-filter:blur(6px); font-size:13px; max-width:min(560px,90vw); text-align:center; }
+  body.building #hotbar, body.building #itemname { display:none; }
+  .bslot { width:54px; height:54px; border-radius:12px; background:var(--panel); border:2px solid rgba(255,255,255,.14); display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; font-size:22px; backdrop-filter:blur(6px); touch-action:manipulation; }
+  .bslot small { position:absolute; left:5px; top:2px; font-size:11px; opacity:.7; }
+  .bslot em { font:700 11px system-ui; font-style:normal; color:var(--gold); }
+  .bslot.sel { border-color:var(--gold); transform:translateY(-4px); box-shadow:0 6px 16px rgba(0,0,0,.35); }
+  .bslot.poor em { color:#ff8a7a; } .bslot.rm em { color:#ddd; }
+  body.touch .bslot { width:42px; height:42px; font-size:17px; } body.touch .bslot small { display:none; }
+  body.touch.building #bottom { max-width:60vw; } body.touch #buildname { font-size:11px; max-width:52vw; }
+  body.touch.building #vitals { display:none; }
   body.touch #minimap { width:104px; height:104px; top:max(62px,calc(env(safe-area-inset-top) + 52px)); right:max(12px,env(safe-area-inset-right)); }
   body.touch #mapkey { display:none; }
   body.touch #toasts { top:max(44px,calc(env(safe-area-inset-top) + 36px)); right:auto; left:50%; transform:translateX(-50%); align-items:center; max-width:min(330px,40vw); }
@@ -388,7 +401,9 @@
   </div>
   <div id="bottom">
     <div id="itemname"></div>
+    <div id="buildname"></div>
     <div id="hotbar"></div>
+    <div id="buildbar"></div>
   </div>
 </div>
 <div id="fps" hidden></div>
@@ -418,6 +433,7 @@
   <button class="sb" id="tb-next" type="button" aria-label="Volgend wapen"><b>R</b>Wapen</button>
   <button class="tb" id="tb-drink" type="button" aria-label="Drankje">🧪<small>0</small></button>
   <button class="tb" id="tb-fish" type="button" aria-label="Hond voeren met vis">🐟<small>0</small></button>
+  <button class="tb" id="tb-build" type="button" aria-label="Bouwen">🔨</button>
   <button class="tb" id="tb-chat" type="button" aria-label="Chat">💬</button>
   <button class="tb" id="tb-invite" type="button" aria-label="Vrienden uitnodigen">📨</button>
   <button class="tb" id="tb-menu" type="button" aria-label="Menu">☰</button>
@@ -438,8 +454,9 @@
       <span><kbd>G</kbd></span><span>Je hond een vis geven (boost)</span>
       <span><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Scrollwiel</kbd></span><span>Bijl of zwaard kiezen</span>
       <span><kbd>F</kbd></span><span>Slaan (alternatief)</span>
+      <span><kbd>B</kbd></span><span>Bouwen met hout (klik = plaatsen, <kbd>1</kbd>–<kbd>7</kbd> kiezen, <kbd>7</kbd> afbreken)</span>
       <span><kbd>M</kbd> / <kbd>Enter</kbd></span><span>Grote kaart / chatten met je kamer (snelberichten zetten een 📍 op de kaart)</span>
-      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen, D-pad omhoog hond voeren, Start pauze</span>
+      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan, B springen, X gebruiken, Y eten, LT drank, LB/RB wapen, D-pad omhoog hond voeren, D-pad omlaag bouwen, Start pauze</span>
     </div>
     <div class="gfx"><span>Graphics</span><div class="row" id="gfx-row"></div></div>
     <label class="fpsrow"><input type="checkbox" id="fps-toggle"> Toon beelden per seconde (fps)</label>

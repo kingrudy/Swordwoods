@@ -302,7 +302,9 @@ setInterval(() => { for (const c of conns) c.msgCount = 0; }, 1000);
 const rooms = new Map();
 let nextRoomId = 1;
 function makeRoom(name, max, permanent) {
-  const r = new Room(nextRoomId++, name, max, permanent, markDirty);
+  let store = null;
+  if (permanent) { db.rooms = db.rooms && typeof db.rooms === 'object' ? db.rooms : {}; store = db.rooms[name] || (db.rooms[name] = {}); }
+  const r = new Room(nextRoomId++, name, max, permanent, markDirty, store);
   rooms.set(r.id, r); broadcastRooms();
   return r;
 }

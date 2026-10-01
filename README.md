@@ -39,6 +39,14 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
 
+**Bouwen**: druk op `B` (mobiel: 🔨, controller: D-pad omlaag) en kies met `1`–`7` of het scrollwiel wat je wilt bouwen. Een groen voorbeeld laat zien waar het komt (rood = kan niet: water, te steil, boom, kist of te dicht bij de winkel); klik of A plaatst het. Alles kost hout:
+- 🔥 Kampvuur (10): binnen 6 m +3 gezondheid per seconde en de helft minder honger, en licht in de nacht.
+- 🕯️ Fakkel (3): licht.
+- 🧱 Houten muur (8) en 🪵 Palissade (16): houden monsters tegen; muren sluiten vanzelf op elkaar aan. Monsters die vastlopen slaan het bouwwerk kapot. De palissade is sterker en verwondt monsters die erop slaan.
+- 🏹 Wachttoren (45): schiet pijlen op monsters binnen 20 m.
+- 🛏️ Bed (20): je respawnpunt na een val (één per speler).
+Met vakje 7 (🪓) breek je je eigen bouwwerken af en krijg je tot de helft van het hout terug. In de vaste kamers blijven bouwwerken bewaard, ook na een herstart van de server (de wereld blijft dan ook dezelfde).
+
 **Kaart en chat**: rechtsboven staat een minikaart die met je meedraait (winkel, ontdekte kisten, medespelers, je hond, gevonden zwerfhonden en monsters dichtbij). `M` of een tik op de minikaart opent de grote kaart van het hele eiland. `Enter` (mobiel: 💬) opent de kamerchat; snelberichten zoals "Help!" of "Kist gevonden!" zetten een knipperende 📍 op jouw plek op ieders kaart.
 
 **Als app installeren**: in de lobby staat "📲 Installeer als app" (Chrome/Edge/Android). Op iPhone: deel-knop → "Zet op beginscherm". Het spel start dan schermvullend met een eigen icoon.
