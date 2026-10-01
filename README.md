@@ -39,6 +39,12 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
 
+**Kaart en chat**: rechtsboven staat een minikaart die met je meedraait (winkel, ontdekte kisten, medespelers, je hond, gevonden zwerfhonden en monsters dichtbij). `M` of een tik op de minikaart opent de grote kaart van het hele eiland. `Enter` (mobiel: 💬) opent de kamerchat; snelberichten zoals "Help!" of "Kist gevonden!" zetten een knipperende 📍 op jouw plek op ieders kaart.
+
+**Als app installeren**: in de lobby staat "📲 Installeer als app" (Chrome/Edge/Android). Op iPhone: deel-knop → "Zet op beginscherm". Het spel start dan schermvullend met een eigen icoon.
+
+**Fps**: in het pauzemenu kun je een teller voor beelden per seconde aanzetten.
+
 **Versie**: onderaan de lobby en op `/api/health` staat het versienummer. Staat daar niet de laatste versie, dan draait je server nog een oude build.
 
 Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaan/hakken, E kist openen of winkel gebruiken, R eten, Q drankje, 1-9 of scrollwiel item kiezen, Esc pauze. Werkt de muis niet vast, dan kun je slepen om te kijken.
@@ -46,6 +52,6 @@ Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaa
 ## Beheer
 - Data: volume `swordwoods-data` (bestand `db.json`). Maak hier een back-up van. Wachtwoorden zijn gehasht (scrypt).
 - Zet er bij internetgebruik een reverse proxy met HTTPS voor (Caddy, Traefik, nginx). WebSockets (`/ws`) moeten doorgelaten worden. Zonder HTTPS gaan wachtwoorden onversleuteld over het netwerk.
-- Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`.
+- Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`, `MAX_SPEED`.
 - Gezondheidscheck: `/api/health`. Ranglijst: `/api/leaderboard`.
-- De positie van spelers wordt door de client bepaald (de server controleert gevechten, loot en honger). Prima onder vrienden, niet bedoeld tegen valsspelers.
+- De positie van spelers wordt door de client bepaald; de server controleert gevechten, loot, honger én snelheid: wie sneller beweegt dan rennen (`MAX_SPEED`, standaard 12 m/s) wordt teruggezet. Chat is beperkt tot 140 tekens en één bericht per 0,8 seconde.

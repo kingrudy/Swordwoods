@@ -96,7 +96,7 @@ function leaderboard() {
 }
 
 /* ------------------------------------------------------------------ HTTP */
-const MIME = { '.glb': 'model/gltf-binary', '.txt': 'text/plain; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+const MIME = { '.webmanifest': 'application/manifest+json', '.glb': 'model/gltf-binary', '.txt': 'text/plain; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 const cache = new Map();
 // Build-id: hash van alle spelbestanden. Staat in elk script-adres (/b/<id>/...), zodat een browser of proxy
 // nooit oude spelcode kan combineren met een nieuwe server.

@@ -93,6 +93,18 @@ $('btn-quick').onclick = () => { $('lb-err').textContent = ''; net.send({ t: 'qu
 $('btn-new').onclick = () => { $('create-form').classList.toggle('on'); $('cr-name').focus(); };
 $('create-form').addEventListener('submit', e => { e.preventDefault(); net.send({ t: 'create', name: $('cr-name').value, max: +$('cr-max').value }); });
 $('btn-invite-lobby').onclick = () => openInvite({});
+// installeren als app (PWA)
+let installEvt = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('install').classList.add('on'); });
+addEventListener('appinstalled', () => { installEvt = null; $('install').classList.remove('on'); });
+{
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+  if (ios && !standalone) $('install').classList.add('on');
+}
+$('install').onclick = async () => {
+  if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch {} installEvt = null; $('install').classList.remove('on'); }
+  else alert('Op iPhone/iPad: tik op het deel-icoon (vierkant met pijl) en kies "Zet op beginscherm".');
+};
 $('btn-logout').onclick = () => { store.del(); try { net.ws.close(); } catch {} location.reload(); };
 
 /* ---------------- verbinding ---------------- */

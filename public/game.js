@@ -7,6 +7,7 @@ import * as M from './models.js';
 import { createGraphics, QUALITY } from './graphics.js';
 import * as CH from './characters.js';
 import { openInvite, closeInvite } from './invite.js';
+import { createHud } from './hud.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -645,6 +646,7 @@ export async function startGame({ net, joined, user }) {
   net.on('_close', () => { /* main.js toont de melding */ });
 
   /* ================================================================ invoer */
+  let hud = null;
   const keys = {}; let locked = false, soft = false, shopOpen = false;
   const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false };
   const drag = { down: false, moved: 0 };
@@ -668,7 +670,7 @@ export async function startGame({ net, joined, user }) {
     locked = document.pointerLockElement === renderer.domElement;
     if (locked) soft = false;
     showVeil(!locked && !shopOpen);
-    if (!locked) for (const k in keys) keys[k] = false;
+    if (!locked) { for (const k in keys) keys[k] = false; if (hud && hud.chatOpen && !isTouch) hud.closeChat(); }
   });
   document.addEventListener('mousemove', e => {
     if (!locked || isTouch || shopOpen) return;
@@ -683,6 +685,9 @@ export async function startGame({ net, joined, user }) {
   document.addEventListener('mouseup', e => { if (!isTouch && soft && drag.down && e.button === 0) { drag.down = false; if (drag.moved < 6) startSwing(); } });
   document.addEventListener('wheel', e => { if (!locked || shopOpen) return; const n = items().length; equipSlot((inv.equip + (e.deltaY > 0 ? 1 : -1) + n) % n); }, { passive: true });
   addEventListener('keydown', e => {
+    if (hud && hud.chatOpen) { if (e.code === 'Escape') { e.preventDefault(); hud.closeChat(); } return; }   // typen in de chat
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (hud && hud.bigOpen && (e.code === 'Escape' || e.code === 'KeyM')) { hud.toggleBig(false); return; }
     keys[e.code] = true;
     if (e.code === 'Space') e.preventDefault();
     if (shopOpen) {
@@ -697,6 +702,8 @@ export async function startGame({ net, joined, user }) {
     if (e.code === 'KeyG') feedDog();
     if (e.code === 'KeyR') net.send({ t: 'eat' });
     if (e.code === 'KeyF') startSwing();
+    if (e.code === 'KeyM') hud.toggleBig();
+    if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyT') { e.preventDefault(); hud.openChat(); }
     if (/^Digit[1-9]$/.test(e.code)) equipSlot(+e.code[5] - 1);
   });
   addEventListener('keyup', e => { keys[e.code] = false; });
@@ -839,6 +846,7 @@ export async function startGame({ net, joined, user }) {
     press('tb-next', () => cycleWeapon(1));
     press('tb-menu', () => { home(); pauseGame(); });
     press('tb-invite', () => { home(); inviteFromGame(); });
+    press('tb-chat', () => { home(); virt.x = virt.y = 0; hud.openChat(); });
     $('hotbar').addEventListener('pointerdown', e => { const sl = e.target.closest('.slot'); if (sl) { e.preventDefault(); equipSlot([...$('hotbar').children].indexOf(sl)); } });
     document.addEventListener('contextmenu', e => e.preventDefault());
   }
@@ -874,6 +882,14 @@ export async function startGame({ net, joined, user }) {
     } else { virt.px = virt.py = 0; virt.pattack = virt.pjump = virt.psprint = false; }
     gp.prev = p.buttons.map((_, i) => b(i));
   }
+  /* ================================================================ minikaart, chat, fps */
+  hud = createHud({
+    W, WORLD, WATER, player, net, myId, names, isTouch, chestObjs, remotes, dogs, mons, colorForName: M.colorForName,
+    sfxChat: () => tone(880, 0.08, 'triangle', 0.05),
+    onChatOpen: () => { for (const k in keys) keys[k] = false; player.vx = player.vz = 0; },
+  });
+  net.on('correct', m => { player.x = m.x; player.y = m.y; player.z = m.z; player.vx = player.vz = player.vy = 0; });
+
   if (isTouch) setupTouch();
   else addEventListener('touchstart', function onFirstTouch() {       // touchscreen op een laptop of onbekend toestel: overlay alsnog aanzetten
     removeEventListener('touchstart', onFirstTouch);
@@ -885,8 +901,8 @@ export async function startGame({ net, joined, user }) {
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
-    pollPad(dt);
-    if (locked && !dead && !shopOpen) {
+    pollPad(dt); hud.update(dt);
+    if (locked && !dead && !shopOpen && !hud.chatOpen) {
       const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
       const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;   // joystick omhoog = vooruit
       const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x + virt.px;
@@ -1141,6 +1157,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { hud, net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

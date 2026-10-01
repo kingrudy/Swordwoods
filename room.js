@@ -12,6 +12,7 @@ export const CFG = {
   hungerRate: num(process.env.HUNGER_RATE, 0.22),     // punten per seconde (100 -> 0 in ~7,5 min)
   treeRespawn: 240, chestRespawn: 600,
   animalTarget: 38,
+  maxSpeed: num(process.env.MAX_SPEED, 12),   // m/s: rennen is 9, met marge voor springen en vertraging
   strays: num(process.env.STRAY_DOGS, 3), strayRespawn: 180, dogDown: 20,
 };
 
@@ -118,7 +119,16 @@ export class Room {
     switch (m.t) {
       case 'in': {
         if (P.dead) return;
-        const x = num(m.x, P.x), z = num(m.z, P.z);
+        let x = num(m.x, P.x), z = num(m.z, P.z);
+        // anti-valsspelen: niet verder dan rennen (+ marge) sinds het vorige bericht
+        const since = Math.min(2, Math.max(0.05, this.T - (P.lastInT ?? this.T - 0.1)));
+        const allowed = CFG.maxSpeed * since + 1.5, moved = len(x - P.x, z - P.z);
+        P.lastInT = this.T;
+        if (moved > allowed) {
+          P.cheatHits = (P.cheatHits || 0) + 1;
+          if (this.T - (P.lastCorrect || -9) > 0.4) { P.lastCorrect = this.T; P.conn.send({ t: 'correct', x: r2(P.x), y: r2(P.y), z: r2(P.z) }); }
+          x = P.x; z = P.z;
+        }
         const r = len(x, z), lim = HALF - 6, k = r > lim ? lim / r : 1;
         P.x = x * k; P.z = z * k;
         const h = this.world.heightAt(P.x, P.z);
@@ -137,6 +147,14 @@ export class Room {
       case 'drink': this.drink(P); break;
       case 'buy': this.buy(P, String(m.id)); break;
       case 'tame': this.tame(P, m.id | 0); break;
+      case 'chat': {
+        if (this.T - (P.lastChat || -9) < 0.8) return;
+        const text = String(m.text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 140);
+        if (!text) return;
+        P.lastChat = this.T;
+        this.bc({ t: 'chat', id: P.id, name: P.name, text, ping: m.ping ? { x: r1(P.x), z: r1(P.z) } : null });
+        break;
+      }
       case 'cast': this.cast(P, num(m.x, NaN), num(m.z, NaN)); break;
       case 'reel': this.reel(P); break;
       case 'feeddog': this.feedDog(P); break;
@@ -310,6 +328,7 @@ export class Room {
     const sp = this.world.spawn;
     P.dead = false; P.hp = 100; P.hunger = Math.max(P.hunger, 50);
     P.x = sp.x + (Math.random() - 0.5) * 4; P.z = sp.z + (Math.random() - 0.5) * 4; P.y = this.world.heightAt(P.x, P.z);
+    P.lastInT = this.T;
     P.conn.send({ t: 'respawn', x: P.x, y: P.y, z: P.z });
   }
 
