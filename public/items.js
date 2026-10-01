@@ -53,8 +53,8 @@ export function validSword(s) {
 export const MONSTERS = [
   { key: 'kobold', name: 'Boskobold',    hp: 24, dmg: 6,  speed: 3.7, r: 0.5, score: 10, minWave: 1, weight: 6, atkCd: 1.1 },
   { key: 'wolf',   name: 'Schaduwwolf',  hp: 18, dmg: 8,  speed: 6.3, r: 0.55, score: 12, minWave: 2, weight: 4, atkCd: 0.8 },
-  { key: 'troll',  name: 'Steentrol',    hp: 90, dmg: 16, speed: 2.9, r: 0.95, score: 30, minWave: 4, weight: 2, atkCd: 1.6 },
-  { key: 'reus',   name: 'Wereldreus',   hp: 420, dmg: 30, speed: 3.3, r: 1.7, score: 150, minWave: 99, weight: 0, atkCd: 2.0 },
+  { key: 'troll',  name: 'Bosmonster',    hp: 90, dmg: 16, speed: 2.9, r: 0.95, score: 30, minWave: 4, weight: 2, atkCd: 1.6 },
+  { key: 'reus',   name: 'Woudreus',   hp: 420, dmg: 30, speed: 3.3, r: 1.7, score: 150, minWave: 99, weight: 0, atkCd: 2.0 },
 ];
 export const ANIMALS = [
   { key: 'konijn',    name: 'Konijn',    hp: 8,  speed: 7.5, flee: 15, meat: 1, r: 0.3 },

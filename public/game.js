@@ -332,8 +332,19 @@ export async function startGame({ net, joined, user }) {
     return { group: g, body: model.group, model, x: 0, z: 0, y: 0, yaw: 0, tx: 0, tz: 0, ty: 0, tyaw: 0, phase: 0, speed: 0, hp: 1, maxhp: 1, first: true };
   }
   /* ---------------- geanimeerde 3D-figuren (worden ingewisseld zodra ze geladen zijn) */
-  const RIG_FOR_MONSTER = (type, id) => type === 0 ? (id % 2 ? 'skeleton_rogue' : 'skeleton_minion') : type === 2 ? 'skeleton_warrior' : type === 3 ? 'skeleton_mage' : null;
-  const RIG_HEIGHT = { 0: 1.65, 2: 3.4, 3: 6.8 };
+  const RIG_FOR_MONSTER = (type, id) => type === 0 ? (id % 2 ? 'skeleton_rogue' : 'skeleton_minion') : type >= 2 ? 'forest_monster' : null;
+  const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10 };   // bosmonster: hoogte inclusief de boom op zijn rug
+  const CLIPS = {
+    skeleton: { idle: 'Idle_Combat', walk: 'Walking_D_Skeletons', run: 'Running_C', walkSpeed: 2.2, runSpeed: 5.2, attack: '1H_Melee_Attack_Chop', atkSpeed: 1.4, die: 'Death_A', hit: 'Hit_A', spawn: 'Spawn_Ground_Skeletons' },
+    forest: { idle: 'Idle', walk: 'Walk', run: 'Walk', walkSpeed: 1.6, runSpeed: 99, attack: 'Attack', atkSpeed: 1.0, die: 'Dying', hit: null, spawn: null },
+  };
+  const clipsOf = e => e.type >= 2 ? CLIPS.forest : CLIPS.skeleton;
+  let bossSkin = null;
+  function bossLook(rig) {          // de baas krijgt de tweede huid
+    const apply = tex => rig.inner.traverse(o => { if (o.isMesh && o.material.name === 'Monster') { o.material.map = tex; o.material.needsUpdate = true; } });
+    if (bossSkin) return apply(bossSkin);
+    new THREE.TextureLoader().load(new URL('./models/forest_monster_skin2.jpg', import.meta.url).href, t => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; bossSkin = t; apply(t); });
+  }
   function setRig(e, rig) {
     e.group.remove(e.body); e.body = rig.group; e.group.add(rig.group);
     e.model = rig; e.flashMats = null;
@@ -341,12 +352,12 @@ export async function startGame({ net, joined, user }) {
   }
   function wantRig(e, name, height, fresh = false) {
     if (!name) return;
-    if (CH.isReady(name)) { const r = CH.createRig(name, height, G.quality !== 'laag'); if (r) { setRig(e, r); if (fresh) e.spawnAnim = true; return; } }
+    if (CH.isReady(name)) { const r = CH.createRig(name, height, G.quality !== 'laag'); if (r) { setRig(e, r); if (e.type === 3 && name === 'forest_monster') bossLook(r); if (fresh) e.spawnAnim = true; return; } }
     e.want = { name, height };
   }
   function onRigReady(name) {
     if (name === 'chest') upgradeChests();
-    for (const map of [remotes, mons, anis]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); e.want = null; } }
+    for (const map of [remotes, mons, anis]) for (const e of map.values()) if (e.want && e.want.name === name) { const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); if (map === mons && e.type === 3 && name === 'forest_monster') bossLook(r); e.want = null; } }
     if (name === 'merchant' && !merchant) {
       merchant = CH.createRig('merchant', 1.8);
       if (merchant) { shopObj.npc.group.visible = false; merchant.group.position.copy(shopObj.npc.group.position); merchant.group.rotation.y = shopObj.npc.group.rotation.y; shopObj.group.add(merchant.group); merchant.loop('Idle'); }
@@ -620,13 +631,13 @@ export async function startGame({ net, joined, user }) {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
         addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg, m.e === 'm' ? '#ffe08a' : '#ffffff');
         blood.emit(m.x, gy + (e ? e.model.height * 0.5 : 0.7), m.z, 8, 2.2, 2.5, 0.6);
-        if (e) { flash(e); if (m.e === 'm' && e.model.kind === 'rig' && !e.model.busy && !e.dying) e.model.once('Hit_A', { speed: 1.6 }); }
+        if (e) { flash(e); if (m.e === 'm' && e.model.kind === 'rig' && !e.model.busy && !e.dying) { const cs = clipsOf(e); if (cs.hit) e.model.once(cs.hit, { speed: 1.6 }); } }
         if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.hit();
         break;
       }
-      case 'matk': { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once(e.type >= 2 ? '2H_Melee_Attack_Chop' : '1H_Melee_Attack_Chop', { speed: e.type >= 2 ? 1.1 : 1.4 }); break; }
+      case 'matk': { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) { const cs = clipsOf(e); e.model.once(cs.attack, { speed: cs.atkSpeed }); } break; }
       case 'mdie': { const e = mons.get(m.id);
-        if (e && e.model.kind === 'rig') { e.dying = 1.8; e.model.once('Death_A', { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
+        if (e && e.model.kind === 'rig') { e.dying = e.type >= 2 ? 2.0 : 1.8; e.model.once(clipsOf(e).die, { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
         else killEnt(mons, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 30, 3.2, 3.5, 1); if (Math.hypot(m.x - player.x, m.z - player.z) < 40) sfx.kill(); break;
       case 'adie': { const e = anis.get(m.id); if (e && e.model.kind === 'rig') { e.dying = 1.4; e.model.once('die', { hold: true }); if (e.bar) e.bar.visible = false; } else killEnt(anis, m.id); } blood.emit(m.x, heightAt(m.x, m.z) + 0.4, m.z, 18, 2.5, 3, 0.8); break;
     }
@@ -968,8 +979,9 @@ export async function startGame({ net, joined, user }) {
       }
       moveEnt(e, dt); tickFlash(e, dt);
       if (e.model.kind === 'rig') {
-        if (e.spawnAnim) { e.spawnAnim = false; e.model.once('Spawn_Ground_Skeletons', { speed: 1.4 }); }
-        rigLocomotion(e, 5.2, 2.2, 'Idle_Combat', 'Walking_D_Skeletons', 'Running_C');
+        const cs = clipsOf(e);
+        if (e.spawnAnim) { e.spawnAnim = false; if (cs.spawn) e.model.once(cs.spawn, { speed: 1.4 }); }
+        rigLocomotion(e, cs.runSpeed, cs.walkSpeed, cs.idle, cs.walk, cs.run);
         const far = Math.hypot(e.x - player.x, e.z - player.z) > 55;       // verre monsters minder vaak animeren
         e.animAcc = (e.animAcc || 0) + dt;
         if (!far || e.animAcc > 0.1) { e.model.update(e.animAcc); e.animAcc = 0; }
@@ -1117,7 +1129,7 @@ export async function startGame({ net, joined, user }) {
     }
   }
 
-  CH.preload(['chest', 'deer', 'knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage', 'merchant'], onRigReady);
+  CH.preload(['chest', 'deer', 'knight', 'barbarian', 'mage', 'rogue', 'skeleton_minion', 'skeleton_rogue', 'forest_monster', 'merchant'], onRigReady);
 
   showVeil(true);
   setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);
