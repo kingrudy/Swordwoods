@@ -17,7 +17,12 @@ export const barkMat = new THREE.MeshStandardMaterial({ color: 0x5a3c25, roughne
 export const woodCutMat = new THREE.MeshStandardMaterial({ color: 0xc89a5e, roughness: 0.8 });
 const leafMats = [0x2f6b2a, 0x3a7d2f, 0x2c6a3a, 0x4b8a34].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }));
 const pineMats = [0x1f4d2b, 0x265a31, 0x1a4526].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }));
-export const foliageMats = [...leafMats, ...pineMats];
+// biomen: sneeuwdennen, donker bos en moerasbomen
+export const snowPineMat = new THREE.MeshStandardMaterial({ color: 0xc9d8d4, roughness: 0.85 });
+export const darkLeafMat = new THREE.MeshStandardMaterial({ color: 0x1a3320, roughness: 0.9 });
+export const swampLeafMat = new THREE.MeshStandardMaterial({ color: 0x5a6a2a, roughness: 0.95 });
+export const foliageMats = [...leafMats, ...pineMats, snowPineMat, darkLeafMat, swampLeafMat];
+const deadBarkMat = new THREE.MeshStandardMaterial({ color: 0x3a3028, roughness: 1 });
 export const goldMat = new THREE.MeshStandardMaterial({ color: 0xd9a83a, metalness: 0.5, roughness: 0.35 });
 const leatherMat = new THREE.MeshStandardMaterial({ color: 0x4a2f1c, roughness: 0.9 });
 const metalMat = (c, emi) => new THREE.MeshStandardMaterial({ color: c, metalness: 0.45, roughness: 0.3, emissive: c, emissiveIntensity: emi });
@@ -68,11 +73,15 @@ export function makeTreeKit(seed) {
   }
   return kit;
 }
-export function buildTree(kit, type, vi, scale, rotY) {
+export function buildTree(kit, type, vi, scale, rotY, biome = 'forest') {
+  if (biome === 'snow') type = 'pine';
   const v = kit[type][vi], g = new THREE.Group();
-  const trunk = new THREE.Mesh(v.trunk, barkMat); trunk.castShadow = true; g.add(trunk);
+  const mat = biome === 'snow' ? snowPineMat : biome === 'dark' ? darkLeafMat : biome === 'swamp' ? swampLeafMat : v.mat;
+  const trunk = new THREE.Mesh(v.trunk, biome === 'swamp' || biome === 'dark' ? deadBarkMat : barkMat); trunk.castShadow = true; g.add(trunk);
   const crown = new THREE.Group(); g.add(crown);
-  for (const c of v.crowns) { const m = new THREE.Mesh(c.geo, v.mat); m.position.set(c.x, c.y, c.z); m.castShadow = true; crown.add(m); }
+  for (const c of v.crowns) { const m = new THREE.Mesh(c.geo, mat); m.position.set(c.x, c.y, c.z); m.castShadow = true; crown.add(m); }
+  if (biome === 'swamp' && type === 'oak') crown.scale.set(1.15, 0.75, 1.15);
+  if (biome === 'dark') g.scale.y = 1.15;
   g.scale.setScalar(scale); g.rotation.y = rotY;
   return { group: g, crown, trunk, height: v.h * scale };
 }
@@ -526,4 +535,48 @@ export function buildSmithy() {
   npc.group.position.set(0.05, 0.16, 1.1); npc.group.rotation.y = Math.PI; npc.armR.rotation.x = -1.2; g.add(npc.group);
   const label = makeLabel('Smid Gerrit', '#ffd9a0'); label.position.y = 3.9; label.scale.multiplyScalar(1.5); g.add(label);
   return { group: g, npc, anvil: new THREE.Vector3(0.6, 0.9, 0.5), forge: new THREE.Vector3(-1.1, 1.3, -0.8) };
+}
+
+/* ---------------------------------------------------------------- ruïnes en reizende handelaar */
+const ruinStone = std(0x8f8a80, { roughness: 1 }), ruinDark = std(0x5f5b55, { roughness: 1 }), mossMat = std(0x4a6a2a, { roughness: 1 });
+/** Stenen zuil (gebroken als h laag is). Staat op de grond. */
+export function buildRuinPillar(h, rot = 0, seed = 1) {
+  const g = new THREE.Group(), rnd = mulberryLocal(seed);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.4, 1.15), ruinDark); base.position.y = 0.2; g.add(base);
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, h, 10), ruinStone); col.position.y = 0.4 + h / 2; g.add(col);
+  if (h > 2.5) { const cap = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.32, 1.1), ruinDark); cap.position.y = 0.4 + h + 0.16; g.add(cap); }
+  else { const top = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 0), ruinStone); top.position.y = 0.4 + h; top.scale.y = 0.5; g.add(top);
+    const chunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.4, 10), ruinStone); chunk.rotation.z = Math.PI / 2; chunk.position.set(1.1, 0.4, 0.3); chunk.rotation.y = rnd() * 3; g.add(chunk); }
+  const moss = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), mossMat); moss.scale.set(1, 0.25, 1); moss.position.y = 0.38; g.add(moss);
+  g.rotation.y = rot; g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+export function buildRuinFloor(radius = 5.6) {
+  const g = new THREE.Group();
+  const n = 26, rnd = mulberryLocal(Math.round(radius * 100));
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * radius;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(1 + rnd() * 0.7, 0.14, 0.9 + rnd() * 0.6), rnd() < 0.5 ? ruinStone : ruinDark);
+    slab.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r); slab.rotation.y = rnd() * 3; slab.receiveShadow = true; g.add(slab);
+  }
+  return g;
+}
+export const ruinBeamMat = new THREE.MeshBasicMaterial({ color: 0xb06bff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+/** Handelskar met huif. Voorkant naar +Z. */
+export function buildTraderCart() {
+  const g = new THREE.Group();
+  const wood = std(0x7a4f2a), dark = std(0x4a3222), cloth = std(0x6a3a9a, { side: THREE.DoubleSide });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
+  add(new THREE.BoxGeometry(2.4, 0.7, 1.5), wood, 0, 0.95, -1.2);
+  for (const x of [-1.3, 1.3]) add(new THREE.CylinderGeometry(0.55, 0.55, 0.12, 14), dark, x, 0.55, -1.2, 0, 0, Math.PI / 2);
+  add(new THREE.CylinderGeometry(1.0, 1.0, 2.4, 14, 1, true, 0, Math.PI), cloth, 0, 1.3, -1.2, 0, 0, Math.PI / 2).rotation.set(0, 0, Math.PI / 2);
+  for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(0.42, 0.42, 0.42), [wood, std(0xb98a52), dark][i], -0.7 + i * 0.6, 1.5 + (i % 2) * 0.1, -0.5);
+  add(new THREE.BoxGeometry(0.1, 0.1, 1.6), dark, -0.5, 0.75, 0.3, 0.1, 0, 0); add(new THREE.BoxGeometry(0.1, 0.1, 1.6), dark, 0.5, 0.75, 0.3, 0.1, 0, 0);
+  const rug = add(new THREE.BoxGeometry(2.2, 0.03, 1.4), std(0x8a2a3a), 0, 0.02, 1.0); rug.castShadow = false;
+  for (const [x, c] of [[-0.6, 0xff4aa0], [0, 0x6fe0ff], [0.6, 0xf2c14e]]) add(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.6, roughness: 0.3 }), x, 0.14, 1.0);
+  const npc = buildHumanoid({ skin: 0xd9a77a, cloth: 0x4a2a6a, hair: 0x222222 });
+  npc.group.position.set(0, 0, 0.1); npc.group.rotation.y = Math.PI; g.add(npc.group);
+  const label = makeLabel('Reizende handelaar', '#d7a8ff'); label.position.y = 3.2; label.scale.multiplyScalar(1.4); g.add(label);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 18, 12, 1, true).translate(0, 9, 0), ruinBeamMat); beam.position.set(0, 0.3, -2.2); g.add(beam);
+  return { group: g, npc };
 }

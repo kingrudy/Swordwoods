@@ -322,6 +322,9 @@
   .sw-row .buy { padding:8px 11px; border-radius:10px; border:0; background:var(--gold); color:#2b2110; font-weight:700; touch-action:manipulation; }
   .sw-row .buy.melt { background:rgba(255,255,255,.12); color:var(--ink); } .sw-row .buy:disabled { background:rgba(255,255,255,.08); color:var(--dim); }
   #orechip { display:none; } #orechip.on { display:block; }
+  #buffchip { display:none; color:#d7a8ff; } #buffchip.on { display:block; }
+  #trader { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:12px; background:rgba(8,14,10,.62); backdrop-filter:blur(4px); }
+  #trader.on { display:flex; }
 
   #overlay { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center; background:rgba(8,14,10,.88); text-align:center; padding:20px; }
   #overlay.on { display:flex; }
@@ -443,6 +446,7 @@
     <div class="chip" id="dogchip"></div>
     <div class="chip" id="fishchip"></div>
     <div class="chip" id="orechip"></div>
+    <div class="chip" id="buffchip"></div>
     <div id="players"></div>
   </div>
   <div id="wave"></div>
@@ -466,7 +470,7 @@
   </div>
 </div>
 <div id="fps" hidden></div>
-<div id="bigmap-wrap"><canvas id="bigmap" width="720" height="720" aria-label="Kaart"></canvas><p>Tik of druk op M om te sluiten · 🟦 winkel · 🟧 smid · 🟡 kist · 🔷 erts · ⚪ hond · 🔴 monster</p></div>
+<div id="bigmap-wrap"><canvas id="bigmap" width="720" height="720" aria-label="Kaart"></canvas><p>Tik of druk op M om te sluiten · 🟦 winkel · 🟧 smid · 🟪 handelaar · △ ruïne · 🟡 kist · 🔷 erts · ⚪ hond · 🔴 monster</p></div>
 <div id="chatpanel">
   <div id="chat-quick"></div>
   <form id="chat-form" autocomplete="off"><input id="chat-input" maxlength="140" placeholder="Bericht aan je kamer…" enterkeyhint="send"><button class="btn primary small" type="submit">Stuur</button><button class="btn small" id="chat-close" type="button">✕</button></form>
@@ -482,6 +486,11 @@
 <div id="smith"><div class="shop-card">
   <div class="shop-head"><div><h2>Smid Gerrit</h2><p>Smeed je zwaarden sterker met erts en hout, of smelt oude zwaarden om tot erts.</p></div><div class="shop-wood" id="smith-res">⛏️ 0 · 🪵 0</div><button class="btn primary" id="smith-close" type="button">Sluiten</button></div>
   <div id="smith-list"></div>
+</div></div>
+
+<div id="trader"><div class="shop-card">
+  <div class="shop-head"><div><h2>Reizende handelaar</h2><p id="trader-left">Bijzondere waren, alleen vandaag.</p></div><div class="shop-wood" id="trader-wood">🪵 0</div><button class="btn primary" id="trader-close" type="button">Sluiten</button></div>
+  <div id="trader-list"></div>
 </div></div>
 
 <div id="touch">

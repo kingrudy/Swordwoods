@@ -138,6 +138,73 @@ export function createWorld(seed) {
     ores.push(o); gAdd(o);
   }
 
+  // ---- biomen: sectoren rond het eiland (het midden is altijd gewoon bos)
+  const TAU = Math.PI * 2, boff = (seed * 2.399) % TAU;
+  function biomeW(x, z) {
+    const away = sstep(42, 78, len(x, z));
+    if (away <= 0) return { snow: 0, swamp: 0, dark: 0 };
+    const a = Math.atan2(z, x) + (vnoise(x * 0.02 + 7, z * 0.02 + 3) - 0.5) * 0.9 - boff;
+    const sector = (c, half) => { const d = Math.abs((((a - c) % TAU) + TAU * 1.5) % TAU - Math.PI); return sstep(half + 0.2, half - 0.2, d); };
+    const snow = away * sector(0, 0.8);
+    const dark = away * sector(2.15, 0.7);
+    const swamp = away * sector(4.25, 0.65) * (1 - sstep(5, 9, heightAt(x, z)));
+    return { snow, swamp, dark };
+  }
+  function biomeAt(x, z) { const w = biomeW(x, z); return w.snow > 0.5 ? 'snow' : w.swamp > 0.5 ? 'swamp' : w.dark > 0.5 ? 'dark' : 'forest'; }
+  for (const t of trees) t.biome = biomeAt(t.x, t.z);
+  for (const c of chests) c.biome = biomeAt(c.x, c.z);
+
+  // ---- ruïnes met een kerkerkist (eigen rng)
+  const rrng = mulberry32(seed * 41 + 7), ruins = [];
+  for (let tries = 0; tries < 20000 && ruins.length < 5; tries++) {
+    const r = 50 + rrng() * (HALF * 0.82 - 50), a = rrng() * TAU;
+    const x = r * Math.cos(a), z = r * Math.sin(a), h = heightAt(x, z);
+    if (h < 1.0 || h > 15 || slopeAt(x, z) > 0.38) continue;
+    let ok = true;
+    for (let k = 0; k < 8 && ok; k++) { const px = x + Math.cos(k / 8 * TAU) * 6, pz = z + Math.sin(k / 8 * TAU) * 6; if (heightAt(px, pz) < 0.8 || Math.abs(heightAt(px, pz) - h) > 2.2) ok = false; }
+    gNear(x, z, o => { if (len(o.x - x, o.z - z) < 6.6) ok = false; });
+    for (const g2 of [[x + 5, z], [x - 5, z], [x, z + 5], [x, z - 5]]) gNear(g2[0], g2[1], o => { if (len(o.x - x, o.z - z) < 6.6) ok = false; });
+    for (const o of ruins) if (len(o.x - x, o.z - z) < 40) ok = false;
+    if (len(x - shop.x, z - shop.z) < 30) ok = false;
+    if (!ok) continue;
+    const rotY = rrng() * TAU, idx = ruins.length, parts = [];
+    for (let k = 0; k < 7; k++) {
+      const pa = rotY + k / 7 * TAU, px = x + Math.cos(pa) * 5, pz = z + Math.sin(pa) * 5;
+      const part = { x: px, z: pz, y: heightAt(px, pz), r: 0.5, solid: true, ruin: idx, h: k % 3 === 1 ? 1.2 + rrng() : 3.2 + rrng() * 1.5, rot: rrng() * TAU };
+      parts.push(part); gAdd(part);
+    }
+    const chest = { x, z, y: h, r: 0.9, solid: true, ruin: idx, rotY: rotY + Math.PI };
+    gAdd(chest);
+    ruins.push({ idx, x, z, y: h, rotY, parts, chest, biome: biomeAt(x, z) });
+  }
+
+  // ---- gemeenschapskist vlak bij het startpunt
+  const pot = (() => {
+    for (let k = 0; k < 24; k++) {
+      const a = 2.4 + k * 0.55, d = 4.5 + (k >> 3) * 1.5, x = Math.cos(a) * d, z = 2 + Math.sin(a) * d;
+      if (heightAt(x, z) < 0.6 || len(x - shop.x, z - shop.z) < 6.5 || len(x - smith.x, z - smith.z) < 5) continue;
+      let ok = true; gNear(x, z, o => { if (len(o.x - x, o.z - z) < 2.6) ok = false; });
+      if (ok) { const p = { x, z, y: heightAt(x, z), r: 0.95, solid: true, pot: true, rotY: Math.atan2(-x, -(z - 2)) }; gAdd(p); return p; }
+    }
+    const p = { x: -4, z: -1, y: heightAt(-4, -1), r: 0.95, solid: true, pot: true, rotY: 0 }; gAdd(p); return p;
+  })();
+
+  // ---- arena voor duels (eigen rng; kiest de vlakste plek met de minste bomen)
+  const arena = (() => {
+    const arng = mulberry32(seed * 53 + 11); let best = null, bestScore = 1e9;
+    for (let tries = 0; tries < 400; tries++) {
+      const r = 30 + arng() * 45, a = arng() * TAU, x = r * Math.cos(a), z = r * Math.sin(a), h = heightAt(x, z);
+      if (h < 1 || h > 12) continue;
+      let lo = h, hi = h, water = false;
+      for (let k = 0; k < 12; k++) { const hx = heightAt(x + Math.cos(k / 12 * TAU) * 10, z + Math.sin(k / 12 * TAU) * 10); lo = Math.min(lo, hx); hi = Math.max(hi, hx); if (hx < 0.6) water = true; }
+      if (water || len(x - shop.x, z - shop.z) < 18 || len(x - smith.x, z - smith.z) < 15 || len(x - pot.x, z - pot.z) < 15) continue;
+      let objs = 0; for (const [ox, oz] of [[0, 0], [5, 0], [-5, 0], [0, 5], [0, -5]]) gNear(x + ox, z + oz, o => { if (len(o.x - x, o.z - z) < 10 && !o.type) objs += 50; else if (len(o.x - x, o.z - z) < 10) objs++; });
+      const score = (hi - lo) * 3 + objs;
+      if (score < bestScore) { bestScore = score; best = { x, z, y: h, r: 9 }; }
+    }
+    return best || { x: 40, z: 0, y: heightAt(40, 0), r: 9 };
+  })();
+
   /** Willekeurig punt op land (voor dieren en monsters). rnd: () => 0..1 */
   function landPoint(rnd, cx = 0, cz = 0, rMin = 0, rMax = HALF * 0.85, minH = 0.2) {
     for (let i = 0; i < 40; i++) {
@@ -149,5 +216,5 @@ export function createWorld(seed) {
     return null;
   }
 
-  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
+  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, ruins, pot, arena, biomeW, biomeAt, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
 }

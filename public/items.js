@@ -102,3 +102,42 @@ export const dogStats = level => ({ maxhp: 60 + 15 * (level - 1), dmg: 6 + 3 * (
 export const dogXpNeeded = level => 30 + level * 30;
 export const DOG_FURS = [0xc8903f, 0x3a2a20, 0xe8dcc8, 0x8a5a2b, 0x777777];   // kleurvarianten
 export const DOG_BOOST_SEC = 60, DOG_BOOST_MAX = 180;
+/** Hondenrassen: een zwerfhond heeft een ras, dat bepaalt zijn sterke kanten. */
+export const DOG_BREEDS = [
+  { id: 'herder', name: 'Herder',    hp: 1.0, dmg: 1.0,  spd: 1.0,  desc: 'Evenwichtig en trouw.' },
+  { id: 'jacht',  name: 'Jachthond', hp: 0.9, dmg: 1.1,  spd: 1.25, desc: 'Snel en jaagt zelf op dieren in de buurt.' },
+  { id: 'waak',   name: 'Waakhond',  hp: 1.45, dmg: 0.9, spd: 0.95, desc: 'Stevig: monsters dichtbij vallen hem aan in plaats van jou.' },
+  { id: 'speur',  name: 'Speurneus', hp: 1.0, dmg: 0.9,  spd: 1.1,  desc: 'Vindt kisten en ertsaders van veel verder weg.' },
+];
+export const breedOf = id => DOG_BREEDS.find(b => b.id === id) || DOG_BREEDS[0];
+export const DOG_CMDS = [
+  { c: 'follow', name: 'Volg',     icon: '🐾', desc: 'Loop met me mee' },
+  { c: 'stay',   name: 'Blijf',    icon: '✋', desc: 'Bewaak deze plek' },
+  { c: 'attack', name: 'Val aan',  icon: '⚔️', desc: 'Val het monster aan waar je naar kijkt' },
+  { c: 'seek',   name: 'Zoek',     icon: '👃', desc: 'Zoek een kist (speurneus: ook erts)' },
+];
+/** Gemeenschapskist: de hele kamer spaart hout voor een feestmaal. */
+export const potGoal = lvl => 300 + 150 * (lvl - 1);
+export const FEAST_SEC = 600;
+
+/** Reizende handelaar: komt af en toe langs met bijzondere waren (vier per bezoek). */
+export const TRADER_ITEMS = [
+  { id: 'mystery', name: 'Mysterieuze kist', icon: '🎁', cost: 140, desc: 'Een zwaard, minstens zeldzaam, met grote kans op episch of legendarisch.' },
+  { id: 'elixir',  name: 'Krachtelixer',     icon: '⚗️', cost: 40,  desc: '5 minuten 25% meer schade.' },
+  { id: 'haste',   name: 'Windthee',         icon: '🍵', cost: 30,  desc: '3 minuten 20% sneller lopen.' },
+  { id: 'ore',     name: 'Zak erts',         icon: '⛏️', cost: 45,  desc: '10 erts voor de smid.' },
+  { id: 'snack',   name: 'Hondenkoekje',     icon: '🦴', cost: 35,  desc: 'Je hond krijgt 150 ervaring.' },
+  { id: 'potions', name: 'Drie drankjes',    icon: '🧪', cost: 20,  desc: 'Drie helende drankjes (tot je maximum).' },
+];
+export const WEATHERS = [
+  { k: 'helder', name: 'Helder', w: 45 },
+  { k: 'regen',  name: 'Regen',  w: 25, desc: 'Vissen bijten sneller.' },
+  { k: 'onweer', name: 'Onweer', w: 12, desc: 'Pas op voor de bliksem!' },
+  { k: 'mist',   name: 'Mist',   w: 18, desc: 'Je ziet minder ver.' },
+];
+export const BIOMES = {
+  forest: { name: 'Het Woud', icon: '🌲', desc: '' },
+  snow:   { name: 'Het Sneeuwveld', icon: '❄️', desc: 'Het is koud: je krijgt 30% sneller honger, behalve bij een kampvuur.' },
+  swamp:  { name: 'Het Moeras', icon: '🐸', desc: 'Je loopt langzamer door de modder. Er groeit veel vis.' },
+  dark:   { name: 'Het Duistere Bos', icon: '🌑', desc: 'Kisten bevatten hier betere zwaarden.' },
+};

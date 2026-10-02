@@ -80,6 +80,8 @@ export const ACHIEVEMENTS = [
   { id: 'dieren',     icon: '🦌', name: 'Woudjager',         desc: 'Jaag op 50 dieren',               test: s => st(s, 'animals') >= 50 },
   { id: 'uur',        icon: '⏳', name: 'Bosbewoner',        desc: 'Speel in totaal een uur',         test: s => st(s, 'playSec') >= 3600 },
   { id: 'niveau10',   icon: '⭐', name: 'Ervaren',           desc: 'Bereik niveau 10',                test: s => levelInfo(s.xp | 0).level >= 10 },
+  { id: 'kerker',     icon: '🏛️', name: 'Grafrover',         desc: 'Plunder een kerkerkist',          test: s => st(s, 'dungeons') >= 1 },
+  { id: 'reiziger',   icon: '🧭', name: 'Ontdekkingsreiziger', desc: 'Bezoek alle vier de gebieden',  test: s => Object.keys(s.biomes || {}).length >= 4 },
   { id: 'opdrachten', icon: '📅', name: 'Plichtsgetrouw',    desc: 'Voltooi 10 dagelijkse opdrachten', test: s => st(s, 'quests') >= 10 },
 ];
 

@@ -225,6 +225,8 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
   }
   const tmpC = new THREE.Color(), sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
   const state = { night: 0, day: 1, elev: 1 };
+  // weer: 0..1 waarden die zacht naar hun doel bewegen
+  const wx = { gloom: 0, fog: 0, gloomT: 0, fogT: 0, flash: 0, cold: 0, coldT: 0 };
 
   function update(dt, time, px, py, pz) {
     uTime.value = time;
@@ -235,22 +237,29 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
     const e = sunDir.y;
     const day = sstep(-0.12, 0.25, e), night = 1 - sstep(-0.2, 0.02, e), twi = 1 - sstep(0.0, 0.35, Math.abs(e + 0.03));
     state.night = night; state.day = day; state.elev = e;
+    const wk = Math.min(1, dt * 0.4);
+    wx.gloom += (wx.gloomT - wx.gloom) * wk; wx.fog += (wx.fogT - wx.fog) * wk; wx.cold += (wx.coldT - wx.cold) * Math.min(1, dt * 0.8);
+    wx.flash = Math.max(0, wx.flash - dt * 3.5);
+    const gl = wx.gloom, fla = wx.flash;
 
     // kleuren
     skyU.uTop.value.copy(C(0x070d24)).lerp(C(0x2f6fd0), day).lerp(C(0x3a4f8f), twi * 0.3);
     skyU.uHor.value.copy(C(0x16213d)).lerp(C(0xb9d6ec), day).lerp(C(0xf0a068), twi * 0.5);
     skyU.uGlow.value.copy(C(0xff8a4a)).lerp(C(0xffc27a), sstep(-0.05, 0.2, e));
     skyU.uSun.value.copy(sunDir); skyU.uMoon.value.copy(moonDir); skyU.uNight.value = night; skyU.uTwilight.value = twi;
+    if (gl > 0.001) { const grey = C(0x6a7480).multiplyScalar(0.25 + 0.75 * day); skyU.uTop.value.lerp(grey, gl * 0.85); skyU.uHor.value.lerp(grey, gl * 0.7); }
+    if (wx.cold > 0.001) skyU.uHor.value.lerp(C(0xdfe8f2).multiplyScalar(0.3 + 0.7 * day), wx.cold * 0.35);
+    if (fla > 0) { skyU.uTop.value.lerp(C(0xe8ecff), fla * 0.8); skyU.uHor.value.lerp(C(0xe8ecff), fla * 0.8); }
     scene.fog.color.copy(skyU.uHor.value).multiplyScalar(0.92);
-    scene.fog.near = 60 + day * 30; scene.fog.far = 200 + day * 110;
+    scene.fog.near = (60 + day * 30) * (1 - 0.85 * wx.fog) * (1 - 0.3 * gl); scene.fog.far = (200 + day * 110) * (1 - 0.72 * wx.fog) * (1 - 0.25 * gl);
 
     // licht: overdag de zon, 's nachts de maan
     const sunI = 3.0 * sstep(-0.03, 0.2, e), moonI = 0.5 * night;
     const L = sunI >= moonI ? sunDir : moonDir;
-    key.intensity = Math.max(sunI, moonI);
+    key.intensity = Math.max(sunI, moonI) * (1 - 0.6 * gl) + fla * 2.5;
     key.color.copy(sunI >= moonI ? tmpC.copy(C(0xff9a50)).lerp(C(0xfff0d2), sstep(0.0, 0.4, e)) : C(0x9fb4ff));
     key.position.set(px + L.x * 110, py + L.y * 110, pz + L.z * 110); key.target.position.set(px, py, pz);
-    hemi.intensity = 0.5 + 0.65 * day;
+    hemi.intensity = (0.5 + 0.65 * day) * (1 - 0.3 * gl) + fla * 1.5;
     hemi.color.copy(C(0x5a6ea8)).lerp(C(0xcfe6ff), day).lerp(C(0xffc9a0), twi * 0.3);
     hemi.groundColor.copy(C(0x1e2530)).lerp(C(0x9bb872), day);
     handHemi.intensity = 0.55 + 0.6 * day; handKey.intensity = 0.5 + 1.2 * day; handKey.color.copy(key.color);
@@ -301,6 +310,11 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
       const l = new THREE.PointLight(color, 0, distance, 1.6); l.userData.max = max; l.position.copy(pos); scene.add(l); lanterns.push(l); return l;
     },
     setTimeOfDay(t) { forcedT = t === null ? null : ((t % 1) + 1) % 1; },
+    /** Weer: k = 'helder' | 'regen' | 'onweer' | 'mist'; cold = 0..1 (sneeuwgebied). */
+    setWeather(k) { wx.gloomT = k === 'regen' ? 0.6 : k === 'onweer' ? 0.85 : k === 'mist' ? 0.25 : 0; wx.fogT = k === 'mist' ? 1 : k === 'regen' ? 0.25 : k === 'onweer' ? 0.35 : 0; },
+    setCold(v) { wx.coldT = v; },
+    flash() { wx.flash = 1; },
+    weather: wx,
     timeOfDay: dayT,
   };
 }

@@ -39,6 +39,14 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
 
+**Gebieden**: het midden van het eiland is gewoon bos; daaromheen liggen drie gebieden met een eigen sfeer. In **het Sneeuwveld** (witte grond, besneeuwde dennen, sneeuw in plaats van regen) krijg je 30% sneller honger, behalve bij een kampvuur. In **het Moeras** loop je langzamer, maar vissen bijten sneller. In **het Duistere Bos** bevatten kisten betere zwaarden. Een melding laat zien waar je binnenloopt; wie alle vier bezoekt krijgt een prestatie.
+
+**Ruïnes en kerkerkisten**: op het eiland staan vijf oude ruïnes (△ op de kaart zodra je ze gezien hebt). Open je de kerkerkist, dan ontwaken de bewakers: skeletten, een schutter en bij hogere golven een hondenjager of bosmonster. Versla ze allemaal en de kist opent: een zwaard dat minstens zeldzaam is, plus erts en hout. Daarna is de kist 20 minuten leeg.
+
+**Weer**: het weer wisselt per kamer: helder, regen (vissen bijten sneller), mist (je ziet minder ver) en onweer. Bij onweer slaat de bliksem in de buurt van spelers in: een gele cirkel waarschuwt een seconde van tevoren. Wie erin staat raakt gewond (rol weg!), monsters krijgen flinke schade en bomen worden geveld.
+
+**Reizende handelaar**: af en toe komt er een handelaar met een kar langs (paars op de kaart, 4 minuten). Hij verkoopt vier van deze zes waren: een mysterieuze kist (minstens zeldzaam zwaard), Krachtelixer (5 min 25% meer schade), Windthee (3 min 20% sneller), een zak erts, een hondenkoekje en drie drankjes.
+
 **Niveaus en talenten**: alles wat je doet levert ervaring op (monsters, dieren, bomen, kisten, vissen, erts, bouwen, golven en opdrachten). Elk nieuw niveau (tot 30) geeft een talentpunt dat je in het pauzemenu (tab Talenten) of in de lobby besteedt: Kracht (meer schade), Taaiheid (meer levens), Vlugheid (sneller lopen en rollen), IJzeren maag (minder honger), Houthakker (meer hout), Mijnwerker (meer erts) en Baasje (sterkere hond). Opnieuw verdelen kan altijd gratis.
 
 **Dagelijkse opdrachten**: elke dag (Nederlandse tijd) krijg je drie opdrachten, zoals "Versla 25 monsters" of "Vang 5 vissen". Ze staan rechts in beeld, in het pauzemenu en in de lobby. Voltooi je er een, dan krijg je meteen hout en ervaring.

@@ -11,6 +11,7 @@ import { createHud } from './hud.js';
 import { createBuildSystem } from './buildmode.js';
 import { levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
 import { renderTalents, renderQuests } from './progressui.js';
+import { createWorldFx } from './worldfx.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -68,8 +69,12 @@ export async function startGame({ net, joined, user }) {
       const sand = [0.55 + 0.08 * n, 0.48 + 0.07 * n, 0.30 + 0.05 * n], rock = [0.36 + 0.1 * n, 0.34 + 0.09 * n, 0.31 + 0.08 * n];
       let c = grass.map((g, k) => lerp(g, dry[k], sstep(5, 13, h) * 0.6));
       c = c.map((v, k) => lerp(v, sand[k], 1 - sstep(0.2, 1.1, h)));
+      const bw = W.biomeW(x, z), land = sstep(0.4, 1.4, h);
+      if (bw.dark > 0) c = c.map((v, k) => lerp(v, [0.08 + 0.04 * n, 0.19 + 0.06 * n, 0.08 + 0.03 * n][k], bw.dark * land));
+      if (bw.swamp > 0) c = c.map((v, k) => lerp(v, [0.23 + 0.06 * n, 0.25 + 0.06 * n, 0.12 + 0.03 * n][k], bw.swamp * land));
       const rockT = Math.max(sstep(0.9, 0.7, ny), sstep(13, 17, h));
       c = c.map((v, k) => lerp(v, rock[k], rockT));
+      if (bw.snow > 0) c = c.map((v, k) => lerp(v, [0.86 + 0.06 * n, 0.89 + 0.05 * n, 0.93 + 0.04 * n][k], bw.snow * land * (1 - rockT * 0.6)));
       col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2];
     }
     tGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -89,7 +94,8 @@ export async function startGame({ net, joined, user }) {
     let nt = 0, nf = 0;
     for (let tries = 0; tries < 60000 && (nt < TUFT_N || nf < FLOW_N); tries++) {
       const x = (rng() - 0.5) * (WORLD - 20), z = (rng() - 0.5) * (WORLD - 20), h = heightAt(x, z);
-      if (h < 0.7 || h > 12 || slopeAt(x, z) > 0.6 || Math.hypot(x - W.shop.x, z - W.shop.z) < 3.6) continue;
+      if (h < 0.7 || h > 12 || slopeAt(x, z) > 0.6 || Math.hypot(x - W.shop.x, z - W.shop.z) < 3.6 || Math.hypot(x - W.smith.x, z - W.smith.z) < 3.2) continue;
+      if (W.biomeW(x, z).snow > 0.55 && rng() < 0.85) continue;
       dummy.position.set(x, h - 0.03, z); dummy.rotation.set((rng() - 0.5) * 0.4, rng() * 6.28, (rng() - 0.5) * 0.4);
       const s = 0.45 + rng() * 0.6; dummy.scale.set(s, s * (0.8 + rng() * 0.7), s); dummy.updateMatrix();
       if (nf < FLOW_N && rng() < 0.1) { flowers.setMatrixAt(nf, dummy.matrix); c.setHSL([0.0, 0.12, 0.62, 0.86, 0.15][Math.floor(rng() * 5)], 0.75, 0.62); flowers.setColorAt(nf, c); nf++; }
@@ -127,7 +133,7 @@ export async function startGame({ net, joined, user }) {
   const kit = M.makeTreeKit(seed);
   for (const fm of M.foliageMats) G.wind(fm, 'leaf');
   const treeObjs = W.trees.map(t => {
-    const o = M.buildTree(kit, t.type, t.vi, t.scale, t.rotY);
+    const o = M.buildTree(kit, t.type, t.vi, t.scale, t.rotY, t.biome);
     o.group.position.set(t.x, t.y - 0.1, t.z); scene.add(o.group);
     return { t, ...o, felled: false, fall: null, shake: 0, stump: null };
   });
@@ -233,6 +239,7 @@ export async function startGame({ net, joined, user }) {
     roll: () => noise(0.3, 0.08, 600),
     clang: () => { tone(1400, 0.18, 'square', 0.05, -300); tone(2100, 0.25, 'triangle', 0.04, -500); noise(0.08, 0.1, 4000); },
     arrow: () => noise(0.12, 0.05, 3500),
+    thunder: (v = 1) => { noise(1.8, 0.45 * v, 180); noise(0.35, 0.3 * v, 900); tone(40, 1.6, 'sine', 0.25 * v, -15); },
     rumble: () => { noise(0.9, 0.25, 220); tone(55, 0.9, 'sine', 0.2, -20); },
     chop: () => { noise(0.12, 0.28, 700); tone(150, 0.12, 'triangle', 0.22, -70); },
     hit: () => { noise(0.1, 0.22, 1800); tone(220, 0.1, 'square', 0.08, -120); },
@@ -327,6 +334,8 @@ export async function startGame({ net, joined, user }) {
     $('hubar').firstElementChild.style.width = clamp(you.hu, 0, 100) + '%'; $('hubar').lastElementChild.textContent = 'Honger ' + Math.round(you.hu);
     $('hubar').classList.toggle('low', you.hu < 25);
     $('score').textContent = '⭐ Punten: ' + you.sc;
+    const bfc = $('buffchip'), bf = you.bf || null; bfc.classList.toggle('on', !!bf);
+    if (bf) bfc.textContent = (bf.elixir ? '⚗️ ' + fmt(bf.elixir) + ' ' : '') + (bf.haste ? '🍵 ' + fmt(bf.haste) : '');
     const w = $('wave');
     w.classList.toggle('fight', wave.ph === 1);
     const wm = wave.ph === 1 && wave.mod ? WAVE_MODS.find(x => x.id === wave.mod) : null;
@@ -583,10 +592,11 @@ export async function startGame({ net, joined, user }) {
   });
   net.on('inv', m => {
     inv.ore = m.ore | 0; inv.xp = m.xp | 0; inv.tal = m.tal || {}; inv.daily = m.daily || null; inv.ach = m.ach || {};
-    if (smithOpen) renderSmith();
-    if (veil.classList.contains('on')) renderPauseTabs();
     inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
-    renderInv(); rebuildHeld(); if (shopOpen) renderShop();
+    renderInv(); rebuildHeld(); if (shopOpen && !smithOpen && !(wfx && wfx.traderOpen)) renderShop();
+    if (smithOpen) renderSmith();
+    if (wfx && wfx.traderOpen) wfx.renderTrader();
+    if (veil.classList.contains('on')) renderPauseTabs();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
   net.on('pjoin', m => { names.set(m.id, m.name); looks.set(m.id, m.look | 0); toast('<b>' + esc(m.name) + '</b> doet mee.', '#6fd37a'); });
@@ -613,6 +623,7 @@ export async function startGame({ net, joined, user }) {
     if (m.kind === 'wood') toast('🪵 <b>' + m.n + ' hout</b> in de kist.', '#c89a5e');
     else if (m.kind === 'meat') toast('🍖 <b>' + m.n + ' vlees</b> in de kist.', '#e58b7b');
     else if (m.kind === 'empty') toast('De kist is leeg. Alleen stof en spinnenwebben.', '#999');
+    else if (m.kind === 'dungeon') { toast('🏛️ Kerkerbuit: <b>+' + m.ore + ' erts</b> en <b>+' + m.wood + ' hout</b>', '#ffd27a'); }
     else if (m.kind === 'ore') { toast('⛏️ <b>+' + m.n + ' erts</b>', '#c9a46a'); sfx.coin(); }
     else {
       const sw = m.sword, R = RARITIES[sw.rarity];
@@ -741,7 +752,7 @@ export async function startGame({ net, joined, user }) {
   net.on('_close', () => { /* main.js toont de melding */ });
 
   /* ================================================================ invoer */
-  let hud = null, bs = null;
+  let hud = null, bs = null, wfx = null;
   const keys = {}; let locked = false, soft = false, shopOpen = false;
   const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false };
   const drag = { down: false, moved: 0 };
@@ -888,7 +899,7 @@ export async function startGame({ net, joined, user }) {
   }
   const feedDog = () => net.send({ t: 'feeddog' });
   function interact() {
-    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
+    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (wfx.findRuin()) net.send({ t: 'ruin', i: wfx.findRuin().R.idx }); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else if (wfx.nearTrader()) wfx.openTrader(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
 
   /* ================================================================ winkel */
   const shopEl = $('shop');
@@ -917,6 +928,7 @@ export async function startGame({ net, joined, user }) {
   }
   function closeShop(relock = true) {
     if (!shopOpen) return;
+    if (wfx && wfx.traderOpen) { wfx.closeTrader(); return; }
     shopOpen = false; smithOpen = false; shopEl.classList.remove('on'); $('smith').classList.remove('on');
     if (relock && !isTouch && !soft) requestLock();
   }
@@ -1078,6 +1090,7 @@ export async function startGame({ net, joined, user }) {
     W, WORLD, WATER, player, net, myId, names, isTouch, chestObjs, remotes, dogs, mons, colorForName: M.colorForName,
     extraMarkers: () => {
       const out = bs ? bs.markers() : [];
+      if (wfx) out.push(...wfx.markers());
       out.push({ x: W.smith.x, z: W.smith.z, kind: 'smith' });
       for (const r of oreObjs) if (!r.empty && (r.seen || (r.seen = Math.abs(r.o.x - player.x) < 40 && Math.abs(r.o.z - player.z) < 40))) out.push({ x: r.o.x, z: r.o.z, kind: 'ore' });
       return out;
@@ -1089,6 +1102,13 @@ export async function startGame({ net, joined, user }) {
     scene, M, W, G, net, player, inv, myName: joined.you.name, heightAt, camera, joined, treeObjs, isTouch,
     chips, sparkles, sfx, toast,
     onToggle: on => { if (on) { swing.t = 1; } renderInv(); },
+  });
+  wfx = createWorldFx({
+    scene, M, W, G, net, player, heightAt, camera, sfx, sparkles, chips, toast, banner, CH, joined, inv, myId,
+    onPanel: on => {
+      if (on) { shopOpen = true; player.vx = player.vz = 0; virt.x = virt.y = 0; showVeil(false); if (document.pointerLockElement) document.exitPointerLock(); }
+      else { shopOpen = false; if (!isTouch && !soft) requestLock(); }
+    },
   });
   net.on('correct', m => { player.x = m.x; player.y = m.y; player.z = m.z; player.vx = player.vz = player.vy = 0; });
 
@@ -1103,7 +1123,7 @@ export async function startGame({ net, joined, user }) {
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
-    pollPad(dt); hud.update(dt); bs.update(dt, time);
+    pollPad(dt); hud.update(dt); bs.update(dt, time); wfx.update(dt, time);
     if (locked && !dead && !shopOpen && !hud.chatOpen) {
       const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
       const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;   // joystick omhoog = vooruit
@@ -1112,7 +1132,7 @@ export async function startGame({ net, joined, user }) {
       let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
       const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
       const rooted = performance.now() / 1000 < (player.rootUntil || 0);
-      const sp = rooted ? 0 : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
+      const sp = rooted ? 0 : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
       if (player.roll) {
         const R = player.roll; R.t += dt; const v = 15 * (1 - 0.45 * R.t / 0.38);
         player.vx = R.dx * v; player.vz = R.dz * v;
@@ -1323,7 +1343,7 @@ export async function startGame({ net, joined, user }) {
     const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
     const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
     if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
-    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && nearSmith(); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
+    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && (nearSmith() || wfx.nearTrader() || !!wfx.findRuin()); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
     if (isTouch && Math.floor(time * 4) !== Math.floor((time - dt) * 4)) $('tb-roll').classList.toggle('cd', performance.now() / 1000 < rollReadyAt);
     if (bs.active && locked && !dead && !shopOpen) { /* bouwmodus regelt de aanwijzing */ }
     else if (performance.now() / 1000 < (player.rootUntil || 0) && !dead) { pr.innerHTML = '<b style="color:#9adf6a">Vastgegroeid!</b>'; pr.classList.add('on'); }
@@ -1339,6 +1359,8 @@ export async function startGame({ net, joined, user }) {
     } else
     if (ch) { pr.innerHTML = isTouch ? 'Kist openen' : '<b>E</b> · kist openen'; pr.classList.add('on'); }
     else if (sh) { pr.innerHTML = isTouch ? 'Winkel openen' : '<b>E</b> · winkel openen'; pr.classList.add('on'); }
+    else if (locked && !dead && !shopOpen && wfx.findRuin()) { pr.innerHTML = wfx.ruinPrompt(wfx.findRuin(), isTouch); pr.classList.add('on'); }
+    else if (locked && !dead && !shopOpen && wfx.nearTrader()) { pr.innerHTML = isTouch ? 'Handelaar (X)' : '<b>E</b> · reizende handelaar'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && nearSmith()) { pr.innerHTML = isTouch ? 'Smid (X)' : '<b>E</b> · naar de smid'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
     else pr.classList.remove('on');
@@ -1410,6 +1432,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { hud, bs, fx, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { hud, bs, fx, wfx: () => wfx, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }
