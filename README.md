@@ -39,6 +39,12 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
 
+**Hondenrassen en commando's**: elke zwerfhond heeft een ras (zie de aanwijzing voordat je hem temt): Herder (evenwichtig), Jachthond (snel, jaagt zelf op dieren), Waakhond (veel levens, monsters vallen hem aan in plaats van jou) of Speurneus (vindt kisten en erts van ver). Met `V` (mobiel: 🐕) geef je commando's: 1 Volg, 2 Blijf (bewaakt die plek), 3 Val aan (het monster waar je naar kijkt) en 4 Zoek (hij rent naar een ongeopende kist, of bij een speurneus ook een ertsader, en zet een 📍 op je kaart).
+
+**Samen spelen**: in het pauzemenu (tab Geven) geef je hout, vlees, vis, erts, drankjes of een zwaard aan een speler binnen 8 meter; ruilen is allebei iets geven. Bij het startpunt staat de **gemeenschapskist**: iedereen spaart er hout in (300, daarna steeds 150 meer). Is hij vol, dan krijgt de hele kamer een feestmaal: vol gegeten, 2 drankjes en 10 minuten 10% meer schade en 10% minder schade. In de vaste kamers blijft de stand bewaard.
+
+**Arena**: ergens niet ver van het midden ligt een zandcirkel met vlaggen (⭕ op de kaart). Alleen daar kun je andere spelers raken. Wie verliest valt niet echt: hij staat met volle levens buiten de ring en verliest niets. Duelwinsten tellen voor de prestatie Kampioen.
+
 **Gebieden**: het midden van het eiland is gewoon bos; daaromheen liggen drie gebieden met een eigen sfeer. In **het Sneeuwveld** (witte grond, besneeuwde dennen, sneeuw in plaats van regen) krijg je 30% sneller honger, behalve bij een kampvuur. In **het Moeras** loop je langzamer, maar vissen bijten sneller. In **het Duistere Bos** bevatten kisten betere zwaarden. Een melding laat zien waar je binnenloopt; wie alle vier bezoekt krijgt een prestatie.
 
 **Ruïnes en kerkerkisten**: op het eiland staan vijf oude ruïnes (△ op de kaart zodra je ze gezien hebt). Open je de kerkerkist, dan ontwaken de bewakers: skeletten, een schutter en bij hogere golven een hondenjager of bosmonster. Versla ze allemaal en de kist opent: een zwaard dat minstens zeldzaam is, plus erts en hout. Daarna is de kist 20 minuten leeg.
@@ -80,6 +86,6 @@ Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaa
 ## Beheer
 - Data: volume `swordwoods-data` (bestand `db.json`). Maak hier een back-up van. Wachtwoorden zijn gehasht (scrypt).
 - Zet er bij internetgebruik een reverse proxy met HTTPS voor (Caddy, Traefik, nginx). WebSockets (`/ws`) moeten doorgelaten worden. Zonder HTTPS gaan wachtwoorden onversleuteld over het netwerk.
-- Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`, `MAX_SPEED`. Voor testen: `ALLOW_CHEATS=1` zet chatcommando's aan (`/spawn <type> [aantal]`, `/golf [modificatie]`, `/hout <n>`, `/erts <n>`, `/xp <n>`, `/zwaard <0-4>`, `/god`); nooit aanzetten op een openbare server.
+- Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`, `MAX_SPEED`. Voor testen: `ALLOW_CHEATS=1` zet chatcommando's aan (`/spawn <type> [aantal]`, `/golf [modificatie]`, `/hout <n>`, `/erts <n>`, `/xp <n>`, `/zwaard <0-4>`, `/hond [ras]`, `/weer <soort>`, `/handelaar`, `/god`); nooit aanzetten op een openbare server.
 - Gezondheidscheck: `/api/health`. Ranglijst: `/api/leaderboard`.
 - De positie van spelers wordt door de client bepaald; de server controleert gevechten, loot, honger én snelheid: wie sneller beweegt dan rennen (`MAX_SPEED`, standaard 12 m/s) wordt teruggezet. Chat is beperkt tot 140 tekens en één bericht per 0,8 seconde.

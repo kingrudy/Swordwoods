@@ -82,6 +82,9 @@ export const ACHIEVEMENTS = [
   { id: 'niveau10',   icon: '⭐', name: 'Ervaren',           desc: 'Bereik niveau 10',                test: s => levelInfo(s.xp | 0).level >= 10 },
   { id: 'kerker',     icon: '🏛️', name: 'Grafrover',         desc: 'Plunder een kerkerkist',          test: s => st(s, 'dungeons') >= 1 },
   { id: 'reiziger',   icon: '🧭', name: 'Ontdekkingsreiziger', desc: 'Bezoek alle vier de gebieden',  test: s => Object.keys(s.biomes || {}).length >= 4 },
+  { id: 'kampioen',   icon: '🏆', name: 'Kampioen',          desc: 'Win 10 duels in de arena',        test: s => st(s, 'pvpWins') >= 10 },
+  { id: 'gul',        icon: '🎁', name: 'Gulle gever',       desc: 'Geef 5 keer iets aan een ander',  test: s => st(s, 'gifts') >= 5 },
+  { id: 'feest',      icon: '🍗', name: 'Feestbeest',        desc: 'Vier een feestmaal in je kamer',  test: s => st(s, 'feasts') >= 1 },
   { id: 'opdrachten', icon: '📅', name: 'Plichtsgetrouw',    desc: 'Voltooi 10 dagelijkse opdrachten', test: s => st(s, 'quests') >= 10 },
 ];
 

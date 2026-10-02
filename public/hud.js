@@ -65,6 +65,8 @@ export function createHud(ctx) {
       case 'monster': c.fillStyle = m.boss ? '#ff5a2a' : '#e0413a'; c.beginPath(); c.arc(0, 0, (m.boss ? 4.5 : 2.5) * s, 0, 7); c.fill(); break;
       case 'smith': c.fillStyle = '#ff8a3a'; c.fillRect(-4 * s, -4 * s, 8 * s, 8 * s); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(-4 * s, -4 * s, 8 * s, 8 * s); break;
       case 'ore': c.fillStyle = '#9fd0ff'; c.beginPath(); c.moveTo(0, -3.5 * s); c.lineTo(3 * s, 0); c.lineTo(0, 3.5 * s); c.lineTo(-3 * s, 0); c.fill(); break;
+      case 'pot': c.fillStyle = '#ffd27a'; c.beginPath(); c.arc(0, 0, 4 * s, 0, 7); c.fill(); c.strokeStyle = '#7a4a10'; c.lineWidth = 1.5; c.stroke(); break;
+      case 'arena': c.strokeStyle = '#ff7a5a'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, 5 * s, 0, 7); c.stroke(); break;
       case 'build': c.fillStyle = m.color || '#b98a52'; c.fillRect(-2 * s, -2 * s, 4 * s, 4 * s); break;
       case 'bed': c.fillStyle = '#e58b7b'; c.fillRect(-3 * s, -2 * s, 6 * s, 4 * s); break;
     }
@@ -157,5 +159,5 @@ export function createHud(ctx) {
     acc += dt;
     if (acc > 1 / 15) { acc = 0; drawMini(); if (bigOpen) drawBig(); }
   }
-  return { markers, update, openChat, closeChat, toggleBig, get chatOpen() { return chatOpen; }, get bigOpen() { return bigOpen; }, pings, addLine };
+  return { discover: i => discovered.add(i), markers, update, openChat, closeChat, toggleBig, get chatOpen() { return chatOpen; }, get bigOpen() { return bigOpen; }, pings, addLine };
 }

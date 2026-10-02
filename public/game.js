@@ -12,6 +12,8 @@ import { createBuildSystem } from './buildmode.js';
 import { levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
 import { renderTalents, renderQuests } from './progressui.js';
 import { createWorldFx } from './worldfx.js';
+import { createSocial } from './social.js';
+import { breedOf, DOG_BREEDS } from './items.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -335,7 +337,7 @@ export async function startGame({ net, joined, user }) {
     $('hubar').classList.toggle('low', you.hu < 25);
     $('score').textContent = '⭐ Punten: ' + you.sc;
     const bfc = $('buffchip'), bf = you.bf || null; bfc.classList.toggle('on', !!bf);
-    if (bf) bfc.textContent = (bf.elixir ? '⚗️ ' + fmt(bf.elixir) + ' ' : '') + (bf.haste ? '🍵 ' + fmt(bf.haste) : '');
+    if (bf) bfc.textContent = (bf.feast ? '🍗 ' + fmt(bf.feast) + ' ' : '') + (bf.elixir ? '⚗️ ' + fmt(bf.elixir) + ' ' : '') + (bf.haste ? '🍵 ' + fmt(bf.haste) : '');
     const w = $('wave');
     w.classList.toggle('fight', wave.ph === 1);
     const wm = wave.ph === 1 && wave.mod ? WAVE_MODS.find(x => x.id === wave.mod) : null;
@@ -530,16 +532,16 @@ export async function startGame({ net, joined, user }) {
   function syncDogs(list) {
     const seen = new Set();
     for (const a of list) {
-      const [id, x, z, yaw, hp, maxhp, owner, state, level, name, , boost] = a; seen.add(id);
+      const [id, x, z, yaw, hp, maxhp, owner, state, level, name, , boost, bi] = a; seen.add(id);
       let e = dogs.get(id);
       if (e && e.owner !== owner) { killEnt(dogs, id); e = null; }
       if (!e) e = makeDog(a);
-      e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp; e.state = state; e.level = level; e.boost = boost | 0;
+      e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp; e.state = state; e.level = level; e.boost = boost | 0; e.breed = (DOG_BREEDS[bi] || DOG_BREEDS[0]);
       const key = owner ? name + '|' + level + '|' + owner : '';
       if (key !== e.labelKey) {
         e.labelKey = key;
         if (e.label) { e.group.remove(e.label); e.label.material.map.dispose(); e.label = null; }
-        if (owner) { const own = owner === myId; e.label = M.makeLabel(name + ' · nv ' + level + (own ? '' : ' (' + (names.get(owner) || '?') + ')'), own ? '#ffd27a' : '#ffffff'); e.label.position.y = 1.25; e.group.add(e.label); }
+        if (owner) { const own = owner === myId; e.label = M.makeLabel(name + ' · ' + e.breed.name + ' · nv ' + level + (own ? '' : ' (' + (names.get(owner) || '?') + ')'), own ? '#ffd27a' : '#ffffff'); e.label.position.y = 1.25; e.group.add(e.label); }
       }
       if (owner === myId) { const was = myDogHp && myDogHp.down; myDogHp = { hp: hp, max: maxhp, down: state === 2, boost: boost | 0 }; if (was !== myDogHp.down || Math.random() < 0.2) renderDogChip(); }
     }
@@ -752,7 +754,7 @@ export async function startGame({ net, joined, user }) {
   net.on('_close', () => { /* main.js toont de melding */ });
 
   /* ================================================================ invoer */
-  let hud = null, bs = null, wfx = null;
+  let hud = null, bs = null, wfx = null, soc = null;
   const keys = {}; let locked = false, soft = false, shopOpen = false;
   const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false };
   const drag = { down: false, moved: 0 };
@@ -822,6 +824,9 @@ export async function startGame({ net, joined, user }) {
     if (e.code === 'KeyM') hud.toggleBig();
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyT') { e.preventDefault(); hud.openChat(); }
     if (e.code === 'KeyB') bs.toggle();
+    if (e.code === 'KeyV') { soc.toggleDogMenu(); return; }
+    if (soc.dogMenu && /^Digit[1-4]$/.test(e.code)) { soc.command(['follow', 'stay', 'attack', 'seek'][+e.code[5] - 1]); return; }
+    if (soc.dogMenu && e.code === 'Escape') { soc.toggleDogMenu(false); return; }
     if (/^Digit[1-9]$/.test(e.code)) { if (bs.active) bs.select(+e.code[5] - 1); else equipSlot(+e.code[5] - 1); }
   });
   addEventListener('keyup', e => { keys[e.code] = false; });
@@ -899,7 +904,7 @@ export async function startGame({ net, joined, user }) {
   }
   const feedDog = () => net.send({ t: 'feeddog' });
   function interact() {
-    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (wfx.findRuin()) net.send({ t: 'ruin', i: wfx.findRuin().R.idx }); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else if (wfx.nearTrader()) wfx.openTrader(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
+    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (wfx.findRuin()) net.send({ t: 'ruin', i: wfx.findRuin().R.idx }); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else if (wfx.nearTrader()) wfx.openTrader(); else if (soc.nearPot()) soc.openPot(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
 
   /* ================================================================ winkel */
   const shopEl = $('shop');
@@ -929,6 +934,7 @@ export async function startGame({ net, joined, user }) {
   function closeShop(relock = true) {
     if (!shopOpen) return;
     if (wfx && wfx.traderOpen) { wfx.closeTrader(); return; }
+    if (soc && soc.potOpen) { soc.closePot(); return; }
     shopOpen = false; smithOpen = false; shopEl.classList.remove('on'); $('smith').classList.remove('on');
     if (relock && !isTouch && !soft) requestLock();
   }
@@ -967,7 +973,8 @@ export async function startGame({ net, joined, user }) {
   let ptab = isTouch ? 'tal' : 'keys';
   function renderPauseTabs() {
     for (const b of document.querySelectorAll('#ptabs [data-pt]')) b.classList.toggle('on', b.dataset.pt === ptab);
-    for (const t of ['keys', 'tal', 'quest']) $('pt-' + t).classList.toggle('on', t === ptab);
+    for (const t of ['keys', 'tal', 'quest', 'give']) $('pt-' + t).classList.toggle('on', t === ptab);
+    if (ptab === 'give' && soc) soc.renderGive($('pt-give'));
     const free = talentPoints(levelInfo(inv.xp).level) - spentPoints(inv.tal);
     $('pt-free').textContent = free > 0 ? '(' + free + ')' : '';
     if (ptab === 'tal') renderTalents($('pt-tal'), inv, m => net.send(m));
@@ -1043,6 +1050,7 @@ export async function startGame({ net, joined, user }) {
     press('tb-sprint', () => { virt.toggle = !virt.toggle; $('tb-sprint').classList.toggle('on', virt.toggle); });
     press('tb-next', () => { if (bs.active) bs.cycle(1); else cycleWeapon(1); });
     press('tb-build', () => bs.toggle());
+    press('tb-dog', () => soc.toggleDogMenu());
     press('tb-menu', () => { home(); pauseGame(); });
     press('tb-invite', () => { home(); inviteFromGame(); });
     press('tb-chat', () => { home(); virt.x = virt.y = 0; hud.openChat(); });
@@ -1091,6 +1099,7 @@ export async function startGame({ net, joined, user }) {
     extraMarkers: () => {
       const out = bs ? bs.markers() : [];
       if (wfx) out.push(...wfx.markers());
+      if (soc) out.push(...soc.markers());
       out.push({ x: W.smith.x, z: W.smith.z, kind: 'smith' });
       for (const r of oreObjs) if (!r.empty && (r.seen || (r.seen = Math.abs(r.o.x - player.x) < 40 && Math.abs(r.o.z - player.z) < 40))) out.push({ x: r.o.x, z: r.o.z, kind: 'ore' });
       return out;
@@ -1110,6 +1119,14 @@ export async function startGame({ net, joined, user }) {
       else { shopOpen = false; if (!isTouch && !soft) requestLock(); }
     },
   });
+  soc = createSocial({
+    scene, M, W, G, net, player, inv, names, remotes, mons, dogs, myId, heightAt, sfx, sparkles, toast, banner, joined, hud, addPopup, flash,
+    onOreFound: i => { if (oreObjs[i]) oreObjs[i].seen = true; },
+    onPanel: on => {
+      if (on) { shopOpen = true; player.vx = player.vz = 0; virt.x = virt.y = 0; showVeil(false); if (document.pointerLockElement) document.exitPointerLock(); }
+      else { shopOpen = false; if (!isTouch && !soft) requestLock(); }
+    },
+  });
   net.on('correct', m => { player.x = m.x; player.y = m.y; player.z = m.z; player.vx = player.vz = player.vy = 0; });
 
   if (isTouch) setupTouch();
@@ -1123,7 +1140,7 @@ export async function startGame({ net, joined, user }) {
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
-    pollPad(dt); hud.update(dt); bs.update(dt, time); wfx.update(dt, time);
+    pollPad(dt); hud.update(dt); bs.update(dt, time); wfx.update(dt, time); soc.update(dt, time);
     if (locked && !dead && !shopOpen && !hud.chatOpen) {
       const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
       const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;   // joystick omhoog = vooruit
@@ -1343,7 +1360,7 @@ export async function startGame({ net, joined, user }) {
     const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
     const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
     if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
-    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && (nearSmith() || wfx.nearTrader() || !!wfx.findRuin()); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
+    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && (nearSmith() || wfx.nearTrader() || !!wfx.findRuin() || soc.nearPot()); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
     if (isTouch && Math.floor(time * 4) !== Math.floor((time - dt) * 4)) $('tb-roll').classList.toggle('cd', performance.now() / 1000 < rollReadyAt);
     if (bs.active && locked && !dead && !shopOpen) { /* bouwmodus regelt de aanwijzing */ }
     else if (performance.now() / 1000 < (player.rootUntil || 0) && !dead) { pr.innerHTML = '<b style="color:#9adf6a">Vastgegroeid!</b>'; pr.classList.add('on'); }
@@ -1354,12 +1371,14 @@ export async function startGame({ net, joined, user }) {
       pr.innerHTML = inv.up.rod ? (isTouch ? 'Vissen (X)' : '<b>E</b> · vissen') : 'Hier kun je vissen. Koop een vishengel in de winkel.'; pr.classList.add('on');
     } else
     if (wd) {
-      const txt = inv.dog ? 'Je hebt al een hond' : inv.meat > 0 ? 'hond vlees geven en temmen' : 'Deze hond wil vlees. Jaag eerst op een dier.';
+      const br = wd.breed ? ' (' + wd.breed.name + ': ' + wd.breed.desc + ')' : '';
+      const txt = (inv.dog ? 'Je hebt al een hond' : inv.meat > 0 ? 'hond vlees geven en temmen' : 'Deze hond wil vlees. Jaag eerst op een dier.') + br;
       pr.innerHTML = inv.dog || inv.meat <= 0 ? txt : (isTouch ? 'Hond temmen (1 vlees)' : '<b>E</b> · ' + txt); pr.classList.add('on');
     } else
     if (ch) { pr.innerHTML = isTouch ? 'Kist openen' : '<b>E</b> · kist openen'; pr.classList.add('on'); }
     else if (sh) { pr.innerHTML = isTouch ? 'Winkel openen' : '<b>E</b> · winkel openen'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && wfx.findRuin()) { pr.innerHTML = wfx.ruinPrompt(wfx.findRuin(), isTouch); pr.classList.add('on'); }
+    else if (locked && !dead && !shopOpen && soc.nearPot()) { pr.innerHTML = (isTouch ? 'Gemeenschapskist (X)' : '<b>E</b> · gemeenschapskist') + ' · ' + soc.pot.have + '/' + soc.pot.goal + ' hout'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && wfx.nearTrader()) { pr.innerHTML = isTouch ? 'Handelaar (X)' : '<b>E</b> · reizende handelaar'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && nearSmith()) { pr.innerHTML = isTouch ? 'Smid (X)' : '<b>E</b> · naar de smid'; pr.classList.add('on'); }
     else if (locked && !dead && !shopOpen && you.hu < 35) { pr.innerHTML = inv.meat > 0 ? '<b>R</b> · vlees eten (je hebt honger)' : 'Je hebt honger. Jaag op konijnen, herten en everzwijnen.'; pr.classList.add('on'); }
@@ -1432,6 +1451,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { hud, bs, fx, wfx: () => wfx, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { hud, bs, fx, wfx: () => wfx, soc: () => soc, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

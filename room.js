@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer: spelers, monsterjacht in golven, dieren, honger, bomen en kisten.
 
 import { createWorld, HALF, WATER } from './public/world.js';
-import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX, TRADER_ITEMS, WEATHERS, BIOMES, WAVE_MODS, HEAVY_MUL, ROLL_CD, ROLL_IFRAME, BLOCK_MELEE } from './public/items.js';
+import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX, TRADER_ITEMS, WEATHERS, BIOMES, DOG_BREEDS, breedOf, potGoal, FEAST_SEC, WAVE_MODS, HEAVY_MUL, ROLL_CD, ROLL_IFRAME, BLOCK_MELEE } from './public/items.js';
 import { levelInfo, XP, TALENTS, TALENT_BY_ID, talentPoints, spentPoints, tal, maxHp, today, dailyQuests, ACHIEVEMENTS, FORGE_MAX, forgeCost, forgeGain, meltValue, swordLabel } from './public/progress.js';
 import { BUILDS, BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, pushOut, canPlace, boundR } from './public/builds.js';
 
@@ -39,9 +39,9 @@ export function ensureSave(u) {
   if (!Array.isArray(s.swords)) s.swords = [];
   s.equip = clamp(s.equip | 0, 0, s.swords.length);
   if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
-  if (s.dog) { s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
+  if (s.dog) { s.dog.breed = breedOf(s.dog.breed).id; s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
   if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) { let h = 0; for (const ch of String(u.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; s.look = h % 4; }
-  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0, bosses: 0, fish: 0, ore: 0, forgedMax: 0, quests: 0, heavyKills: 0, dungeons: 0 }, s.stats || {});
+  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0, bosses: 0, fish: 0, ore: 0, forgedMax: 0, quests: 0, heavyKills: 0, dungeons: 0, pvpWins: 0, pvpLosses: 0, gifts: 0, feasts: 0 }, s.stats || {});
   if (!s.biomes || typeof s.biomes !== 'object') s.biomes = {};
   s.xp = Math.max(0, s.xp | 0); s.ore = Math.max(0, s.ore | 0);
   if (!s.tal || typeof s.tal !== 'object') s.tal = {};
@@ -74,6 +74,7 @@ export class Room {
     this.seed = Number.isInteger(this.store.seed) ? this.store.seed : 1 + Math.floor(Math.random() * 9000);
     this.store.seed = this.seed;
     this.builds = new Map(); this.bid = 1;
+    if (!this.store.pot || typeof this.store.pot !== 'object') this.store.pot = { have: 0, lvl: 1 };
     for (const b of Array.isArray(this.store.builds) ? this.store.builds : []) {
       if (!BUILD_BY_ID[b.kind]) continue;
       const B = BUILD_BY_ID[b.kind], o = { id: this.bid++, kind: b.kind, x: +b.x, z: +b.z, rot: +b.rot || 0, hp: Math.min(B.hp, +b.hp || B.hp), maxhp: B.hp, owner: String(b.owner || ''), nextShot: 0 };
@@ -125,8 +126,8 @@ export class Room {
     if (P.dog) { const st = this.dogStatsFor(P, P.dog.level); P.dog.dmg = st.dmg; const f = P.dog.hp / P.dog.maxhp; P.dog.maxhp = st.maxhp; P.dog.hp = Math.round(st.maxhp * f); }
   }
   dogStatsFor(P, level) {
-    const st = dogStats(level), k = 1 + 0.1 * (P ? tal(P.u.save, 'baasje') : 0);
-    return { ...st, maxhp: Math.round(st.maxhp * k), dmg: st.dmg * k };
+    const st = dogStats(level), k = 1 + 0.1 * (P ? tal(P.u.save, 'baasje') : 0), B = breedOf(P && P.u.save.dog ? P.u.save.dog.breed : 'herder');
+    return { ...st, maxhp: Math.round(st.maxhp * k * B.hp), dmg: st.dmg * k * B.dmg, speed: st.speed * B.spd };
   }
   addXp(P, n) {
     const s = P.u.save, before = levelInfo(s.xp).level;
@@ -200,7 +201,7 @@ export class Room {
     const u = conn.user, s = ensureSave(u);
     const sp = this.world.spawn;
     const P = {
-      id: this.nextPid++, conn, u, name: u.name,
+      id: this.nextPid++, conn, u, name: u.name, isPlayer: true,
       x: sp.x + (Math.random() - 0.5) * 3, z: sp.z + (Math.random() - 0.5) * 3, y: 0, yaw: 0.4, pitch: 0,
       hp: 100, hunger: 80, dead: false, respawnAt: 0, swings: 0, nextSwing: 0, pendingHit: -1, lastHurt: -99, lastEat: -9, starve: 0,
     };
@@ -215,7 +216,7 @@ export class Room {
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look })),
       felled: [...this.felled.keys()], chests: [...this.chestOpen.keys()], ores: [...this.oreBack.keys()],
       builds: [...this.builds.values()].map(b => this.btuple(b)),
-      ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(),
+      ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(), pot: this.potInfo(),
     });
     this.sendInv(P);
     return P;
@@ -287,6 +288,9 @@ export class Room {
       case 'forge': this.forge(P, m.i | 0); break;
       case 'melt': this.melt(P, m.i | 0); break;
       case 'ruin': this.ruin(P, m.i | 0); break;
+      case 'dogcmd': this.dogCmd(P, String(m.c), m.id | 0); break;
+      case 'give': this.give(P, m.to | 0, String(m.what), m.n | 0, m.i | 0); break;
+      case 'deposit': this.deposit(P, m.n | 0); break;
       case 'tbuy': this.traderBuy(P, String(m.id)); break;
       case 'cast': this.cast(P, num(m.x, NaN), num(m.z, NaN)); break;
       case 'reel': this.reel(P); break;
@@ -321,6 +325,8 @@ export class Room {
     };
     for (const m of this.monsters.values()) test(m, MONSTERS[m.type].r, reachM, dotM, 'm');
     for (const a of this.animals.values()) test(a, ANIMALS[a.type].r, reachM, dotM, 'a');
+    if (this.inArena(P)) for (const Q of this.players.values()) if (Q !== P && !Q.dead && this.inArena(Q)) test(Q, 0.4, reachM, dotM, 'p');
+    if (best && kind === 'p') { this.hitPlayer(P, it, best, heavy); return; }
     if (heavy && extra.length > 1) {           // zware slag raakt tot 4 vijanden tegelijk
       extra.sort((a, b) => len(a[0].x - P.x, a[0].z - P.z) - len(b[0].x - P.x, b[0].z - P.z));
       for (const [e, k] of extra.slice(1, 4)) this.hitEnemy(P, it, e, k, true);
@@ -363,6 +369,7 @@ export class Room {
     }
     if (cmd === 'golf') { this.monsters.clear(); this.startWave(a || null); }
     if (cmd === 'god') P.god = !P.god;
+    if (cmd === 'hond' && !P.u.save.dog) { P.u.save.dog = { name: 'Testje', level: 3, xp: 0, fur: 1, breed: breedOf(a).id }; this.spawnOwnedDog(P); this.sendInv(P); }
     if (cmd === 'weer') { this.weather.k = WEATHERS.some(w => w.k === a) ? a : 'onweer'; this.weather.until = this.T + 600; this.weather.bolt = this.T + 2; this.bc({ t: 'weather', k: this.weather.k }); }
     if (cmd === 'handelaar') { this.trader = null; this.traderAt = this.T; }
     if (cmd === 'zwaard') this.giveSword(P, rollSwordOfRarity(Math.max(0, Math.min(4, a | 0))), 'chest');
@@ -371,9 +378,90 @@ export class Room {
     if (cmd === 'hout') { P.u.save.wood += Math.min(10000, a | 0); this.sendInv(P); }
   }
 
+  inArena(P) { const A = this.world.arena; return !!A && len(P.x - A.x, P.z - A.z) < A.r; }
+  hitPlayer(P, it, Q, heavy) {
+    const s = P.u.save, base = it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage;
+    const dmg = Math.max(4, base * 0.5) * (heavy ? 1.8 : 1) * (1 + 0.06 * tal(s, 'kracht')) * (0.9 + Math.random() * 0.2);
+    this.bc({ t: 'ev', k: 'phit', id: Q.id, by: P.id, dmg: Math.round(dmg), heavy: heavy ? 1 : 0 });
+    this.hurt(Q, dmg, P, 'melee');
+  }
+  arenaKO(Q, P) {
+    const A = this.world.arena, a = Math.random() * 6.28;
+    Q.hp = Q.mhp; Q.x = A.x + Math.cos(a) * (A.r + 2.5); Q.z = A.z + Math.sin(a) * (A.r + 2.5); Q.y = this.world.heightAt(Q.x, Q.z); Q.lastInT = this.T; Q.blocking = false;
+    Q.conn.send({ t: 'correct', x: r2(Q.x), y: r2(Q.y), z: r2(Q.z) });
+    P.u.save.stats.pvpWins++; Q.u.save.stats.pvpLosses++;
+    this.bc({ t: 'ev', k: 'duel', w: P.id, l: Q.id });
+    this.toast(P, '⚔️ Je wint het duel van ' + Q.name + '!', '#f2c14e'); this.toast(Q, '⚔️ ' + P.name + ' wint het duel. Je staat buiten de arena.', '#ff9c8a');
+    this.sendInv(P); this.sendInv(Q); this.markDirty();
+  }
+
+  // ------------------------------------------------------------ hond: commando's, geven, gemeenschapskist
+  dogCmd(P, c, id) {
+    const d = P.dog; if (!d || P.dead) return;
+    if (d.state === 'down') return this.toast(P, d.name + ' rust nog uit.', '#bbb');
+    if (c === 'follow') { d.cmd = 'follow'; d.stayAt = null; d.seek = null; d.target = null; }
+    else if (c === 'stay') { d.cmd = 'stay'; d.stayAt = { x: d.x, z: d.z }; d.seek = null; d.target = null; }
+    else if (c === 'attack') {
+      const m = this.monsters.get(id) || this.animals.get(id), isMon = this.monsters.has(id);
+      if (!m || len(m.x - P.x, m.z - P.z) > 40) return this.toast(P, 'Kijk naar een monster om ' + d.name + ' aan te laten vallen.', '#bbb');
+      d.cmd = 'attack'; d.stayAt = null; d.seek = null; d.target = { isMon, e: m, forced: true }; d.retarget = 3;
+    } else if (c === 'seek') {
+      if (this.T < (d.seekCd || 0)) return this.toast(P, d.name + ' snuffelt nog. Probeer het over ' + Math.ceil(d.seekCd - this.T) + ' s opnieuw.', '#bbb');
+      const range = d.breed === 'speur' ? 170 : 90; let best = null, bd = range;
+      this.world.chests.forEach(c2 => { if (this.chestOpen.has(c2.idx)) return; const dd = len(c2.x - P.x, c2.z - P.z); if (dd < bd) { bd = dd; best = { kind: 'chest', i: c2.idx, x: c2.x, z: c2.z }; } });
+      if (d.breed === 'speur') this.world.ores.forEach(o => { if (this.oreLeft[o.idx] <= 0) return; const dd = len(o.x - P.x, o.z - P.z) * 1.15; if (dd < bd) { bd = dd; best = { kind: 'ore', i: o.idx, x: o.x, z: o.z }; } });
+      if (!best) return this.toast(P, d.name + ' vindt niets in de buurt.', '#bbb');
+      d.seekCd = this.T + 30; d.cmd = 'seek'; d.seek = best; d.target = null;
+      this.toast(P, '👃 ' + d.name + ' heeft een spoor! Volg hem.', '#f2c14e');
+    } else return;
+    this.bc({ t: 'ev', k: 'dogcmd', id: d.id, c: d.cmd });
+  }
+  give(P, to, what, n, i) {
+    const Q = this.players.get(to), s = P.u.save;
+    if (!Q || Q === P || P.dead || Q.dead || len(Q.x - P.x, Q.z - P.z) > 8) return this.toast(P, 'Ga dichter bij die speler staan (binnen 8 meter).', '#bbb');
+    const t = Q.u.save; let label = '';
+    if (what === 'sword') {
+      const sw = s.swords[i]; if (!sw) return;
+      if (t.swords.length >= MAX_SWORDS) return this.toast(P, Q.name + ' heeft geen plek meer voor een zwaard.', '#ff9c8a');
+      s.swords.splice(i, 1); if (s.equip === i + 1) s.equip = 0; else if (s.equip > i + 1) s.equip--;
+      t.swords.push(sw); label = sw.name + (sw.f ? ' +' + sw.f : '');
+    } else if (['wood', 'meat', 'fish', 'ore', 'potions'].includes(what)) {
+      n = Math.max(1, Math.min(n, s[what] | 0)); if (!(s[what] > 0)) return;
+      if (what === 'potions') n = Math.min(n, MAX_POTIONS - t.potions); if (n <= 0) return this.toast(P, Q.name + ' kan niet meer drankjes dragen.', '#bbb');
+      s[what] -= n; t[what] = (t[what] | 0) + n;
+      label = n + ' ' + { wood: 'hout', meat: 'vlees', fish: 'vis', ore: 'erts', potions: 'drankje' + (n > 1 ? 's' : '') }[what];
+    } else return;
+    s.stats.gifts++;
+    this.toast(P, '🎁 Je gaf ' + label + ' aan ' + Q.name + '.', '#6fd37a'); this.toast(Q, '🎁 ' + P.name + ' gaf je ' + label + '!', '#6fd37a');
+    this.bc({ t: 'ev', k: 'gift', from: P.id, to: Q.id });
+    this.sendInv(P); this.sendInv(Q); this.markDirty();
+  }
+  potInfo() { const p = this.store.pot; return { have: p.have | 0, goal: potGoal(p.lvl | 0 || 1), lvl: p.lvl | 0 || 1 }; }
+  deposit(P, n) {
+    const W = this.world, s = P.u.save, p = this.store.pot;
+    if (P.dead || len(W.pot.x - P.x, W.pot.z - P.z) > 4.5) return;
+    const goal = potGoal(p.lvl);
+    n = Math.max(0, Math.min(n, s.wood, goal - p.have)); if (!n) return;
+    s.wood -= n; p.have += n; s.stats.spent = (s.stats.spent | 0) + n;
+    this.addXp(P, Math.floor(n / 5));
+    if (p.have >= goal) {
+      p.have = 0; p.lvl++;
+      for (const Q of this.players.values()) {
+        const t = Q.u.save; t.stats.feasts++;
+        if (!Q.dead) { Q.hunger = 100; Q.hp = Q.mhp; }
+        t.potions = Math.min(MAX_POTIONS, t.potions + 2);
+        Q.buffs = Q.buffs || {}; Q.buffs.feast = this.T + FEAST_SEC;
+        this.sendInv(Q);
+      }
+      this.bc({ t: 'ev', k: 'feast', by: P.id, lvl: p.lvl - 1 });
+    }
+    this.bc({ t: 'pot', ...this.potInfo(), by: P.id, n });
+    this.sendInv(P); this.markDirty();
+  }
+
   hitEnemy(P, it, e, kind, heavy) {
     const s = P.u.save, full = P.hunger >= 80 ? 1.15 : 1;   // goed gevoed = iets sterker
-    const dmg = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1) * (1 + 0.06 * tal(s, 'kracht')) * (this.buff(P, 'elixir') ? 1.25 : 1);
+    const dmg = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1) * (1 + 0.06 * tal(s, 'kracht')) * (this.buff(P, 'elixir') ? 1.25 : 1) * (this.buff(P, 'feast') ? 1.1 : 1);
     e.hp -= dmg; e.stun = heavy ? 0.5 : 0.18;
     if (heavy && !(kind === 'm' && e.type === 3)) {          // terugduwen (niet de baas)
       const dx = e.x - P.x, dz = e.z - P.z, d = len(dx, dz) || 1, r = kind === 'm' ? MONSTERS[e.type].r : ANIMALS[e.type].r;
@@ -486,10 +574,10 @@ export class Room {
         if (dmg <= 0) return;
       }
     }
-    dmg *= 1 - SHIELD_REDUCE[P.u.save.up.shield];
+    dmg *= (1 - SHIELD_REDUCE[P.u.save.up.shield]) * (this.buff(P, 'feast') ? 0.9 : 1);
     P.hp -= dmg; P.lastHurt = this.T;
     P.conn.send({ t: 'hurt', dmg: Math.round(dmg), x: src ? r1(src.x) : null, z: src ? r1(src.z) : null });
-    if (P.hp <= 0) this.die(P);
+    if (P.hp <= 0) { if (src && src.isPlayer && this.inArena(P)) this.arenaKO(P, src); else this.die(P); }
   }
 
   die(P) {
@@ -660,7 +748,8 @@ export class Room {
       if (m.retarget <= 0 || !this.targetOk(m.target)) {
         m.retarget = 0.6;
         const dogT = M.hunter ? this.nearest([...this.dogs.values()].filter(d => d.state === 'follow'), m.x, m.z, 80) : null;   // hondenjager: eerst de honden
-        m.target = dogT || this.nearest(alive, m.x, m.z, 400);
+        const taunt = this.nearest([...this.dogs.values()].filter(d => d.state === 'follow' && d.breed === 'waak'), m.x, m.z, 8);   // waakhond trekt de aandacht
+        m.target = dogT || taunt || this.nearest(alive, m.x, m.z, 400);
       }
       const tg = m.target; if (!tg) continue;
       let dx = tg.x - m.x, dz = tg.z - m.z, d = len(dx, dz);
@@ -870,7 +959,8 @@ export class Room {
       const pt = w.landPoint(Math.random, 0, 0, 55, HALF * 0.75, 0.8);
       if (!pt || w.slopeAt(pt.x, pt.z) > 0.5) continue;
       const d = { id: this.eid++, isDog: true, state: 'wild', owner: null, x: pt.x, z: pt.z, home: pt, yaw: Math.random() * 6.28,
-        level: 1, xp: 0, name: 'Zwerfhond', fur: Math.floor(Math.random() * DOG_FURS.length), hp: 60, maxhp: 60, dir: null, wt: 0, nextBark: 0, sit: false };
+        level: 1, xp: 0, name: 'Zwerfhond', fur: Math.floor(Math.random() * DOG_FURS.length), hp: 60, maxhp: 60, dir: null, wt: 0, nextBark: 0, sit: false,
+        breed: DOG_BREEDS[Math.floor(Math.random() * DOG_BREEDS.length)].id };
       this.dogs.set(d.id, d); return d;
     }
     return null;
@@ -878,7 +968,7 @@ export class Room {
   spawnOwnedDog(P) {
     const sd = P.u.save.dog, st = this.dogStatsFor(P, sd.level);
     const d = { id: this.eid++, isDog: true, state: 'follow', owner: P, x: P.x + 1.5, z: P.z + 1.5, yaw: 0, level: sd.level, xp: sd.xp, name: sd.name, fur: sd.fur | 0,
-      hp: st.maxhp, maxhp: st.maxhp, dmg: st.dmg, nextAtk: 0, target: null, retarget: 0, lastFight: -99, downUntil: 0 };
+      hp: st.maxhp, maxhp: st.maxhp, dmg: st.dmg, nextAtk: 0, target: null, retarget: 0, lastFight: -99, downUntil: 0, breed: breedOf(sd.breed).id, cmd: 'follow' };
     this.dogs.set(d.id, d); P.dog = d;
     return d;
   }
@@ -891,7 +981,7 @@ export class Room {
     s.meat--;
     const used = new Set([...this.players.values()].map(p => p.u.save.dog && p.u.save.dog.name));
     const free = DOG_NAMES.filter(n => !used.has(n)), name = (free.length ? free : DOG_NAMES)[Math.floor(Math.random() * (free.length || DOG_NAMES.length))];
-    s.dog = { name, level: 1, xp: 0, fur: d.fur };
+    s.dog = { name, level: 1, xp: 0, fur: d.fur, breed: d.breed || 'herder' };
     s.stats.dogs = (s.stats.dogs | 0) + 1;
     this.dogs.delete(d.id);
     const nd = this.spawnOwnedDog(P); nd.x = d.x; nd.z = d.z; nd.yaw = d.yaw;
@@ -1009,19 +1099,21 @@ export class Room {
       if (this.T - d.lastFight > 5 && d.hp < d.maxhp) d.hp = Math.min(d.maxhp, d.hp + 3 * dt);
       // doel zoeken: monsters bij de baas, of dieren die de baas net heeft geraakt / boze everzwijnen
       d.retarget -= dt;
-      const valid = t => t && (t.isMon ? this.monsters.has(t.e.id) : this.animals.has(t.e.id)) && len(t.e.x - P.x, t.e.z - P.z) < 22;
+      const home = d.cmd === 'stay' && d.stayAt ? d.stayAt : P, range = d.cmd === 'stay' ? 9 : 22;
+      const valid = t => t && (t.isMon ? this.monsters.has(t.e.id) : this.animals.has(t.e.id)) && (t.forced ? len(t.e.x - P.x, t.e.z - P.z) < 45 : len(t.e.x - home.x, t.e.z - home.z) < range);
       if (d.retarget <= 0 || !valid(d.target)) {
         d.retarget = 0.5; d.target = null;
-        let best = null, bd = 16;
-        for (const m of this.monsters.values()) { const dd = len(m.x - P.x, m.z - P.z); if (dd < bd) { bd = dd; best = { isMon: true, e: m }; } }
-        if (!best) for (const a of this.animals.values()) {
-          if (!(a.angry || this.T - a.hurtT < 6)) continue;
-          const dd = len(a.x - P.x, a.z - P.z); if (dd < bd) { bd = dd; best = { isMon: false, e: a }; }
+        let best = null, bd = d.cmd === 'stay' ? 7 : 16;
+        for (const m of this.monsters.values()) { const dd = len(m.x - home.x, m.z - home.z); if (dd < bd) { bd = dd; best = { isMon: true, e: m }; } }
+        if (!best && d.cmd !== 'seek') for (const a of this.animals.values()) {
+          if (!(a.angry || this.T - a.hurtT < 6 || (d.breed === 'jacht' && len(a.x - home.x, a.z - home.z) < 14))) continue;   // jachthond jaagt zelf
+          const dd = len(a.x - home.x, a.z - home.z); if (dd < bd) { bd = dd; best = { isMon: false, e: a }; }
         }
         d.target = best;
+        if (d.cmd === 'attack') d.cmd = 'follow';
       }
       const boosted = (d.boostUntil || 0) > this.T;
-      const speed = dogStats(d.level).speed + (boosted ? 2.5 : 0);
+      const speed = this.dogStatsFor(P, d.level).speed + (boosted ? 2.5 : 0);
       if (d.target && !P.dead) {
         const e = d.target.e, r = d.target.isMon ? MONSTERS[e.type].r : ANIMALS[e.type].r;
         const dx = e.x - d.x, dz = e.z - d.z, dist = len(dx, dz), reach = r + 0.8;
@@ -1040,6 +1132,21 @@ export class Room {
             d.target = null;
           }
         }
+        continue;
+      }
+      // zoeken: naar een kist of ertsader lopen en blaffen
+      if (d.cmd === 'seek' && d.seek) {
+        const g = d.seek, dx = g.x - d.x, dz = g.z - d.z, dist = len(dx, dz);
+        if (dist > 1.8) { const st = Math.min(dist - 1.5, (speed + 1) * dt); this.move(d, d.x + dx / dist * st, d.z + dz / dist * st, 0.35); d.yaw = Math.atan2(-dx, -dz); }
+        else if (!g.found) { g.found = this.T; this.bc({ t: 'ev', k: 'bark', id: d.id, x: r1(d.x), z: r1(d.z) }); P.conn.send({ t: 'ev', k: 'dogfound', kind: g.kind, i: g.i, x: r1(g.x), z: r1(g.z) }); }
+        else if (this.T - g.found > 4) { d.cmd = 'follow'; d.seek = null; }
+        if (len(d.x - P.x, d.z - P.z) > 160) { d.cmd = 'follow'; d.seek = null; }
+        continue;
+      }
+      // blijven: op de plek zitten
+      if (d.cmd === 'stay' && d.stayAt) {
+        const dx = d.stayAt.x - d.x, dz = d.stayAt.z - d.z, dist = len(dx, dz);
+        if (dist > 0.8) { const st = Math.min(dist - 0.5, speed * dt); this.move(d, d.x + dx / dist * st, d.z + dz / dist * st, 0.35); d.yaw = Math.atan2(-dx, -dz); }
         continue;
       }
       // volgen
@@ -1222,7 +1329,7 @@ export class Room {
 
   snapshot() {
     const p = [], m = [], a = [], d = [];
-    for (const e of this.dogs.values()) d.push([e.id, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), e.maxhp, e.owner ? e.owner.id : 0, e.state === 'wild' ? (e.sit ? 3 : 0) : e.state === 'down' ? 2 : 1, e.level, e.name, e.fur, e.boostUntil > this.T ? Math.ceil(e.boostUntil - this.T) : 0]);
+    for (const e of this.dogs.values()) d.push([e.id, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), e.maxhp, e.owner ? e.owner.id : 0, e.state === 'wild' ? (e.sit ? 3 : 0) : e.state === 'down' ? 2 : (e.cmd === 'stay' && !e.target ? 3 : 1), e.level, e.name, e.fur, e.boostUntil > this.T ? Math.ceil(e.boostUntil - this.T) : 0, DOG_BREEDS.findIndex(b => b.id === e.breed)]);
     for (const P of this.players.values()) p.push([P.id, r1(P.x), r1(P.y), r1(P.z), r2(P.yaw), Math.round(P.hp), eqCode(this.eqItem(P)), P.dead ? 1 : 0, P.swings]);
     for (const e of this.monsters.values()) m.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
     for (const e of this.animals.values()) a.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);

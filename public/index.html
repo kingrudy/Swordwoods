@@ -323,6 +323,17 @@
   .sw-row .buy.melt { background:rgba(255,255,255,.12); color:var(--ink); } .sw-row .buy:disabled { background:rgba(255,255,255,.08); color:var(--dim); }
   #orechip { display:none; } #orechip.on { display:block; }
   #buffchip { display:none; color:#d7a8ff; } #buffchip.on { display:block; }
+  #pot { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:12px; background:rgba(8,14,10,.62); backdrop-filter:blur(4px); }
+  #pot.on { display:flex; }
+  #dogmenu { position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:8; display:none; gap:8px; }
+  #dogmenu.on { display:flex; }
+  #dogmenu button { display:flex; flex-direction:column; align-items:center; gap:2px; width:118px; padding:10px 8px; border-radius:14px; border:1px solid var(--line); background:rgba(18,28,20,.94); color:var(--ink); font:inherit; touch-action:manipulation; cursor:pointer; }
+  #dogmenu button span { font-size:24px; } #dogmenu button b { font-size:13px; } #dogmenu button small { font-size:11px; color:var(--dim); text-align:center; line-height:1.25; }
+  body.touch #dogmenu { bottom:auto; top:60px; } body.touch #dogmenu button { width:96px; padding:7px; }
+  #tb-dog { right:max(228px,calc(env(safe-area-inset-right) + 216px)); top:max(10px,env(safe-area-inset-top)); }
+  .give-row { padding:8px 0; border-bottom:1px solid var(--line); } .give-row b { display:block; margin-bottom:6px; } .give-row .row { gap:6px; flex-wrap:wrap; }
+  .give-row select { padding:6px; border-radius:8px; background:rgba(0,0,0,.3); color:var(--ink); border:1px solid var(--line); max-width:220px; }
+  body.arena #cross { background:#ff7a5a; }
   #trader { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:12px; background:rgba(8,14,10,.62); backdrop-filter:blur(4px); }
   #trader.on { display:flex; }
 
@@ -470,7 +481,7 @@
   </div>
 </div>
 <div id="fps" hidden></div>
-<div id="bigmap-wrap"><canvas id="bigmap" width="720" height="720" aria-label="Kaart"></canvas><p>Tik of druk op M om te sluiten · 🟦 winkel · 🟧 smid · 🟪 handelaar · △ ruïne · 🟡 kist · 🔷 erts · ⚪ hond · 🔴 monster</p></div>
+<div id="bigmap-wrap"><canvas id="bigmap" width="720" height="720" aria-label="Kaart"></canvas><p>Tik of druk op M om te sluiten · 🟦 winkel · 🟧 smid · 🟪 handelaar · △ ruïne · 🟡 kist · 🔷 erts · 🟠 gemeenschapskist · ⭕ arena · ⚪ hond · 🔴 monster</p></div>
 <div id="chatpanel">
   <div id="chat-quick"></div>
   <form id="chat-form" autocomplete="off"><input id="chat-input" maxlength="140" placeholder="Bericht aan je kamer…" enterkeyhint="send"><button class="btn primary small" type="submit">Stuur</button><button class="btn small" id="chat-close" type="button">✕</button></form>
@@ -488,6 +499,12 @@
   <div id="smith-list"></div>
 </div></div>
 
+<div id="dogmenu"></div>
+<div id="pot"><div class="shop-card" style="width:min(480px,100%)">
+  <div class="shop-head"><div><h2>Gemeenschapskist</h2><p>Spaar samen hout. Is de kist vol, dan krijgt iedereen in de kamer een feestmaal: vol gegeten, 2 drankjes en 10 minuten 10% sterker en taaier.</p></div><button class="btn primary" id="pot-close" type="button">Sluiten</button></div>
+  <span class="lvlbar" id="pot-bar" style="height:12px;margin:10px 0 6px"><i></i></span><p class="q-note" id="pot-text"></p>
+  <div class="row"><span class="shop-wood" id="pot-wood"></span><button class="btn small" type="button" data-dep="10">+10</button><button class="btn small" type="button" data-dep="50">+50</button><button class="btn small" type="button" data-dep="100">+100</button><button class="btn small primary" type="button" data-dep="all">Alles</button></div>
+</div></div>
 <div id="trader"><div class="shop-card">
   <div class="shop-head"><div><h2>Reizende handelaar</h2><p id="trader-left">Bijzondere waren, alleen vandaag.</p></div><div class="shop-wood" id="trader-wood">🪵 0</div><button class="btn primary" id="trader-close" type="button">Sluiten</button></div>
   <div id="trader-list"></div>
@@ -510,6 +527,7 @@
   <button class="tb" id="tb-fish" type="button" aria-label="Hond voeren met vis">🐟<small>0</small></button>
   <button class="tb" id="tb-build" type="button" aria-label="Bouwen">🔨</button>
   <button class="tb" id="tb-chat" type="button" aria-label="Chat">💬</button>
+  <button class="tb" id="tb-dog" type="button" aria-label="Hondencommando's">🐕</button>
   <button class="tb" id="tb-invite" type="button" aria-label="Vrienden uitnodigen">📨</button>
   <button class="tb" id="tb-menu" type="button" aria-label="Menu">☰</button>
 </div>
@@ -519,7 +537,8 @@
   <div class="pause">
     <h2>Pauze</h2>
     <p>Het spel loopt door voor de anderen in je kamer.</p>
-    <div class="pause-tabs" id="ptabs"><button class="btn small on" type="button" data-pt="keys">Besturing</button><button class="btn small" type="button" data-pt="tal">Talenten <span id="pt-free"></span></button><button class="btn small" type="button" data-pt="quest">Opdrachten</button></div>
+    <div class="pause-tabs" id="ptabs"><button class="btn small on" type="button" data-pt="keys">Besturing</button><button class="btn small" type="button" data-pt="tal">Talenten <span id="pt-free"></span></button><button class="btn small" type="button" data-pt="quest">Opdrachten</button><button class="btn small" type="button" data-pt="give">Geven</button></div>
+    <div class="ptab" id="pt-give"></div>
     <div class="ptab" id="pt-tal"></div>
     <div class="ptab" id="pt-quest"></div>
     <div class="ptab on" id="pt-keys">
@@ -535,6 +554,7 @@
       <span><kbd>G</kbd></span><span>Je hond een vis geven (boost)</span>
       <span><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Scrollwiel</kbd></span><span>Bijl of zwaard kiezen</span>
       <span><kbd>F</kbd></span><span>Slaan (alternatief)</span>
+      <span><kbd>V</kbd></span><span>Hondencommando's: 1 volg, 2 blijf, 3 val aan (waar je naar kijkt), 4 zoek een kist</span>
       <span><kbd>B</kbd></span><span>Bouwen met hout (klik = plaatsen, <kbd>1</kbd>–<kbd>7</kbd> kiezen, <kbd>7</kbd> afbreken)</span>
       <span><kbd>M</kbd> / <kbd>Enter</kbd></span><span>Grote kaart / chatten met je kamer (snelberichten zetten een 📍 op de kaart)</span>
       <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan (vasthouden = zware slag), B springen, X gebruiken, Y eten, LT blokkeren, LB rollen, RB wapen, D-pad links drank, D-pad omhoog hond voeren, D-pad omlaag bouwen, Start pauze</span>
