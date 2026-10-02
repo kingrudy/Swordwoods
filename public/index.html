@@ -263,6 +263,7 @@
   #chat-quick button { padding:7px 11px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,.08); color:var(--ink); font:600 13px system-ui; touch-action:manipulation; }
   #chat-form { display:flex; gap:8px; } #chat-input { flex:1; min-width:0; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:rgba(0,0,0,.35); color:var(--ink); font-size:15px; }
   #fps { position:fixed; left:50%; bottom:2px; transform:translateX(-50%); z-index:4; font:600 11px ui-monospace,monospace; color:#9f9; text-shadow:0 1px 2px #000; pointer-events:none; }
+  .fpsrow.vol input { flex:1; min-width:70px; accent-color:var(--gold); }
   .fpsrow { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--dim); margin:0 0 16px; }
   #tb-chat { right:max(120px,calc(env(safe-area-inset-right) + 108px)); top:max(10px,env(safe-area-inset-top)); }
   #tb-build { right:max(174px,calc(env(safe-area-inset-right) + 162px)); top:max(10px,env(safe-area-inset-top)); }
@@ -562,6 +563,7 @@
     </div>
     <div class="gfx"><span>Graphics</span><div class="row" id="gfx-row"></div></div>
     <label class="fpsrow"><input type="checkbox" id="fps-toggle"> Toon beelden per seconde (fps)</label>
+    <div class="fpsrow vol"><span>🎵 Muziek</span><input type="range" id="vol-music" min="0" max="100"><span>🔊 Geluid</span><input type="range" id="vol-sfx" min="0" max="100"></div>
     <div class="row">
       <button class="btn primary" id="btn-resume" type="button">Verder spelen</button>
       <button class="btn" id="btn-invite" type="button">📨 Vrienden uitnodigen</button>

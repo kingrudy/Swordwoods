@@ -79,6 +79,8 @@ Met vakje 7 (🪓) breek je je eigen bouwwerken af en krijg je tot de helft van 
 
 **Fps**: in het pauzemenu kun je een teller voor beelden per seconde aanzetten.
 
+**Muziek en geluid**: alle muziek wordt in de browser opgewekt (geen geluidsbestanden). Overdag rustige melodieën, 's nachts lager en trager, tijdens een golf drums en een baslijn, en bij een baas sneller en dreigender. In de sneeuw klinkt alles hoger, in het duistere bos lager. Je hoort voetstappen die per gebied anders klinken (knerpende sneeuw, soppend moeras), vogels overdag, krekels en uilen 's nachts, regen, wind en donder. In het pauzemenu stel je muziek en geluid apart in.
+
 **Versie**: onderaan de lobby en op `/api/health` staat het versienummer. Staat daar niet de laatste versie, dan draait je server nog een oude build.
 
 Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaan/hakken, E kist openen of winkel gebruiken, R eten, Q drankje, 1-9 of scrollwiel item kiezen, Esc pauze. Werkt de muis niet vast, dan kun je slepen om te kijken.
@@ -88,4 +90,5 @@ Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaa
 - Zet er bij internetgebruik een reverse proxy met HTTPS voor (Caddy, Traefik, nginx). WebSockets (`/ws`) moeten doorgelaten worden. Zonder HTTPS gaan wachtwoorden onversleuteld over het netwerk.
 - Instellingen via omgevingsvariabelen: `PORT` (standaard 8304; de server luistert daarnaast op `EXTRA_PORTS`, standaard 8080 en 8787), `DATA_DIR`, `FIRST_WAVE_DELAY`, `WAVE_GAP`, `HUNGER_RATE`, `MAX_SPEED`. Voor testen: `ALLOW_CHEATS=1` zet chatcommando's aan (`/spawn <type> [aantal]`, `/golf [modificatie]`, `/hout <n>`, `/erts <n>`, `/xp <n>`, `/zwaard <0-4>`, `/hond [ras]`, `/weer <soort>`, `/handelaar`, `/god`); nooit aanzetten op een openbare server.
 - Gezondheidscheck: `/api/health`. Ranglijst: `/api/leaderboard`.
+- Balansstatistieken: `http://<server>:8304/stats` (pagina) en `/api/stats` (JSON). Telt over alle kamers: welke monsters hoeveel spelers doden (dodelijkheid per 100 kills), doodsoorzaken, tot welke golf kamers komen, waar hele kamers vallen, gemiddelde golfduur, speeltijd, aankopen, opdrachten, bouwwerken en golfmodificaties. Alleen totalen, geen spelersgegevens. Wil je de pagina afschermen, zet dan `STATS_KEY=geheim` en open `/stats?key=geheim`.
 - De positie van spelers wordt door de client bepaald; de server controleert gevechten, loot, honger én snelheid: wie sneller beweegt dan rennen (`MAX_SPEED`, standaard 12 m/s) wordt teruggezet. Chat is beperkt tot 140 tekens en één bericht per 0,8 seconde.

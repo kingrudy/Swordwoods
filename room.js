@@ -3,6 +3,7 @@
 import { createWorld, HALF, WATER } from './public/world.js';
 import { rollSword, rollSwordOfRarity, AXE, MAX_SWORDS, MONSTERS, ANIMALS, eqCode, SHOP, SHIELD_REDUCE, MAX_POTIONS, DOG_NAMES, DOG_MAX_LEVEL, DOG_FURS, dogStats, dogXpNeeded, DOG_BOOST_SEC, DOG_BOOST_MAX, TRADER_ITEMS, WEATHERS, BIOMES, DOG_BREEDS, breedOf, potGoal, FEAST_SEC, WAVE_MODS, HEAVY_MUL, ROLL_CD, ROLL_IFRAME, BLOCK_MELEE } from './public/items.js';
 import { levelInfo, XP, TALENTS, TALENT_BY_ID, talentPoints, spentPoints, tal, maxHp, today, dailyQuests, ACHIEVEMENTS, FORGE_MAX, forgeCost, forgeGain, meltValue, swordLabel } from './public/progress.js';
+import { bump, maxOf } from './stats.js';
 import { BUILDS, BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, pushOut, canPlace, boundR } from './public/builds.js';
 
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
@@ -144,7 +145,7 @@ export class Room {
       if (q.kind !== kind || q.done) continue;
       q.have = best ? Math.max(q.have, n) : q.have + n;
       if (q.have >= q.need) {
-        q.have = q.need; q.done = true; s.wood += q.wood; s.stats.quests++;
+        q.have = q.need; q.done = true; s.wood += q.wood; s.stats.quests++; bump('quest.' + q.kind);
         this.addXp(P, q.xp);
         P.conn.send({ t: 'ev', k: 'quest', q });
         this.toast(P, '📅 Opdracht voltooid! +' + q.wood + ' hout en +' + q.xp + ' ervaring', '#6fd37a');
@@ -181,7 +182,7 @@ export class Room {
     if (s.ore < c.ore || s.wood < c.wood) return this.toast(P, 'Je hebt ' + c.ore + ' erts en ' + c.wood + ' hout nodig.', '#ff9c8a');
     s.ore -= c.ore; s.wood -= c.wood; s.stats.spent = (s.stats.spent | 0) + c.wood;
     if (!Number.isFinite(sw.d0)) sw.d0 = sw.damage;
-    sw.damage += forgeGain(sw); sw.f = (sw.f | 0) + 1; s.stats.forgedMax = Math.max(s.stats.forgedMax, sw.f);
+    sw.damage += forgeGain(sw); sw.f = (sw.f | 0) + 1; bump('forge'); s.stats.forgedMax = Math.max(s.stats.forgedMax, sw.f);
     this.toast(P, '⚒️ ' + swordLabel(sw) + ' · schade ' + sw.damage, '#f2c14e');
     P.conn.send({ t: 'ev', k: 'forged', i });
     this.sendInv(P); this.markDirty();
@@ -190,7 +191,7 @@ export class Room {
     const s = P.u.save, sw = s.swords[i];
     if (!sw || !this.nearSmith(P)) return;
     const n = meltValue(sw);
-    s.swords.splice(i, 1); s.ore += n;
+    s.swords.splice(i, 1); s.ore += n; bump('melt');
     if (s.equip === i + 1) s.equip = 0; else if (s.equip > i + 1) s.equip--;
     this.toast(P, swordLabel(sw) + ' omgesmolten: +' + n + ' erts', '#c8c8d0');
     this.sendInv(P); this.markDirty();
@@ -208,6 +209,7 @@ export class Room {
     P.y = this.world.heightAt(P.x, P.z); P.mhp = maxHp(s); P.hp = P.mhp;
     this.players.set(P.id, P); this.emptySince = null;
     if (s.dog) this.spawnOwnedDog(P);
+    bump('sessions');
     this.bc({ t: 'pjoin', id: P.id, name: P.name, look: s.look }, P);
     conn.send({
       t: 'joined', now: Date.now(),
@@ -389,7 +391,7 @@ export class Room {
     const A = this.world.arena, a = Math.random() * 6.28;
     Q.hp = Q.mhp; Q.x = A.x + Math.cos(a) * (A.r + 2.5); Q.z = A.z + Math.sin(a) * (A.r + 2.5); Q.y = this.world.heightAt(Q.x, Q.z); Q.lastInT = this.T; Q.blocking = false;
     Q.conn.send({ t: 'correct', x: r2(Q.x), y: r2(Q.y), z: r2(Q.z) });
-    P.u.save.stats.pvpWins++; Q.u.save.stats.pvpLosses++;
+    P.u.save.stats.pvpWins++; Q.u.save.stats.pvpLosses++; bump('duels');
     this.bc({ t: 'ev', k: 'duel', w: P.id, l: Q.id });
     this.toast(P, '⚔️ Je wint het duel van ' + Q.name + '!', '#f2c14e'); this.toast(Q, '⚔️ ' + P.name + ' wint het duel. Je staat buiten de arena.', '#ff9c8a');
     this.sendInv(P); this.sendInv(Q); this.markDirty();
@@ -453,7 +455,7 @@ export class Room {
         Q.buffs = Q.buffs || {}; Q.buffs.feast = this.T + FEAST_SEC;
         this.sendInv(Q);
       }
-      this.bc({ t: 'ev', k: 'feast', by: P.id, lvl: p.lvl - 1 });
+      this.bc({ t: 'ev', k: 'feast', by: P.id, lvl: p.lvl - 1 }); bump('feasts');
     }
     this.bc({ t: 'pot', ...this.potInfo(), by: P.id, n });
     this.sendInv(P); this.markDirty();
@@ -517,13 +519,13 @@ export class Room {
       case 'sword': {
         const sw = rollSwordOfRarity(it.rarity);
         if (s.swords.length >= MAX_SWORDS && sw.damage <= Math.min(...s.swords.map(x => x.damage))) return fail('Je rugzak zit vol met betere zwaarden. Niets afgerekend.');
-        s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost;
+        s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost; bump("buy." + it.id);
         this.giveSword(P, sw, 'shop'); this.sendInv(P); this.markDirty();
         P.conn.send({ t: 'ev', k: 'bought' });
         return;
       }
     }
-    s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost;
+    s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost; bump("buy." + it.id);
     P.conn.send({ t: 'ev', k: 'bought' });
     this.toast(P, it.name + ' gekocht voor ' + it.cost + ' hout.', '#f2c14e');
     this.sendInv(P); this.markDirty();
@@ -562,8 +564,9 @@ export class Room {
   }
 
   // ------------------------------------------------------------ schade en dood
-  hurt(P, dmg, src, kind = 'melee') {
+  hurt(P, dmg, src, kind = 'melee', cause = null) {
     if (P.dead || P.god) return;
+    P.cause = cause || (kind === 'arrow' ? 'schutter' : !src ? 'onbekend' : src.isPlayer ? 'speler' : src.angry !== undefined ? ANIMALS[src.type].key : src.abRoots !== undefined ? MONSTERS[src.type].key : 'onbekend');
     if (src && this.T < (P.iframe || 0)) { P.conn.send({ t: 'ev', k: 'dodged' }); return; }
     if (src && P.blocking) {
       const dx = src.x - P.x, dz = src.z - P.z, d = len(dx, dz) || 1;
@@ -583,6 +586,7 @@ export class Room {
   die(P) {
     P.hp = 0; P.dead = true; P.blocking = false; P.respawnAt = this.T + CFG.respawn; P.pendingHit = -1;
     const s = P.u.save; s.stats.deaths++; s.wood = Math.floor(s.wood / 2);
+    bump('deaths'); bump('death.' + (P.cause || 'onbekend'));
     P.conn.send({ t: 'dead', in: CFG.respawn });
     this.bc({ t: 'ev', k: 'pdead', id: P.id });
     this.sendInv(P); this.markDirty();
@@ -601,6 +605,7 @@ export class Room {
   }
 
   wipe() {
+    bump('wipe.' + String(this.wave.n).padStart(2, '0'));
     this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.wave.mod = null;
     this.wave.n = Math.max(0, this.wave.n - 1); this.wave.ph = 0; this.wave.t = CFG.wipeDelay;
     this.bc({ t: 'wave', ph: 0, n: this.wave.n, wipe: true, next: this.wave.t });
@@ -610,7 +615,7 @@ export class Room {
   pickAlive() { const a = [...this.players.values()].filter(p => !p.dead); return a[Math.floor(Math.random() * a.length)] || null; }
 
   startWave(forceMod = null) {
-    const w = this.wave; w.n++; w.ph = 1;
+    const w = this.wave; w.n++; w.ph = 1; w.startT = this.T;
     const n = w.n, alive = [...this.players.values()].filter(p => !p.dead).length || 1;
     const mod = forceMod ? WAVE_MODS.find(x => x.id === forceMod) : (n >= 3 && n % 5 !== 0 && Math.random() < 0.45 ? WAVE_MODS[Math.floor(Math.random() * WAVE_MODS.length)] : null);
     w.mod = mod ? mod.id : null;
@@ -637,6 +642,7 @@ export class Room {
       this.spawnMonster(type, pt.x, pt.z, hpMul * bossMul, scale.dmg * bossMul, scale.spd); spawned++;
     }
     this.bc({ t: 'wave', ph: 1, n, boss, count: spawned, mod: w.mod });
+    if (w.mod) bump('mod.' + w.mod);
   }
 
   spawnMonster(type, x, z, hpMul, dmgMul, spdMul) {
@@ -652,6 +658,7 @@ export class Room {
 
   endWave() {
     const w = this.wave, modW = w.mod ? 1.5 : 1; w.ph = 0; w.t = CFG.waveGap; w.mod = null;
+    bump('waves'); bump('waveSec', this.T - (w.startT || this.T)); bump('wave.reached.' + String(w.n).padStart(2, '0')); maxOf('wave.max', w.n);
     this.projs.length = 0; this.hazards.length = 0;
     for (const P of this.players.values()) {
       if (P.dead) continue;
@@ -675,6 +682,7 @@ export class Room {
     const M = MONSTERS[m.type], s = P.u.save;
     s.stats.kills++; s.stats.score += M.score * Math.max(1, this.wave.n);
     if (m.type === 3) s.stats.bosses++;
+    bump('kills'); bump('kill.' + M.key);
     this.addXp(P, M.score * XP.kill); this.quest(P, 'kill');
     this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type });
     if (Math.random() < (m.type === 3 ? 1 : 0.06)) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
@@ -859,7 +867,7 @@ export class Room {
       for (const P of this.players.values()) {
         if (P.dead || len(P.x - h.x, P.z - h.z) > h.r) continue;
         if (this.T < (P.iframe || 0)) { P.conn.send({ t: 'ev', k: 'dodged' }); continue; }
-        this.hurt(P, h.dmg, null);
+        this.hurt(P, h.dmg, null, 'melee', h.bolt ? 'bliksem' : 'wortels');
         if (!h.bolt) { P.rootUntil = this.T + 1.5; P.conn.send({ t: 'rooted', s: 1.5 }); }
       }
       for (const d of this.dogs.values()) if (d.state === 'follow' && len(d.x - h.x, d.z - h.z) < h.r) this.hurtDog(d, h.dmg * 0.6);
@@ -925,10 +933,10 @@ export class Room {
       const cold = P.biome === 'snow' && !warm ? 1.3 : 1;
       P.hunger = Math.max(0, P.hunger - CFG.hungerRate * dt * (warm ? 0.5 : 1) * cold * (1 - 0.1 * tal(P.u.save, 'maag')));
       if (warm && P.hp < P.mhp) P.hp = Math.min(P.mhp, P.hp + 3 * dt);
-      P.u.save.stats.playSec += dt;
+      P.u.save.stats.playSec += dt; bump('playSec', dt);
       if (P.hunger <= 0) {
         P.starve += dt;
-        if (P.starve >= 1.5) { P.starve = 0; this.hurt(P, 4, null); if (P.dead) continue; }
+        if (P.starve >= 1.5) { P.starve = 0; this.hurt(P, 4, null, 'melee', 'honger'); if (P.dead) continue; }
       } else if (P.hunger >= 40 && this.T - P.lastHurt > 6 && P.hp < P.mhp) P.hp = Math.min(P.mhp, P.hp + 1.5 * dt);
       if (P.pendingHit >= 0 && this.T >= P.pendingHit) { P.pendingHit = -1; this.resolveHit(P); }
       this.updateFishing(P);
@@ -1183,7 +1191,7 @@ export class Room {
       st.st = 'cool'; st.until = this.T + 1200;
       const s = P.u.save, ore = 4 + Math.floor(Math.random() * 5), wood = 15 + Math.floor(Math.random() * 16);
       let sw = rollSword(1.4); for (let k = 0; k < 6 && sw.rarity < 2; k++) sw = rollSword(1.4);
-      s.ore += ore; s.wood += wood; s.stats.dungeons++;
+      s.ore += ore; s.wood += wood; s.stats.dungeons++; bump('dungeon');
       this.giveSword(P, sw, 'chest');
       P.conn.send({ t: 'loot', kind: 'dungeon', ore, wood });
       this.addXp(P, 60); this.sendInv(P); this.markDirty();
@@ -1202,7 +1210,7 @@ export class Room {
     if (s.wood < it.cost) return this.toast(P, 'Te weinig hout.', '#ff9c8a');
     if (id === 'snack' && !P.dog) return this.toast(P, 'Je hebt geen hond bij je.', '#bbb');
     if (id === 'potions' && s.potions >= MAX_POTIONS) return this.toast(P, 'Je kunt niet meer drankjes dragen.', '#bbb');
-    s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost;
+    s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost; bump('trader.' + id);
     P.buffs = P.buffs || {};
     switch (id) {
       case 'mystery': { let sw = rollSword(1.8); for (let k = 0; k < 8 && sw.rarity < 2; k++) sw = rollSword(1.8); this.giveSword(P, sw, 'chest'); break; }
@@ -1278,7 +1286,7 @@ export class Room {
     if (why) return fail(why);
     if (B.one) for (const b of mine) if (b.kind === kind) this.removeBuild(b, 'replace');
     s.wood -= B.cost; s.stats.built = (s.stats.built || 0) + 1; this.addXp(P, XP.build); this.quest(P, 'build');
-    const b = { id: this.bid++, kind, x, z, rot, hp: B.hp, maxhp: B.hp, owner: P.name, nextShot: 0 };
+    const b = { id: this.bid++, kind, x, z, rot, hp: B.hp, maxhp: B.hp, owner: P.name, nextShot: 0 }; bump('build.' + kind);
     this.builds.set(b.id, b);
     this.bc({ t: 'ev', k: 'bnew', b: this.btuple(b), by: P.id });
     this.sendInv(P); this.saveBuilds();

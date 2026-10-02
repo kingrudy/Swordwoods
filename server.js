@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { Room, ensureSave, applyTalent, ensureDaily } from './room.js';
+import { initStats, statsData, statsHtml } from './stats.js';
 
 const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -22,8 +23,10 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 
 /* ------------------------------------------------------------------ opslag */
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const STATS_KEY = process.env.STATS_KEY || '';
 let db = { users: {}, sessions: {} };
 try { db = Object.assign(db, JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') console.error('db lezen mislukt:', e.message); }
+db.balance = initStats(db.balance);
 let saveTimer = null;
 function flush() {
   clearTimeout(saveTimer); saveTimer = null;
@@ -148,8 +151,17 @@ const json = (res, code, obj) => res.writeHead(code, { 'Content-Type': 'applicat
 const onRequest = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
+    if (req.method === 'GET' && url.pathname === '/stats') {
+      if (STATS_KEY && url.searchParams.get('key') !== STATS_KEY) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Geef ?key=... mee (STATS_KEY).'); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(statsHtml(VERSION));
+    }
     if (url.pathname.startsWith('/api/')) {
       const ip = req.socket.remoteAddress || '?';
+      if (req.method === 'GET' && url.pathname === '/api/stats') {
+        if (STATS_KEY && url.searchParams.get('key') !== STATS_KEY) return json(res, 403, { err: 'Geef ?key=... mee (STATS_KEY).' });
+        if (url.pathname === '/api/stats') return json(res, 200, statsData());
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(statsHtml(VERSION));
+      }
       if (req.method === 'GET' && url.pathname === '/api/leaderboard') return json(res, 200, leaderboard());
       if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, build: BUILD, rooms: rooms.size, users: Object.keys(db.users).length });
       if (req.method === 'POST' && (url.pathname === '/api/register' || url.pathname === '/api/login')) {
@@ -339,3 +351,4 @@ function listen(port, main) {
 }
 listen(PORT, true);
 for (const p of EXTRA_PORTS) listen(p, false);
+setInterval(markDirty, 60000).unref?.();
