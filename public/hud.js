@@ -8,20 +8,23 @@ export const QUICK = [
 ];
 
 export function createHud(ctx) {
-  const { W, WORLD, WATER, player, net, myId, names, isTouch } = ctx;
+  const { W, WATER, player, net, myId, names, isTouch } = ctx;
+  // kaartgebied: beide eilanden (vierkant)
+  const SZ = ctx.MAP ? ctx.MAP.x1 - ctx.MAP.x0 : ctx.WORLD, X0 = ctx.MAP ? ctx.MAP.x0 : -SZ / 2, Z0 = -SZ / 2;
   const pings = [];              // { x, z, t, color, name }
   const discovered = new Set();  // kist-indexen die je hebt gezien
   const seenDogs = new Set();
 
   /* ---------------------------------------------------------------- terreinkaart (één keer) */
-  const N = 256, base = document.createElement('canvas'); base.width = base.height = N;
+  const N = 360, base = document.createElement('canvas'); base.width = base.height = N;
   {
     const c = base.getContext('2d'), img = c.createImageData(N, N);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const x = (i / (N - 1) - 0.5) * WORLD, z = (j / (N - 1) - 0.5) * WORLD, h = W.heightAt(x, z), o = (j * N + i) * 4;
+      const x = X0 + i / (N - 1) * SZ, z = Z0 + j / (N - 1) * SZ, h = W.heightAt(x, z), o = (j * N + i) * 4;
+      const des = x > 240;
       let col;
       if (h < WATER - 0.2) { const d = Math.min(1, (WATER - h) / 8); col = [40 - 20 * d, 110 - 40 * d, 160 - 40 * d]; }
-      else if (h < 1.0) col = [205, 190, 140];
+      else if (h < 1.0 || des) col = des ? [222, 190, 128] : [205, 190, 140];
       else if (h > 15) col = [150, 148, 140];
       else { const k = Math.min(1, h / 15); col = [70 + 40 * k, 120 + 10 * k, 60 + 20 * k]; }
       const shade = 1 + (W.heightAt(x + 2, z + 2) - h) * -0.05;
@@ -29,9 +32,9 @@ export function createHud(ctx) {
     }
     c.putImageData(img, 0, 0);
     c.fillStyle = 'rgba(25,70,30,.55)';
-    for (const t of W.trees) { const i = (t.x / WORLD + 0.5) * N, j = (t.z / WORLD + 0.5) * N; c.fillRect(i - 0.8, j - 0.8, 1.6, 1.6); }
+    for (const t of W.trees) { const i = (t.x - X0) / SZ * N, j = (t.z - Z0) / SZ * N; c.fillRect(i - 0.8, j - 0.8, 1.6, 1.6); }
   }
-  const toCanvas = (x, z) => [(x / WORLD + 0.5) * N, (z / WORLD + 0.5) * N];
+  const toCanvas = (x, z) => [(x - X0) / SZ * N, (z - Z0) / SZ * N];
 
   /* ---------------------------------------------------------------- minikaart */
   const mini = $('minimap'), mctx = mini.getContext('2d');
@@ -63,6 +66,9 @@ export function createHud(ctx) {
       case 'mydog': c.fillStyle = '#c8903f'; c.beginPath(); c.arc(0, 0, 3 * s, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.stroke(); break;
       case 'wilddog': c.fillStyle = '#e8dcc8'; c.beginPath(); c.arc(0, 0, 2.5 * s, 0, 7); c.fill(); break;
       case 'monster': c.fillStyle = m.boss ? '#ff5a2a' : '#e0413a'; c.beginPath(); c.arc(0, 0, (m.boss ? 4.5 : 2.5) * s, 0, 7); c.fill(); break;
+      case 'bazaar': c.fillStyle = '#ffb03a'; c.fillRect(-4 * s, -4 * s, 8 * s, 8 * s); c.strokeStyle = '#7a3a10'; c.lineWidth = 1.5; c.strokeRect(-4 * s, -4 * s, 8 * s, 8 * s); break;
+      case 'mound': c.fillStyle = '#8a5a2a'; c.beginPath(); c.arc(0, 0, 2.6 * s, 0, 7); c.fill(); break;
+      case 'boat': c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(0, -4 * s); c.lineTo(3 * s, 3 * s); c.lineTo(-3 * s, 3 * s); c.closePath(); c.fill(); c.strokeStyle = '#2a6aa0'; c.lineWidth = 1.5; c.stroke(); break;
       case 'smith': c.fillStyle = '#ff8a3a'; c.fillRect(-4 * s, -4 * s, 8 * s, 8 * s); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(-4 * s, -4 * s, 8 * s, 8 * s); break;
       case 'ore': c.fillStyle = '#9fd0ff'; c.beginPath(); c.moveTo(0, -3.5 * s); c.lineTo(3 * s, 0); c.lineTo(0, 3.5 * s); c.lineTo(-3 * s, 0); c.fill(); break;
       case 'pot': c.fillStyle = '#ffd27a'; c.beginPath(); c.arc(0, 0, 4 * s, 0, 7); c.fill(); c.strokeStyle = '#7a4a10'; c.lineWidth = 1.5; c.stroke(); break;
@@ -78,14 +84,14 @@ export function createHud(ctx) {
     mctx.beginPath(); mctx.arc(half, half, half - 1, 0, 7); mctx.clip();
     mctx.fillStyle = '#123'; mctx.fillRect(0, 0, S, S);
     mctx.translate(half, half); mctx.rotate(player.yaw);
-    const [cx, cy] = toCanvas(player.x, player.z), k = scale * WORLD / N;
+    const [cx, cy] = toCanvas(player.x, player.z), k = scale * SZ / N;
     mctx.imageSmoothingEnabled = true;
     mctx.drawImage(base, -cx * k, -cy * k, N * k, N * k);
     const all = markers();
     for (const m of all) {
       const dx = (m.x - player.x) * scale, dz = (m.z - player.z) * scale;
       const d = Math.hypot(dx, dz); let px = dx, py = dz;
-      if (d > half - 8) { if (m.kind !== 'shop' && m.kind !== 'player' && m.kind !== 'trader' && m.kind !== 'smith') continue; px = dx / d * (half - 8); py = dz / d * (half - 8); }
+      if (d > half - 8) { if (m.kind !== 'shop' && m.kind !== 'player' && m.kind !== 'trader' && m.kind !== 'smith' && m.kind !== 'bazaar' && m.kind !== 'boat') continue; px = dx / d * (half - 8); py = dz / d * (half - 8); }
       mctx.save(); mctx.translate(px, py); mctx.rotate(-player.yaw); drawMarker(mctx, m, 0, 0); mctx.restore();
     }
     const now = performance.now() / 1000;

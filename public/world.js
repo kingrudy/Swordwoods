@@ -2,6 +2,13 @@
 // Let op: geen Math.hypot/sin/cos gebruiken in placement, zodat elke JS-engine dezelfde uitkomst geeft.
 
 export const WORLD = 420, HALF = WORLD / 2, WATER = -2.2;
+/** Het Woestijneiland ligt ten oosten van het bos-eiland, over zee. */
+export const DESERT = { cx: 345, cz: 0, r: 92 };
+/** Hele speelveld (beide eilanden en de zee ertussen). */
+export const MAP = { x0: -HALF, x1: DESERT.cx + DESERT.r + 30, z0: -HALF, z1: HALF };
+export const inDesert = (x, z) => x > DESERT.cx - DESERT.r - 25;
+/** Binnen het speelveld houden (rechthoek). */
+export function clampXZ(x, z) { return [clamp(x, MAP.x0 + 8, MAP.x1 - 8), clamp(z, MAP.z0 + 8, MAP.z1 - 8)]; }
 
 export function mulberry32(a) {
   return function () {
@@ -33,7 +40,23 @@ export function createWorld(seed) {
     for (let i = 0; i < oct; i++) { s += a * vnoise(x * f, z * f); n += a; a *= 0.5; f *= 2.03; }
     return s / n;
   }
+  // woestijn: duinen met ruggen, een oase met een meertje, en zee eromheen
+  const oasis = { x: DESERT.cx + 18, z: DESERT.cz - 14 };
+  function desertH(x, z) {
+    const dx = x - DESERT.cx, dz = z - DESERT.cz, rd = len(dx, dz);
+    const ridge = 1 - Math.abs(2 * fbm(x * 0.016 + 17, z * 0.011 + 5, 3) - 1);
+    let h = 2.4 + ridge * ridge * 9 + (fbm(x * 0.05 + 3, z * 0.05 + 9, 2) - 0.5) * 1.6;
+    const ox = x - oasis.x, oz = z - oasis.z, od = ox * ox + oz * oz;
+    h = lerp(h, 1.7 + (fbm(x * 0.04, z * 0.04, 2) - 0.5) * 0.6, sstep(DESERT.r * 0.58, DESERT.r * 0.76, rd));   // vlak strand rond het eiland
+    h = lerp(h, -5.5, Math.exp(-od / 160));                                      // oasemeertje
+    h -= sstep(0.78, 1.05, rd / DESERT.r) * 34;                      // kust
+    return h;
+  }
   function heightAt(x, z) {
+    if (x > 150) return Math.max(desertH(x, z), forestH(x, z));
+    return forestH(x, z);
+  }
+  function forestH(x, z) {
     const n = fbm(x * 0.006, z * 0.006);
     const m = fbm(x * 0.02 + 50, z * 0.02 + 50, 3);
     let h = (n - 0.45) * 46 + (m - 0.5) * 5;
@@ -141,6 +164,7 @@ export function createWorld(seed) {
   // ---- biomen: sectoren rond het eiland (het midden is altijd gewoon bos)
   const TAU = Math.PI * 2, boff = (seed * 2.399) % TAU;
   function biomeW(x, z) {
+    if (inDesert(x, z)) return { snow: 0, swamp: 0, dark: 0 };
     const away = sstep(42, 78, len(x, z));
     if (away <= 0) return { snow: 0, swamp: 0, dark: 0 };
     const a = Math.atan2(z, x) + (vnoise(x * 0.02 + 7, z * 0.02 + 3) - 0.5) * 0.9 - boff;
@@ -150,7 +174,7 @@ export function createWorld(seed) {
     const swamp = away * sector(4.25, 0.65) * (1 - sstep(5, 9, heightAt(x, z)));
     return { snow, swamp, dark };
   }
-  function biomeAt(x, z) { const w = biomeW(x, z); return w.snow > 0.5 ? 'snow' : w.swamp > 0.5 ? 'swamp' : w.dark > 0.5 ? 'dark' : 'forest'; }
+  function biomeAt(x, z) { if (inDesert(x, z)) return 'desert'; const w = biomeW(x, z); return w.snow > 0.5 ? 'snow' : w.swamp > 0.5 ? 'swamp' : w.dark > 0.5 ? 'dark' : 'forest'; }
   for (const t of trees) t.biome = biomeAt(t.x, t.z);
   for (const c of chests) c.biome = biomeAt(c.x, c.z);
 
@@ -216,5 +240,46 @@ export function createWorld(seed) {
     return null;
   }
 
-  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, ruins, pot, arena, biomeW, biomeAt, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
+  // ---- woestijneiland: haven met bazaar, palmen en zandbergen (eigen rng; verandert niets aan het bos)
+  const drng = mulberry32(seed * 61 + 19), D = DESERT;
+  const harbor = (() => {           // westkust, richting het bos
+    let best = null;
+    for (let k = 0; k < 40; k++) {
+      const a = Math.PI + (k % 2 ? 1 : -1) * Math.floor((k + 1) / 2) * 0.06, x0 = D.cx + Math.cos(a) * D.r, z0 = D.cz + Math.sin(a) * D.r;
+      for (let t = 0; t < 40; t++) {        // vanaf zee landinwaarts tot we op droog vlak strand staan
+        const x = x0 + (D.cx - x0) * t / 40, z = z0 + (D.cz - z0) * t / 40, h = heightAt(x, z);
+        if (h > 1.1 && h < 3.5 && slopeAt(x, z) < 0.25) { best = { x, z, y: h, a }; break; }
+      }
+      if (best) break;
+    }
+    return best || { x: D.cx - D.r * 0.7, z: D.cz, y: heightAt(D.cx - D.r * 0.7, D.cz), a: Math.PI };
+  })();
+  const bazaar = { x: harbor.x + 9, z: harbor.z + 6, r: 2.6, solid: true, bazaar: true };
+  bazaar.y = heightAt(bazaar.x, bazaar.z); bazaar.rotY = Math.atan2(harbor.x - bazaar.x, harbor.z - bazaar.z); gAdd(bazaar);
+  const desertPoint = (rnd, minR = 0, maxR = D.r * 0.85, minH = 0.6) => {
+    for (let i = 0; i < 40; i++) { const a = rnd() * Math.PI * 2, d = minR + rnd() * (maxR - minR), x = D.cx + d * Math.cos(a), z = D.cz + d * Math.sin(a); if (heightAt(x, z) > minH) return { x, z }; }
+    return null;
+  };
+  // palmen rond de oase en verspreid langs de kust (hakbaar: zo kun je een boot terug bouwen)
+  for (let tries = 0; tries < 3000 && trees.length < 420 + 46; tries++) {
+    const nearO = drng() < 0.55, a = drng() * Math.PI * 2, d = nearO ? 9 + drng() * 14 : 10 + drng() * D.r * 0.8;
+    const x = (nearO ? oasis.x : D.cx) + d * Math.cos(a), z = (nearO ? oasis.z : D.cz) + d * Math.sin(a), h = heightAt(x, z);
+    if (h < 0.6 || h > 8 || slopeAt(x, z) > 0.5 || len(x - bazaar.x, z - bazaar.z) < 7 || len(x - harbor.x, z - harbor.z) < 6) continue;
+    let ok = true; gNear(x, z, o => { if (len(o.x - x, o.z - z) < 3.6) ok = false; }); if (!ok) continue;
+    const scale = 0.8 + drng() * 0.5;
+    const t = { idx: trees.length, x, z, y: h, type: 'palm', vi: Math.floor(drng() * 4), scale, rotY: drng() * 6.28, r: 0.32 * scale, hp0: 3 + scale * 2, solid: true, biome: 'desert' };
+    trees.push(t); gAdd(t);
+  }
+  const mounds = [];
+  for (let tries = 0; tries < 4000 && mounds.length < 34; tries++) {
+    const p = desertPoint(drng, 12, D.r * 0.8, 1.2); if (!p) continue;
+    if (len(p.x - bazaar.x, p.z - bazaar.z) < 10 || len(p.x - oasis.x, p.z - oasis.z) < 13) continue;
+    let ok = true; gNear(p.x, p.z, o => { if (len(o.x - p.x, o.z - p.z) < 3.5) ok = false; });
+    for (const m of mounds) if (len(m.x - p.x, m.z - p.z) < 11) ok = false;
+    if (!ok) continue;
+    mounds.push({ idx: mounds.length, x: p.x, z: p.z, y: heightAt(p.x, p.z), size: 0.9 + drng() * 0.6, rotY: drng() * 6.28 });
+  }
+  const desert = { ...D, harbor, bazaar, mounds, oasis, point: desertPoint };
+
+  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, ruins, pot, arena, desert, biomeW, biomeAt, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
 }

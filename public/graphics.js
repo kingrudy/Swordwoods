@@ -88,13 +88,15 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
   const waterU = {
     uTime, uLightDir: { value: new THREE.Vector3(0, 1, 0) }, uLightCol: { value: C(0xffffff) },
     uTop: skyU.uTop, uHor: skyU.uHor, uDeep: { value: C(0x0f3f63) }, uShallow: { value: C(0x2f8aa0) },
-    uHeight: { value: null }, uWorld: { value: 420 }, uWaterY: { value: -2.2 }, uAmbient: { value: 1 }, uNight: skyU.uNight,
+    uHeight: { value: null }, uWorld: { value: 420 }, uMin: { value: new THREE.Vector2(-210, -210) }, uSize: { value: new THREE.Vector2(420, 420) }, uWaterY: { value: -2.2 }, uAmbient: { value: 1 }, uNight: skyU.uNight,
   };
-  function createWater({ heightAt, WORLD, WATER }) {
+  function createWater({ heightAt, WORLD, WATER, bounds = null }) {
     // hoogtekaart van het terrein rond het waterpeil (voor ondiep water en schuim langs de kust)
-    const N = 256, data = new Uint8Array(N * N * 4);
+    const B = bounds || { x0: -WORLD / 2, x1: WORLD / 2, z0: -WORLD / 2, z1: WORLD / 2 };
+    const N = bounds ? 384 : 256, data = new Uint8Array(N * N * 4);
+    waterU.uMin.value.set(B.x0, B.z0); waterU.uSize.value.set(B.x1 - B.x0, B.z1 - B.z0);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const x = (i / (N - 1) - 0.5) * WORLD, z = (j / (N - 1) - 0.5) * WORLD;
+      const x = B.x0 + i / (N - 1) * (B.x1 - B.x0), z = B.z0 + j / (N - 1) * (B.z1 - B.z0);
       const v = clamp((heightAt(x, z) - WATER + 8) / 16, 0, 1) * 255, o = (j * N + i) * 4;
       data[o] = data[o + 1] = data[o + 2] = v; data[o + 3] = 255;
     }
@@ -110,7 +112,7 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
           #include <fog_vertex>
         }`,
       fragmentShader: `
-        uniform float uTime, uWorld, uWaterY, uAmbient, uNight; uniform vec3 uLightDir, uLightCol, uTop, uHor, uDeep, uShallow; uniform sampler2D uHeight;
+        uniform float uTime, uWorld, uWaterY, uAmbient, uNight; uniform vec2 uMin, uSize; uniform vec3 uLightDir, uLightCol, uTop, uHor, uDeep, uShallow; uniform sampler2D uHeight;
         varying vec3 vW;
         #include <fog_pars_fragment>
         ${NOISE_GLSL}
@@ -126,7 +128,7 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
           float fres = 0.03 + 0.97 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
           vec3 R = reflect(-V, n);
           vec3 skyc = mix(uHor, uTop, clamp(R.y * 1.4, 0.0, 1.0));
-          vec2 uv = p / uWorld + 0.5;
+          vec2 uv = (p - uMin) / uSize;
           float th = uWaterY - 8.0;
           if (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) th = texture2D(uHeight, uv).r * 16.0 - 8.0 + uWaterY;
           float depth = uWaterY - th;
@@ -145,7 +147,7 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
         }`,
     });
     Object.assign(mat.uniforms, waterU);
-    water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 3, WORLD * 3, 1, 1).rotateX(-Math.PI / 2), mat);
+    water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 4, WORLD * 4, 1, 1).rotateX(-Math.PI / 2), mat); water.position.x = (B.x0 + B.x1) / 2;
     water.position.y = WATER; water.renderOrder = 2;
     scene.add(water);
     return water;

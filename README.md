@@ -39,6 +39,14 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Vrienden uitnodigen**: via 📨 in de lobby, in het pauzemenu of op het scherm. Je krijgt een link naar jouw kamer die je via WhatsApp, het deelmenu van je telefoon of kopiëren verstuurt. Wie de link opent, logt in of maakt een account en komt direct in jouw kamer.
 
+**Het Woestijneiland**: ten oosten van het bos-eiland ligt over zee een zandwoestijn (op de grote kaart, `M`). Bouw een **boot** voor 12 hout (bouwmenu `B`, vakje 7): zet hem in het water vlak bij de kust en stap in met `E` (mobiel X). Je stuurt met de muis en W/A/S/D of de stick; bij de kust ga je met `E` aan land. De boot blijft liggen waar je uitstapt, dus je kunt er later weer mee terug. Iedereen mag in een lege boot stappen, maar je hebt er zelf maar één (een nieuwe vervangt de oude). Op het eiland:
+- **Zandbergen** (🟤 op de kaart zodra je ze gezien hebt): sta ernaast en druk `E` om te graven (2,6 s; blijf staan). Je vindt een **faraobeeld** (brons 15, zilver 40, goud 100 goud waard, en heel zelden het **gouden masker van de farao**, 300 goud), een paar goudstukken, een scarabee of alleen zand. Een uitgegraven berg komt na 6 minuten terug.
+- De **Bazaar van Farid** bij de haven koopt je beelden voor goud en verkoopt een schep (graaft twee keer zo snel en vindt vaker beelden), dadels, hout en oasewater.
+- Met goud koop je bij Bram in de winkel het **Farao-zwaard** (legendarisch, 250 goud), epische zwaarden en hout.
+- **Gerbils** (snel, 1 vlees) en **kangoeroes** (4 vlees, schoppen terug als je ze raakt) lopen er rond. Palmen kun je omhakken voor hout, en de oase heeft een meertje om te vissen.
+- Golven monsters blijven op het bos-eiland: wie op zee of in de woestijn is, wordt niet aangevallen. Val je in de woestijn, dan sta je weer bij de haven.
+- Nieuwe prestaties: Zeeman, Archeoloog, Schat van de farao en Goudzoeker, plus een dagelijkse graafopdracht.
+
 **Hondenrassen en commando's**: elke zwerfhond heeft een ras (zie de aanwijzing voordat je hem temt): Herder (evenwichtig), Jachthond (snel, jaagt zelf op dieren), Waakhond (veel levens, monsters vallen hem aan in plaats van jou) of Speurneus (vindt kisten en erts van ver). Met `V` (mobiel: 🐕) geef je commando's: 1 Volg, 2 Blijf (bewaakt die plek), 3 Val aan (het monster waar je naar kijkt) en 4 Zoek (hij rent naar een ongeopende kist, of bij een speurneus ook een ertsader, en zet een 📍 op je kaart).
 
 **Samen spelen**: in het pauzemenu (tab Geven) geef je hout, vlees, vis, erts, drankjes of een zwaard aan een speler binnen 8 meter; ruilen is allebei iets geven. Bij het startpunt staat de **gemeenschapskist**: iedereen spaart er hout in (300, daarna steeds 150 meer). Is hij vol, dan krijgt de hele kamer een feestmaal: vol gegeten, 2 drankjes en 10 minuten 10% meer schade en 10% minder schade. In de vaste kamers blijft de stand bewaard.

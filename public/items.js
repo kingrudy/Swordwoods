@@ -70,7 +70,26 @@ export const HEAVY_MUL = 2.2, ROLL_CD = 1.0, ROLL_IFRAME = 0.45, BLOCK_MELEE = 0
 export const ANIMALS = [
   { key: 'konijn',    name: 'Konijn',    hp: 8,  speed: 7.5, flee: 15, meat: 1, r: 0.3 },
   { key: 'hert',      name: 'Hert',      hp: 24, speed: 9.5, flee: 22, meat: 3, r: 0.6 },
-  { key: 'everzwijn', name: 'Everzwijn', hp: 42, speed: 5.5, flee: 0,  meat: 4, r: 0.6, dmg: 11 },
+  { key: 'everzwijn', name: 'Everzwijn', hp: 42, speed: 5.5, flee: 0,  meat: 4, r: 0.6, dmg: 11, fights: true },
+  { key: 'gerbil',    name: 'Gerbil',    hp: 5,  speed: 8.0, flee: 12, meat: 1, r: 0.22, desert: true },
+  { key: 'kangoeroe', name: 'Kangoeroe', hp: 30, speed: 10,  flee: 18, meat: 4, r: 0.55, dmg: 9, fights: true, desert: true },
+];
+
+/* ---------------------------------------------------------------- woestijn: faraobeelden en goud */
+export const STATUES = [
+  { k: 'brons',  name: 'Bronzen faraobeeld',      icon: '🟫', value: 15,  w: 60, color: '#c98a4a' },
+  { k: 'zilver', name: 'Zilveren faraobeeld',     icon: '⬜', value: 40,  w: 28, color: '#d8dee6' },
+  { k: 'goud',   name: 'Gouden faraobeeld',       icon: '🟨', value: 100, w: 10, color: '#f2c14e' },
+  { k: 'masker', name: 'Gouden masker van de farao', icon: '👑', value: 300, w: 2, color: '#ffd27a' },
+];
+export const statueOf = k => STATUES.find(x => x.k === k);
+export const DIG_SEC = 2.6, DIG_SEC_SHOVEL = 1.3, MOUND_BACK = 360;
+/** Bazaar van Farid (woestijnhaven): beelden verkopen voor goud, spullen kopen met goud of hout. */
+export const BAZAAR = [
+  { id: 'shovel', name: 'Schep',           icon: '🪏', cost: 20, cur: 'wood', desc: 'Graaf twee keer zo snel en vind vaker een beeld.' },
+  { id: 'dates',  name: 'Zak dadels',      icon: '🌴', cost: 2,  cur: 'gold', desc: '4 vlees: eten voor onderweg.' },
+  { id: 'wood',   name: 'Stapel hout',     icon: '🪵', cost: 5,  cur: 'gold', desc: '60 hout (genoeg voor een paar boten).' },
+  { id: 'water',  name: 'Oasewater',       icon: '🧪', cost: 3,  cur: 'gold', desc: 'Twee helende drankjes.' },
 ];
 
 // ---------------------------------------------------------------- winkel
@@ -93,6 +112,9 @@ export const SHOP = [
   { id: 'sword2',  group: 'Zwaarden',  name: 'Zeldzaam zwaard',  desc: 'Willekeurig zwaard, zeldzaamheid Zeldzaam.', cost: 85,  kind: 'sword', rarity: 2 },
   { id: 'sword3',  group: 'Zwaarden',  name: 'Episch zwaard',    desc: 'Willekeurig zwaard, zeldzaamheid Episch.',   cost: 220, kind: 'sword', rarity: 3 },
   { id: 'sword4',  group: 'Zwaarden',  name: 'Legendarisch zwaard', desc: 'Willekeurig zwaard, zeldzaamheid Legendarisch.', cost: 600, kind: 'sword', rarity: 4 },
+  { id: 'gsword',  group: 'Voor goud', name: 'Farao-zwaard',     desc: 'Legendarisch zwaard, betaald met goud uit de woestijn.', cost: 250, gold: true, kind: 'sword', rarity: 4 },
+  { id: 'gepic',   group: 'Voor goud', name: 'Episch zwaard',    desc: 'Willekeurig episch zwaard.', cost: 90, gold: true, kind: 'sword', rarity: 3 },
+  { id: 'gwood',   group: 'Voor goud', name: 'Wagen hout',       desc: '150 hout.', cost: 10, gold: true, kind: 'wood', n: 150 },
 ];
 
 // ---------------------------------------------------------------- hond (companion)
@@ -140,4 +162,5 @@ export const BIOMES = {
   snow:   { name: 'Het Sneeuwveld', icon: '❄️', desc: 'Het is koud: je krijgt 30% sneller honger, behalve bij een kampvuur.' },
   swamp:  { name: 'Het Moeras', icon: '🐸', desc: 'Je loopt langzamer door de modder. Er groeit veel vis.' },
   dark:   { name: 'Het Duistere Bos', icon: '🌑', desc: 'Kisten bevatten hier betere zwaarden.' },
+  desert: { name: 'Het Woestijneiland', icon: '🏜️', desc: 'Graaf in zandbergen naar faraobeelden en verkoop ze bij Farid voor goud.' },
 };

@@ -14,6 +14,8 @@ export const BUILDS = [
     desc: 'Schiet om de 1,4 s een pijl op monsters binnen 20 m.' },
   { id: 'bed', name: 'Bed', icon: '🛏️', cost: 20, hp: 90, shape: 'box', w: 1.2, d: 2.2, h: 0.6, solid: false, one: true,
     desc: 'Je respawnt hier na een val. Eén per speler; een nieuw bed vervangt het oude.' },
+  { id: 'boat', name: 'Boot', icon: '⛵', cost: 12, hp: 60, shape: 'box', w: 1.5, d: 3.4, h: 1.2, solid: false, one: true, water: true,
+    desc: 'Zet hem in het water bij de kust en vaar naar het Woestijneiland in het oosten. Eén per speler.' },
 ];
 export const BUILD_BY_ID = Object.fromEntries(BUILDS.map((b, i) => [b.id, { ...b, idx: i }]));
 export const BUILD_RANGE = 8, BUILD_MAX_ROOM = 160, BUILD_MAX_PLAYER = 40, BUILD_REFUND = 0.5, FIRE_RADIUS = 6;
@@ -22,7 +24,7 @@ export const boundR = B => B.shape === 'circle' ? B.r : Math.hypot(B.w, B.d) / 2
 export const snapRot = yaw => Math.round(yaw / (Math.PI / 12)) * (Math.PI / 12);
 /** Waar een bouwwerk komt als je kijkt met deze yaw. */
 export function placePoint(B, px, pz, yaw) {
-  const dist = 1.6 + boundR(B) * (B.shape === 'box' ? Math.min(1, B.d / B.w + 0.35) : 1);
+  const dist = B.water ? 3.6 : 1.6 + boundR(B) * (B.shape === 'box' ? Math.min(1, B.d / B.w + 0.35) : 1);
   return { x: px - Math.sin(yaw) * dist, z: pz - Math.cos(yaw) * dist, rot: snapRot(yaw) };
 }
 
@@ -67,6 +69,14 @@ function samplePoints(B, x, z, rot) {
 export function canPlace(world, builds, kind, x, z, rot, felled = null) {
   const B = BUILD_BY_ID[kind]; if (!B) return 'Onbekend bouwwerk';
   const pts = samplePoints(B, x, z, rot);
+  if (B.water) {                     // boot: in het water, vlak bij de kant
+    for (const [px, pz] of pts) if (world.heightAt(px, pz) > WATER - 0.25) return 'Zet de boot in het water';
+    let shore = false;
+    for (let k = 0; k < 12 && !shore; k++) for (const d of [3, 5, 7]) if (world.heightAt(x + Math.cos(k / 12 * 6.283) * d, z + Math.sin(k / 12 * 6.283) * d) > WATER + 0.3) shore = true;
+    if (!shore) return 'Te ver van de kust';
+    for (const b of builds) if (Math.hypot(b.x - x, b.z - z) < 3.5) return 'Hier ligt al iets';
+    return '';
+  }
   let lo = 1e9, hi = -1e9;
   for (const [px, pz] of pts) { const h = world.heightAt(px, pz); lo = Math.min(lo, h); hi = Math.max(hi, h); }
   if (lo < WATER + 0.3) return 'Niet in het water';

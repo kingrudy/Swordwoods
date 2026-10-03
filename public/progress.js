@@ -38,6 +38,7 @@ export const QUEST_KINDS = [
   { kind: 'wave',   text: n => 'Overleef golf ' + n,                  min: 4,  max: 8,  icon: '🌊', best: true },
   { kind: 'heavy',  text: n => 'Versla ' + n + ' vijanden met een zware slag', min: 5, max: 12, icon: '💥' },
   { kind: 'ore',    text: n => 'Hak ' + n + ' erts uit ertsaders',    min: 4,  max: 10, icon: '⛏️' },
+  { kind: 'dig',    text: n => 'Graaf in ' + n + ' zandbergen op het Woestijneiland', min: 3, max: 8, icon: '🏜️' },
 ];
 const hash = s => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 export function today(now = Date.now()) {
@@ -85,6 +86,10 @@ export const ACHIEVEMENTS = [
   { id: 'kampioen',   icon: '🏆', name: 'Kampioen',          desc: 'Win 10 duels in de arena',        test: s => st(s, 'pvpWins') >= 10 },
   { id: 'gul',        icon: '🎁', name: 'Gulle gever',       desc: 'Geef 5 keer iets aan een ander',  test: s => st(s, 'gifts') >= 5 },
   { id: 'feest',      icon: '🍗', name: 'Feestbeest',        desc: 'Vier een feestmaal in je kamer',  test: s => st(s, 'feasts') >= 1 },
+  { id: 'zeeman',     icon: '⛵', name: 'Zeeman',            desc: 'Vaar naar het Woestijneiland',   test: s => st(s, 'voyages') >= 1 },
+  { id: 'archeoloog', icon: '🗿', name: 'Archeoloog',        desc: 'Vind 10 faraobeelden',           test: s => st(s, 'statues') >= 10 },
+  { id: 'farao',      icon: '👑', name: 'Schat van de farao', desc: 'Vind het gouden masker van de farao', test: s => st(s, 'masks') >= 1 },
+  { id: 'goudzoeker', icon: '💰', name: 'Goudzoeker',        desc: 'Verdien 500 goud',               test: s => st(s, 'goldEarned') >= 500 },
   { id: 'opdrachten', icon: '📅', name: 'Plichtsgetrouw',    desc: 'Voltooi 10 dagelijkse opdrachten', test: s => st(s, 'quests') >= 10 },
 ];
 

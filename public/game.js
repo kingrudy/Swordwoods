@@ -1,6 +1,6 @@
 // Multiplayer-client: rendert de wereld, stuurt invoer naar de server en toont wat de server meldt.
 import * as THREE from 'three';
-import { createWorld, HALF, WATER, WORLD, mulberry32 } from './world.js';
+import { createWorld, HALF, WATER, WORLD, MAP, DESERT, clampXZ, inDesert, mulberry32 } from './world.js';
 import { RARITIES, BASES, MONSTERS, ANIMALS, AXE, decodeEq, MAX_SWORDS, SHOP, MAX_POTIONS, DOG_FURS, dogXpNeeded, WAVE_MODS, ROLL_CD } from './items.js';
   let fishing = null;   // eigen hengel in het water: { x, z, bite }
 import * as M from './models.js';
@@ -14,6 +14,7 @@ import { renderTalents, renderQuests } from './progressui.js';
 import { createWorldFx } from './worldfx.js';
 import { createSocial } from './social.js';
 import { createMusic } from './music.js';
+import { createDesert } from './desert.js';
 import { breedOf, DOG_BREEDS } from './items.js';
 
 const $ = id => document.getElementById(id);
@@ -85,7 +86,7 @@ export async function startGame({ net, joined, user }) {
   const terrain = new THREE.Mesh(tGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   G.terrainDetail(terrain.material);
   terrain.receiveShadow = true; scene.add(terrain);
-  G.createWater({ heightAt, WORLD, WATER });
+  { const half = (MAP.x1 - MAP.x0) / 2; G.createWater({ heightAt, WORLD, WATER, bounds: { x0: MAP.x0, x1: MAP.x1, z0: -half, z1: half } }); }
   await nextFrame();
 
   // gras, bloemen, rotsen, wolken (alleen sfeer)
@@ -134,7 +135,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ bomen en kisten */
   const kit = M.makeTreeKit(seed);
-  for (const fm of M.foliageMats) G.wind(fm, 'leaf');
+  for (const fm of M.getFoliageMats()) G.wind(fm, "leaf");
   const treeObjs = W.trees.map(t => {
     const o = M.buildTree(kit, t.type, t.vi, t.scale, t.rotY, t.biome);
     o.group.position.set(t.x, t.y - 0.1, t.z); scene.add(o.group);
@@ -264,6 +265,7 @@ export async function startGame({ net, joined, user }) {
     const g = a.createGain(); g.gain.value = v; s.connect(f).connect(g).connect(bus()); s.start();
   }
   const sfx = {
+    dig: () => { burst(0.2, 0.08, 'bandpass', 700 + Math.random() * 300, 1.2); burst(0.1, 0.05, 'highpass', 3000, 1, 0.08); },
     swing: () => { burst(0.18, 0.09, 'bandpass', 900, 0.8); burst(0.12, 0.05, 'bandpass', 2600, 1.2, 0.04); },
     step: biome => {
       if (biome === 'snow') { burst(0.12, 0.06, 'bandpass', 3200, 2); burst(0.08, 0.04, 'highpass', 5000, 1, 0.03); }
@@ -348,6 +350,8 @@ export async function startGame({ net, joined, user }) {
     const fc = $('fishchip'); fc.classList.toggle('on', !!(inv.up.rod || inv.fish)); fc.innerHTML = '🐟 Vis: ' + inv.fish + ' <small style="opacity:.6">(G = hond voeren)</small>';
     $('tb-fish').lastElementChild.textContent = inv.fish; $('tb-fish').classList.toggle('off', !inv.dog || !inv.fish);
     $('tb-eat').lastElementChild.textContent = inv.meat; $('tb-drink').lastElementChild.textContent = inv.potions;
+    const gc = $('goldchip'), nst = Object.values(inv.statues || {}).reduce((a, b) => a + b, 0);
+    gc.classList.toggle('on', !!(inv.gold || nst)); gc.innerHTML = '🪙 Goud: ' + (inv.gold | 0) + (nst ? ' · 🗿 ' + nst + ' beeld' + (nst > 1 ? 'en' : '') : '');
     const oc = $('orechip'); oc.classList.toggle('on', inv.ore > 0); oc.innerHTML = '⛏️ Erts: ' + inv.ore + ' <small style="opacity:.6">(bij de smid)</small>';
     const L = levelInfo(inv.xp), free = talentPoints(L.level) - spentPoints(inv.tal);
     $('lvlchip').textContent = 'Niveau ' + L.level + (free > 0 ? ' · ' + free + ' talentpunt' + (free > 1 ? 'en' : '') + ' (pauzemenu)' : '');
@@ -491,7 +495,8 @@ export async function startGame({ net, joined, user }) {
       if (e.swingT !== undefined && e.swingT < 1) {
         const t = e.swingT; m.armR.rotation.x = t < 0.25 ? lerp(0, 0.6, ease(t / 0.25)) : lerp(0.6, -2.0, ease(clamp((t - 0.25) / 0.3, 0, 1))) * (t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4);
       } else m.armR.rotation.x = s * 0.8;
-    } else if (m.legs) { m.legs[0].rotation.x = s; m.legs[3].rotation.x = s; m.legs[1].rotation.x = -s; m.legs[2].rotation.x = -s; }
+    } else if (m.hop) { const h = Math.abs(Math.sin(e.phase * 0.45)) * amp; m.body.position.y = h * 0.6; for (const l of m.legs) l.rotation.x = 0.35 * amp - h * 0.9; m.tail.rotation.x = -1.25 + h * 0.4; }
+    else if (m.legs) { m.legs[0].rotation.x = s; m.legs[3].rotation.x = s; m.legs[1].rotation.x = -s; m.legs[2].rotation.x = -s; }
   }
   function moveEnt(e, dt, useTy = false) {
     const k = 1 - Math.exp(-12 * dt), ox = e.x, oz = e.z;
@@ -617,7 +622,7 @@ export async function startGame({ net, joined, user }) {
       if (id === myId) continue;
       seen.add(id);
       const e = remotes.get(id) || makeRemote(id);
-      e.tx = x; e.ty = y; e.tz = z; e.tyaw = yaw; e.hp = hp; e.dead = dd;
+      e.tx = x; e.ty = y; e.tz = z; e.tyaw = yaw; e.hp = hp; e.dead = dd; e.boatId = a[9] | 0; e.digging = !!a[10];
       if (e.eq !== eq) setRemoteEq(e, eq);
       if (e.sw !== sw) { e.sw = sw; e.swingT = 0; if (e.model.kind === 'rig') e.model.once('1H_Melee_Attack_Chop', { speed: 1.35 }); }
     }
@@ -629,11 +634,12 @@ export async function startGame({ net, joined, user }) {
     const hint = $('prompt');
   });
   net.on('inv', m => {
-    inv.ore = m.ore | 0; inv.xp = m.xp | 0; inv.tal = m.tal || {}; inv.daily = m.daily || null; inv.ach = m.ach || {};
+    inv.gold = m.gold | 0; inv.statues = m.statues || {}; inv.ore = m.ore | 0; inv.xp = m.xp | 0; inv.tal = m.tal || {}; inv.daily = m.daily || null; inv.ach = m.ach || {};
     inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     renderInv(); rebuildHeld(); if (shopOpen && !smithOpen && !(wfx && wfx.traderOpen)) renderShop();
     if (smithOpen) renderSmith();
     if (wfx && wfx.traderOpen) wfx.renderTrader();
+    if (des && des.bazOpen) des.renderBazaar();
     if (veil.classList.contains('on')) renderPauseTabs();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
@@ -790,7 +796,7 @@ export async function startGame({ net, joined, user }) {
   net.on('_close', () => { /* main.js toont de melding */ });
 
   /* ================================================================ invoer */
-  let hud = null, bs = null, wfx = null, soc = null;
+  let hud = null, bs = null, wfx = null, soc = null, des = null;
   const keys = {}; let locked = false, soft = false, shopOpen = false;
   const virt = { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false };
   const drag = { down: false, moved: 0 };
@@ -875,7 +881,7 @@ export async function startGame({ net, joined, user }) {
   const swing = { t: 1, cd: 0 };
   function startSwing(heavy = false) {
     if (bs && bs.active && !dead && !shopOpen) { bs.place(); return; }
-    if (dead || shopOpen || fishing || blocking || player.roll || swing.t < 1 || swing.cd > 0) return;
+    if (dead || shopOpen || fishing || blocking || player.roll || player.sailing || swing.t < 1 || swing.cd > 0) return;
     const it = items()[inv.equip] || AXE;
     swing.t = 0; swing.heavy = heavy; swing.cd = 0.5 / (it.speed || 1) * 0.92 * (heavy ? 1.5 : 1);
     if (heavy) { sfx.heavy(); shake = Math.max(shake, 0.12); } else sfx.swing();
@@ -903,7 +909,7 @@ export async function startGame({ net, joined, user }) {
   }
   function doRoll() {
     const now = performance.now() / 1000;
-    if (dead || shopOpen || player.roll || now < rollReadyAt || now < (player.rootUntil || 0) || !locked) return;
+    if (dead || shopOpen || player.roll || player.sailing || now < rollReadyAt || now < (player.rootUntil || 0) || !locked) return;
     rollReadyAt = now + ROLL_CD - 0.1 * tal(inv, 'vlug');
     const f = fwd(), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
     const iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py;
@@ -941,21 +947,21 @@ export async function startGame({ net, joined, user }) {
   }
   const feedDog = () => net.send({ t: 'feeddog' });
   function interact() {
-    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (wfx.findRuin()) net.send({ t: 'ruin', i: wfx.findRuin().R.idx }); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else if (wfx.nearTrader()) wfx.openTrader(); else if (soc.nearPot()) soc.openPot(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
+    if (fishing) { net.send({ t: 'reel' }); return; } if (dead || shopOpen) return; if (des.interact()) return; const wd = findWildDog(); if (wd) net.send({ t: 'tame', id: wd.id }); else if (findChest()) tryOpen(); else if (wfx.findRuin()) net.send({ t: 'ruin', i: wfx.findRuin().R.idx }); else if (nearShop()) openShop(); else if (nearSmith()) openSmith(); else if (wfx.nearTrader()) wfx.openTrader(); else if (soc.nearPot()) soc.openPot(); else { const w = inv.up.rod ? findWater() : null; if (w) net.send({ t: 'cast', x: +w.x.toFixed(2), z: +w.z.toFixed(2) }); } }
 
   /* ================================================================ winkel */
   const shopEl = $('shop');
   function renderShop() {
-    $('shop-wood').textContent = '🪵 ' + inv.wood + ' hout';
+    $('shop-wood').textContent = '🪵 ' + inv.wood + ' hout' + (inv.gold ? ' · 🪙 ' + inv.gold + ' goud' : '');
     let html = '', group = '';
     for (const it of SHOP) {
       if (it.group !== group) { group = it.group; html += (html ? '</div>' : '') + '<div class="shop-group">' + group + '</div><div class="shop-items">'; }
-      let state = 'ok', label = 'Koop · ' + it.cost + ' hout';
+      let state = 'ok', label = 'Koop · ' + it.cost + (it.gold ? ' goud' : ' hout');
       if (it.kind === 'shield' || it.kind === 'axe') {
         const cur = inv.up[it.kind];
         if (it.level <= cur) { state = 'owned'; label = 'Gekocht'; } else if (it.level > cur + 1) { state = 'locked'; label = 'Koop eerst niveau ' + (it.level - 1); }
       } else if (it.kind === 'potion' && inv.potions >= MAX_POTIONS) { state = 'owned'; label = 'Vol (' + MAX_POTIONS + ')'; }
-      const dis = state !== 'ok' || inv.wood < it.cost;
+      const dis = state !== 'ok' || (it.gold ? (inv.gold | 0) : inv.wood) < it.cost;
       const col = it.kind === 'sword' ? RARITIES[it.rarity].color : '';
       html += '<div class="item' + (state === 'owned' ? ' owned' : '') + '"><b>' + (col ? '<span class="rar" style="color:' + col + '"></span>' : '') + esc(it.name) + '</b><small>' + esc(it.desc) + '</small>' +
         '<button class="buy" type="button" data-buy="' + it.id + '"' + (dis ? ' disabled' : '') + '>' + label + '</button></div>';
@@ -972,6 +978,7 @@ export async function startGame({ net, joined, user }) {
     if (!shopOpen) return;
     if (wfx && wfx.traderOpen) { wfx.closeTrader(); return; }
     if (soc && soc.potOpen) { soc.closePot(); return; }
+    if (des && des.bazOpen) { des.closeBazaar(); return; }
     shopOpen = false; smithOpen = false; shopEl.classList.remove('on'); $('smith').classList.remove('on');
     if (relock && !isTouch && !soft) requestLock();
   }
@@ -1140,11 +1147,12 @@ export async function startGame({ net, joined, user }) {
   }
   /* ================================================================ minikaart, chat, fps */
   hud = createHud({
-    W, WORLD, WATER, player, net, myId, names, isTouch, chestObjs, remotes, dogs, mons, colorForName: M.colorForName,
+    W, WORLD, MAP, WATER, player, net, myId, names, isTouch, chestObjs, remotes, dogs, mons, colorForName: M.colorForName,
     extraMarkers: () => {
       const out = bs ? bs.markers() : [];
       if (wfx) out.push(...wfx.markers());
       if (soc) out.push(...soc.markers());
+      if (des) out.push(...des.markers());
       out.push({ x: W.smith.x, z: W.smith.z, kind: 'smith' });
       for (const r of oreObjs) if (!r.empty && (r.seen || (r.seen = Math.abs(r.o.x - player.x) < 40 && Math.abs(r.o.z - player.z) < 40))) out.push({ x: r.o.x, z: r.o.z, kind: 'ore' });
       return out;
@@ -1156,6 +1164,7 @@ export async function startGame({ net, joined, user }) {
     scene, M, W, G, net, player, inv, myName: joined.you.name, heightAt, camera, joined, treeObjs, isTouch,
     chips, sparkles, sfx, toast,
     onToggle: on => { if (on) { swing.t = 1; } renderInv(); },
+    WATER, onBoat: m => des && des.onBoat(m), riderPos: id => des ? des.riderPos(id) : null,
   });
   wfx = createWorldFx({
     scene, M, W, G, net, player, heightAt, camera, sfx, sparkles, chips, toast, banner, CH, joined, inv, myId,
@@ -1167,6 +1176,14 @@ export async function startGame({ net, joined, user }) {
   soc = createSocial({
     scene, M, W, G, net, player, inv, names, remotes, mons, dogs, myId, heightAt, sfx, sparkles, toast, banner, joined, hud, addPopup, flash,
     onOreFound: i => { if (oreObjs[i]) oreObjs[i].seen = true; },
+    onPanel: on => {
+      if (on) { shopOpen = true; player.vx = player.vz = 0; virt.x = virt.y = 0; showVeil(false); if (document.pointerLockElement) document.exitPointerLock(); }
+      else { shopOpen = false; if (!isTouch && !soft) requestLock(); }
+    },
+  });
+  des = createDesert({
+    scene, M, W, G, net, player, inv, heightAt, WATER, sfx, sparkles, chips, toast, banner, myId, joined, anis, remotes,
+    builds: () => bs.builds,
     onPanel: on => {
       if (on) { shopOpen = true; player.vx = player.vz = 0; virt.x = virt.y = 0; showVeil(false); if (document.pointerLockElement) document.exitPointerLock(); }
       else { shopOpen = false; if (!isTouch && !soft) requestLock(); }
@@ -1185,7 +1202,7 @@ export async function startGame({ net, joined, user }) {
   /* ================================================================ update */
   let sendT = 0;
   function update(dt, time) {
-    pollPad(dt); hud.update(dt); bs.update(dt, time); wfx.update(dt, time); soc.update(dt, time);
+    pollPad(dt); hud.update(dt); bs.update(dt, time); wfx.update(dt, time); soc.update(dt, time); des.update(dt, time);
     // geluid: stemming van de muziek, voetstappen en omgeving
     if (Math.floor(time * 2) !== Math.floor((time - dt) * 2)) {
       const boss = wave.ph === 1 && [...mons.values()].some(e => e.type === 3);
@@ -1203,27 +1220,29 @@ export async function startGame({ net, joined, user }) {
       let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
       const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
       const rooted = performance.now() / 1000 < (player.rootUntil || 0);
-      const sp = rooted ? 0 : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
+      const sail = !!player.sailing;
+      const sp = rooted ? 0 : sail ? 10.5 * wl : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1), k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
       if (player.roll) {
         const R = player.roll; R.t += dt; const v = 15 * (1 - 0.45 * R.t / 0.38);
         player.vx = R.dx * v; player.vz = R.dz * v;
         if (R.t >= 0.38) { player.roll = null; player.vx *= 0.4; player.vz *= 0.4; }
-      } else { player.vx += (wx * sp - player.vx) * k; player.vz += (wz * sp - player.vz) * k; }
+      } else { const kk = sail ? Math.min(1, dt * 1.5) : k; player.vx += (wx * sp - player.vx) * kk; player.vz += (wz * sp - player.vz) * kk; }
       let nx = player.x + player.vx * dt, nz = player.z + player.vz * dt;
-      const deep = (x, z) => heightAt(x, z) < WATER - 0.35;
-      if (deep(nx, player.z)) nx = player.x; if (deep(nx, nz)) nz = player.z;
-      const lim = HALF - 10, rr = Math.hypot(nx, nz); if (rr > lim) { nx *= lim / rr; nz *= lim / rr; }
-      W.gNear(nx, nz, o => {
+      const deep = sail ? (x, z) => heightAt(x, z) > WATER - 0.45 : (x, z) => heightAt(x, z) < WATER - 0.35;   // varen: land houdt je tegen
+      if (deep(nx, player.z)) { nx = player.x; if (sail) player.vx *= -0.2; } if (deep(nx, nz)) { nz = player.z; if (sail) player.vz *= -0.2; }
+      [nx, nz] = clampXZ(nx, nz);
+      if (!sail) W.gNear(nx, nz, o => {
         if (o.type && treeObjs[o.idx].felled) return;
         const dx = nx - o.x, dz = nz - o.z, d = Math.hypot(dx, dz), min = o.r + 0.38;
         if (d < min && d > 0.0001) { nx = o.x + dx / d * min; nz = o.z + dz / d * min; }
       });
-      [nx, nz] = bs.collide(nx, nz, 0.38);
+      if (!sail) [nx, nz] = bs.collide(nx, nz, 0.38);
       player.x = nx; player.z = nz;
-      const gnd = heightAt(player.x, player.z);
+      const gnd = sail ? WATER + 0.12 : heightAt(player.x, player.z);
+      if (sail) { player.onGround = true; player.vy = 0; }
       if (player.onGround) {
         if (gnd < player.y - 0.7) player.onGround = false;
-        else { player.y = gnd; if (keys.Space || virt.jump || virt.pjump) { player.vy = 7.6; player.onGround = false; } }
+        else { player.y = gnd; if (!sail && (keys.Space || virt.jump || virt.pjump)) { player.vy = 7.6; player.onGround = false; } }
       }
       if (!player.onGround) { player.vy -= 22 * dt; player.y += player.vy * dt; if (player.y <= gnd && player.vy <= 0) { player.y = gnd; player.vy = 0; player.onGround = true; } }
       player.bob += Math.hypot(player.vx, player.vz) * dt * 1.7;
@@ -1231,7 +1250,7 @@ export async function startGame({ net, joined, user }) {
     const speed = Math.hypot(player.vx, player.vz);
     const bobY = player.onGround ? Math.sin(player.bob * 2) * 0.045 * Math.min(1, speed / 5) : 0;
     shake = Math.max(0, shake - dt);
-    const eye = dead ? 0.4 : 1.7 - (player.roll ? Math.sin(Math.min(1, player.roll.t / 0.38) * Math.PI) * 0.75 : 0) - (blocking ? 0.08 : 0);
+ const eye = dead ? 0.4 : player.sailing ? 1.25 : 1.7 - (player.roll ? Math.sin(Math.min(1, player.roll.t / 0.38) * Math.PI) * 0.75 : 0) - (blocking ? 0.08 : 0);
     camera.position.set(player.x + (Math.random() - 0.5) * shake * 0.2, player.y + eye + bobY, player.z + (Math.random() - 0.5) * shake * 0.2);
     camera.rotation.y = player.yaw; camera.rotation.x = dead ? -0.9 : player.pitch;
     G.update(dt, time, player.x, player.y, player.z);
@@ -1271,7 +1290,7 @@ export async function startGame({ net, joined, user }) {
         else if (!e.dead && e.wasDead) r.unlock();
         e.wasDead = e.dead;
         if (e.swingT === 0) r.once('1H_Melee_Attack_Chop', { speed: 1.35 });
-        if (!e.dead) { if (e.blocking) r.loop('Blocking'); else rigLocomotion(e); }
+        if (!e.dead) { if (e.blocking) r.loop('Blocking'); else if (e.digging) r.loop('Interact'); else if (e.boatId) r.loop('Idle'); else rigLocomotion(e); }
         r.update(dt);
       } else {
         animateBody(e, dt);
@@ -1414,9 +1433,11 @@ export async function startGame({ net, joined, user }) {
     const pr = $('prompt'), ch = !wd && locked && !dead && !shopOpen ? findChest() : null, sh = !wd && !ch && locked && !dead && !shopOpen && nearShop();
     const wat = !fishing && !wd && !ch && !sh && locked && !dead && !shopOpen && Math.floor(time * 4) !== Math.floor((time - dt) * 4) ? findWater() : (update.lastWat || null);
     if (!fishing && !wd && !ch && !sh && locked && !dead && !shopOpen) update.lastWat = wat; else update.lastWat = null;
-    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && (nearSmith() || wfx.nearTrader() || !!wfx.findRuin() || soc.nearPot()); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
+    if (isTouch) { const tb = $('tb-use'); const fishOk = fishing || (wat && inv.up.rod); const smt = !ch && !sh && !wd && locked && !dead && !shopOpen && (nearSmith() || wfx.nearTrader() || !!wfx.findRuin() || soc.nearPot() || !!des.prompt(true)); tb.classList.toggle('dim', !(ch || sh || wd || fishOk || smt)); tb.firstElementChild.textContent = fishing ? '🎣' : wd ? '🐕' : sh ? '🏪' : ch ? '🧰' : smt ? '⚒️' : fishOk ? '🎣' : '✋'; }
     if (isTouch && Math.floor(time * 4) !== Math.floor((time - dt) * 4)) $('tb-roll').classList.toggle('cd', performance.now() / 1000 < rollReadyAt);
+    const dpr = locked && !dead && !shopOpen && !bs.active && !fishing ? des.prompt(isTouch) : null;
     if (bs.active && locked && !dead && !shopOpen) { /* bouwmodus regelt de aanwijzing */ }
+    else if (dpr) { pr.innerHTML = dpr; pr.classList.add('on'); }
     else if (performance.now() / 1000 < (player.rootUntil || 0) && !dead) { pr.innerHTML = '<b style="color:#9adf6a">Vastgegroeid!</b>'; pr.classList.add('on'); }
     else if (fishing && locked && !dead) {
       pr.innerHTML = fishing.bite ? '<b style="color:#ffd27a;font-size:1.25em">Beet! ' + (isTouch ? 'Tik nu op X' : 'Druk nu op E') + '</b>' : 'Wachten op een beet… ' + (isTouch ? '(X = binnenhalen)' : '(<b>E</b> = binnenhalen)');
@@ -1505,6 +1526,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { music, getAudio: () => actx, hud, bs, fx, wfx: () => wfx, soc: () => soc, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { des: () => des, music, getAudio: () => actx, hud, bs, fx, wfx: () => wfx, soc: () => soc, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

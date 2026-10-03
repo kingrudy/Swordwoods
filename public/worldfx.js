@@ -127,7 +127,7 @@ export function createWorldFx(ctx) {
   function update(dt, time) {
     checkBiome(dt);
     // neerslag
-    const want = weather === 'regen' || weather === 'onweer' ? 1 : 0;
+    const want = (weather === 'regen' || weather === 'onweer') && biome !== 'desert' ? 1 : 0;   // in de woestijn valt geen regen
     amount += (want - amount) * Math.min(1, dt * 0.5);
     const cold = G.weather.cold > 0.5;
     rain.visible = amount > 0.02 && !cold; snow.visible = amount > 0.02 && cold;

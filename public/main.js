@@ -75,6 +75,8 @@ function renderLobby() {
   const cells = [['Beste golf', s.bestWave | 0], ['Punten', s.score | 0], ['Monsters verslagen', s.kills | 0], ['Dieren gejaagd', s.animals | 0],
     ['Bomen omgehakt', s.trees | 0], ['Kisten geopend', s.chests | 0], ['Hout', save.wood | 0], ['Vlees', save.meat | 0], ['Drankjes', save.potions | 0], ['Hout uitgegeven', s.spent | 0], ['Schild', 'niveau ' + ((save.up && save.up.shield) | 0)], ['Bijl', 'niveau ' + ((save.up && save.up.axe) | 0)], ['Vis', save.fish | 0], ['Hond', save.dog ? save.dog.name + ' · niveau ' + save.dog.level : 'Nog niet gevonden'], ['Keer gevallen', s.deaths | 0], ['Speeltijd', fmtTime(s.playSec | 0)]];
   cells.splice(8, 0, ['Erts', save.ore | 0]);
+  const nst = Object.values(save.statues || {}).reduce((a, b) => a + b, 0);
+  cells.splice(9, 0, ['Goud', save.gold | 0], ['Faraobeelden', nst + ' (gevonden: ' + ((s.statues | 0)) + ')']);
   renderTalents($('lb-talents'), save, m => net.send(m));
   renderQuests($('lb-quests'), save);
   renderAchievements($('lb-ach'), save);

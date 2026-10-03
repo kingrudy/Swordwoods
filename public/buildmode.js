@@ -14,6 +14,7 @@ export function createBuildSystem(ctx) {
 
   /* ---------------------------------------------------------------- bouwwerken tonen */
   const groundY = (B, x, z, rot) => {
+    if (B.water) return ctx.WATER - 0.08;
     if (B.shape === 'circle') return heightAt(x, z);
     const c = Math.cos(rot), s = Math.sin(rot); let lo = heightAt(x, z);
     for (const [lx, lz] of [[-B.w / 2, -B.d / 2], [B.w / 2, -B.d / 2], [-B.w / 2, B.d / 2], [B.w / 2, B.d / 2]]) lo = Math.min(lo, heightAt(x + lx * c + lz * s, z - lx * s + lz * c));
@@ -44,6 +45,7 @@ export function createBuildSystem(ctx) {
       case 'bgone': remove(m.id, m.how !== 'replace'); if (m.how === 'destroy') ctx.toast('Een bouwwerk is vernield.', '#ff9c8a'); break;
       case 'bhp': { const e = builds.get(m.id); if (e) { e.hp = m.hp; e.hitT = 0.25; ctx.chips.emit(e.x, e.group.position.y + 1, e.z, 6, 2, 2, 0.6); } break; }
       case 'arrow': shoot(m); break;
+      case 'board': case 'unboard': { const e = builds.get(m.id); if (e) { e.x = m.x; e.z = m.z; e.rot = m.rot; e.group.rotation.y = m.rot; } if (ctx.onBoat) ctx.onBoat(m); break; }
     }
   });
   net.on('buildfail', m => { ctx.toast('🔨 ' + esc(m.msg), '#ff9c8a'); ctx.sfx.creak(); });
@@ -149,6 +151,13 @@ export function createBuildSystem(ctx) {
     // bouwwerken: opkomen, schadebalk, vlammen
     tmp.length = 0;
     for (const e of builds.values()) {
+      if (e.kind === 'boat') {                 // dobberen; wie erin zit bepaalt de plek
+        const rp = ctx.riderPos ? ctx.riderPos(e.id) : null;
+        if (rp) { e.x = rp.x; e.z = rp.z; e.rot = rp.yaw; e.group.rotation.y = rp.yaw; }
+        const own = !!(rp && rp.self); if (e.group.userData.sail && e.group.userData.sail.visible === own) { e.group.userData.sail.visible = !own; e.group.userData.mast.visible = !own; }   // eigen zeil niet voor je neus
+        e.group.position.set(e.x, ctx.WATER - 0.08 + Math.sin(time * 1.6 + e.id) * 0.06, e.z);
+        e.group.rotation.z = Math.sin(time * 1.1 + e.id) * 0.04; e.group.rotation.x = Math.sin(time * 1.3 + e.id * 2) * 0.03;
+      }
       if (e.pop < 1) { e.pop = Math.min(1, e.pop + dt * 3); const s = 0.3 + 0.7 * (1 - Math.pow(1 - e.pop, 3)); e.group.scale.set(1, s, 1); }
       const d = Math.hypot(e.x - player.x, e.z - player.z);
       if (e.hitT > 0) { e.hitT -= dt; e.group.position.x = e.x + Math.sin(time * 70) * 0.04 * (e.hitT / 0.25); }
@@ -209,6 +218,7 @@ export function createBuildSystem(ctx) {
     for (const e of builds.values()) {
       if (e.kind === 'bed') { if (e.owner === myName) out.push({ x: e.x, z: e.z, kind: 'bed' }); continue; }
       if (e.kind === 'torch') continue;
+      if (e.kind === 'boat') { if (e.owner === myName) out.push({ x: e.x, z: e.z, kind: 'boat' }); continue; }
       out.push({ x: e.x, z: e.z, kind: 'build', color: e.kind === 'campfire' ? '#ff9a40' : e.kind === 'tower' ? '#e8c27a' : '#b98a52' });
     }
     return out;
