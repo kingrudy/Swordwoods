@@ -1,7 +1,7 @@
 // Het Woestijneiland aan de clientkant: terrein, palmen-decor, zandbergen om te graven, de bazaar van Farid,
 // faraobeelden en goud, en varen met de boot.
 import * as THREE from 'three';
-import { STATUES, statueOf, BAZAAR } from './items.js';
+import { STATUES, statueOf, BAZAAR, PYRAMID } from './items.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -51,6 +51,20 @@ export function createDesert(ctx) {
     const sign = M.makeLabel('Woestijneiland', '#ffd27a'); sign.position.set(D.harbor.x, D.harbor.y + 3.2, D.harbor.z); sign.scale.multiplyScalar(1.6); scene.add(sign);
   }
   G.addLantern(new THREE.Vector3(D.bazaar.x, D.bazaar.y + 2.6, D.bazaar.z), 0xffb060, 5, 16);
+
+  /* ---------------------------------------------------------------- piramide */
+  const PY = D.pyramid, pyr = M.buildPyramid();
+  pyr.group.position.set(PY.x, PY.y, PY.z); pyr.group.rotation.y = PY.rotY; scene.add(pyr.group);
+  G.addLantern(new THREE.Vector3(PY.entrance.x, PY.entrance.y + 3, PY.entrance.z), 0xffb060, 4, 14);
+  let pyrSt = (ctx.joined.pyr && ctx.joined.pyr.st) || 'idle', pyrLeft = (ctx.joined.pyr && ctx.joined.pyr.left) || 0, pyrSeen = false;
+  const nearPyramid = () => Math.hypot(PY.entrance.x - player.x, PY.entrance.z - player.z) < 5.5;
+  function setPyr(m) {
+    const was = pyrSt; pyrSt = m.st; pyrLeft = m.left || 0;
+    pyr.seal.visible = pyrSt === 'idle' || pyrSt === 'cool';
+    if (was !== pyrSt && pyrSt === 'idle' && Math.hypot(PY.x - player.x, PY.z - player.z) < 80) toast('⚱️ Het zegel van de piramide is weer heel.', '#ffd27a');
+  }
+  setPyr({ st: pyrSt, left: pyrLeft });
+  net.on('pyr', setPyr);
 
   /* ---------------------------------------------------------------- zandbergen */
   const moundObjs = D.mounds.map(m => {
@@ -105,6 +119,16 @@ export function createDesert(ctx) {
       }
       case 'moundBack': setDug(m.i, false); break;
       case 'sold': sparkles.emit(D.bazaar.x, D.bazaar.y + 1.2, D.bazaar.z, 40, 2, 2.5, 1); sfx.coin(); setTimeout(() => sfx.coin(), 150); break;
+      case 'pyrwake': {
+        chips.emit(m.x, heightAt(m.x, m.z) + 1, m.z, 80, 4, 5, 1.4); sparkles.emit(m.x, heightAt(m.x, m.z) + 2, m.z, 60, 3, 4, 1.4);
+        if (Math.hypot(m.x - player.x, m.z - player.z) < 60) { banner('⚱️ De mummies ontwaken!<small>Versla ze allemaal om de farao te wekken</small>', 3200); sfx.rumble(); }
+        break;
+      }
+      case 'pharaoh': {
+        sparkles.emit(m.x, heightAt(m.x, m.z) + 2, m.z, 150, 4, 6, 1.8);
+        if (Math.hypot(m.x - player.x, m.z - player.z) < 80) { banner('👑 De mummie-farao!<small>Ontwijk de zandstralen (rollen) en pas op voor zijn mummies</small>', 3800); sfx.rumble(); setTimeout(() => sfx.rumble(), 400); }
+        break;
+      }
       case 'kick': { const e = ctx.anis.get(m.id); if (e) { e.kickT = 0.3; } sfx.hit(); break; }
     }
   });
@@ -184,10 +208,16 @@ export function createDesert(ctx) {
     const now = inDesertNow();
     if (now !== wasIn) { wasIn = now; }
     if (bazOpen && Math.floor(time) !== Math.floor(time - dt)) renderBazaar();
+    if (!pyrSeen && Math.abs(PY.x - player.x) < 90 && Math.abs(PY.z - player.z) < 90) pyrSeen = true;
+    const awake = pyrSt === 'guards' || pyrSt === 'boss';
+    pyr.glow.material.opacity = pyrSt === 'idle' ? 0.12 + Math.sin(time * 2) * 0.04 : awake ? 0.3 + Math.sin(time * 6) * 0.1 : 0;
+    pyr.glow.material.color.set(awake ? 0xff7a3a : 0xffd27a);
+    if (pyrSt === 'cool') pyrLeft = Math.max(0, pyrLeft - dt);
   }
   function markers() {
     const out = [{ x: D.bazaar.x, z: D.bazaar.z, kind: 'bazaar' }];
     for (const o of moundObjs) if (o.seen && !o.dug) out.push({ x: o.m.x, z: o.m.z, kind: 'mound' });
+    if (pyrSeen) out.push({ x: PY.x, z: PY.z, kind: 'pyramid', awake: pyrSt === 'guards' || pyrSt === 'boss' });
     return out;
   }
   function prompt(touch) {
@@ -195,6 +225,12 @@ export function createDesert(ctx) {
     if (digging) return 'Graven…';
     const o = findMound(); if (o) return o.dug ? 'Hier is al gegraven' : (touch ? 'Graven (X)' : '<b>E</b> · graven in de zandberg');
     if (nearBazaar()) return touch ? 'Bazaar (X)' : '<b>E</b> · bazaar van Farid';
+    if (nearPyramid()) {
+      if (pyrSt === 'guards') return 'De mummies zijn wakker: versla ze!';
+      if (pyrSt === 'boss') return 'Versla de mummie-farao!';
+      if (pyrSt === 'cool') return 'De farao rust nog ' + Math.max(1, Math.ceil(pyrLeft / 60)) + ' min';
+      return (touch ? 'Zegel breken (X)' : '<b>E</b> · zegel van de piramide breken') + ' · ' + PYRAMID.cost + ' goud';
+    }
     const b = findBoat(); if (b) return touch ? 'Instappen (X)' : '<b>E</b> · in de boot stappen';
     return null;
   }
@@ -203,6 +239,11 @@ export function createDesert(ctx) {
     if (sailing) { net.send({ t: 'unboard' }); return true; }
     if (findMound()) return startDig();
     if (nearBazaar()) { openBazaar(); return true; }
+    if (nearPyramid()) {
+      if (pyrSt === 'idle' && (inv.gold | 0) < PYRAMID.cost) toast('Het zegel breken kost ' + PYRAMID.cost + ' goud. Graaf naar beelden en verkoop ze bij Farid.', '#ff9c8a');
+      else net.send({ t: 'pyramid' });
+      return true;
+    }
     const b = findBoat(); if (b) { net.send({ t: 'board', id: b.id }); return true; }
     return false;
   }

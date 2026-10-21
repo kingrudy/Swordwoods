@@ -59,6 +59,26 @@ export function dailyQuests(name, day) {
 export const questText = q => { const K = QUEST_KINDS.find(k => k.kind === q.kind); return K ? K.text(q.need) : q.kind; };
 export const questIcon = q => (QUEST_KINDS.find(k => k.kind === q.kind) || {}).icon || '•';
 
+/* ---------------------------------------------------------------- weekranglijst en weekevents */
+/** ISO-week (Nederlandse tijd), bv. { k: '2026-W43', week: 43, year: 2026, left: 3 } (left = dagen tot maandag). */
+export function isoWeek(now = Date.now()) {
+  const [y, m, d] = today(now).split('-').map(Number), t = new Date(Date.UTC(y, m - 1, d)), dow = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - dow);                 // donderdag van deze week bepaalt het jaar
+  const year = t.getUTCFullYear(), week = Math.ceil(((t - Date.UTC(year, 0, 1)) / 864e5 + 1) / 7);
+  return { k: year + '-W' + String(week).padStart(2, '0'), week, year, left: 8 - dow };
+}
+/** Elke week een ander event; de vermenigvuldigers gelden voor iedereen in alle kamers. */
+export const WEEK_EVENTS = [
+  { id: 'hout',     icon: '🪓', name: 'Houthakkersweek', desc: 'Dubbel hout van bomen',                          wood: 2 },
+  { id: 'monster',  icon: '⚔️', name: 'Monsterweek',     desc: '+50% punten en ervaring voor golven, 2× zo vaak een zwaard van monsters', wave: 1.5, drop: 2 },
+  { id: 'woestijn', icon: '🏜️', name: 'Woestijnweek',    desc: 'Vaker faraobeelden en dubbel goud uit zandbergen', statue: 0.1, digGold: 2 },
+  { id: 'jacht',    icon: '🍖', name: 'Jachtweek',       desc: 'Dubbel vlees van dieren',                        meat: 2 },
+  { id: 'vis',      icon: '🎣', name: 'Visweek',         desc: 'Vissen bijten twee keer zo snel en vaker een gouden vis', fishFast: 0.5, goldFish: 2 },
+];
+export const weekEvent = (w = isoWeek()) => WEEK_EVENTS[(w.year * 53 + w.week) % WEEK_EVENTS.length];
+/** Beloning voor de top 3 van de weekranglijst (goud). */
+export const WEEK_PRIZES = [150, 100, 60];
+
 /* ---------------------------------------------------------------- prestaties */
 const st = (s, k) => ((s.stats || {})[k] | 0);
 export const ACHIEVEMENTS = [
@@ -88,6 +108,7 @@ export const ACHIEVEMENTS = [
   { id: 'feest',      icon: '🍗', name: 'Feestbeest',        desc: 'Vier een feestmaal in je kamer',  test: s => st(s, 'feasts') >= 1 },
   { id: 'zeeman',     icon: '⛵', name: 'Zeeman',            desc: 'Vaar naar het Woestijneiland',   test: s => st(s, 'voyages') >= 1 },
   { id: 'archeoloog', icon: '🗿', name: 'Archeoloog',        desc: 'Vind 10 faraobeelden',           test: s => st(s, 'statues') >= 10 },
+  { id: 'mummie',     icon: '🧟', name: 'Farao gevloerd',    desc: 'Versla de mummie-farao in de piramide', test: s => st(s, 'pharaohs') >= 1 },
   { id: 'farao',      icon: '👑', name: 'Schat van de farao', desc: 'Vind het gouden masker van de farao', test: s => st(s, 'masks') >= 1 },
   { id: 'goudzoeker', icon: '💰', name: 'Goudzoeker',        desc: 'Verdien 500 goud',               test: s => st(s, 'goldEarned') >= 500 },
   { id: 'opdrachten', icon: '📅', name: 'Plichtsgetrouw',    desc: 'Voltooi 10 dagelijkse opdrachten', test: s => st(s, 'quests') >= 10 },

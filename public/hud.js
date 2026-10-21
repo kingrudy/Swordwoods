@@ -51,7 +51,7 @@ export function createHud(ctx) {
       if (e.owner === myId) out.push({ x: e.x, z: e.z, kind: 'mydog' });
       else if (!e.owner && seenDogs.has(e.id)) out.push({ x: e.x, z: e.z, kind: 'wilddog' });
     }
-    for (const e of ctx.mons.values()) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 70 && !(e.type === 5 && d > 9)) out.push({ x: e.x, z: e.z, kind: 'monster', boss: e.type === 3 }); }
+    for (const e of ctx.mons.values()) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 70 && !(e.type === 5 && d > 9)) out.push({ x: e.x, z: e.z, kind: 'monster', boss: e.type === 3 || e.type === 8 }); }
     for (const m of (ctx.extraMarkers ? ctx.extraMarkers() : [])) out.push(m);
     return out;
   }
@@ -68,6 +68,7 @@ export function createHud(ctx) {
       case 'monster': c.fillStyle = m.boss ? '#ff5a2a' : '#e0413a'; c.beginPath(); c.arc(0, 0, (m.boss ? 4.5 : 2.5) * s, 0, 7); c.fill(); break;
       case 'bazaar': c.fillStyle = '#ffb03a'; c.fillRect(-4 * s, -4 * s, 8 * s, 8 * s); c.strokeStyle = '#7a3a10'; c.lineWidth = 1.5; c.strokeRect(-4 * s, -4 * s, 8 * s, 8 * s); break;
       case 'mound': c.fillStyle = '#8a5a2a'; c.beginPath(); c.arc(0, 0, 2.6 * s, 0, 7); c.fill(); break;
+      case 'pyramid': c.fillStyle = m.awake ? '#ff7a3a' : '#e8c070'; c.beginPath(); c.moveTo(0, -6 * s); c.lineTo(6 * s, 4 * s); c.lineTo(-6 * s, 4 * s); c.closePath(); c.fill(); c.strokeStyle = '#6a4a10'; c.lineWidth = 1.5; c.stroke(); break;
       case 'boat': c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(0, -4 * s); c.lineTo(3 * s, 3 * s); c.lineTo(-3 * s, 3 * s); c.closePath(); c.fill(); c.strokeStyle = '#2a6aa0'; c.lineWidth = 1.5; c.stroke(); break;
       case 'smith': c.fillStyle = '#ff8a3a'; c.fillRect(-4 * s, -4 * s, 8 * s, 8 * s); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.strokeRect(-4 * s, -4 * s, 8 * s, 8 * s); break;
       case 'ore': c.fillStyle = '#9fd0ff'; c.beginPath(); c.moveTo(0, -3.5 * s); c.lineTo(3 * s, 0); c.lineTo(0, 3.5 * s); c.lineTo(-3 * s, 0); c.fill(); break;
@@ -91,7 +92,7 @@ export function createHud(ctx) {
     for (const m of all) {
       const dx = (m.x - player.x) * scale, dz = (m.z - player.z) * scale;
       const d = Math.hypot(dx, dz); let px = dx, py = dz;
-      if (d > half - 8) { if (m.kind !== 'shop' && m.kind !== 'player' && m.kind !== 'trader' && m.kind !== 'smith' && m.kind !== 'bazaar' && m.kind !== 'boat') continue; px = dx / d * (half - 8); py = dz / d * (half - 8); }
+      if (d > half - 8) { if (m.kind !== 'shop' && m.kind !== 'player' && m.kind !== 'trader' && m.kind !== 'smith' && m.kind !== 'bazaar' && m.kind !== 'pyramid' && m.kind !== 'boat') continue; px = dx / d * (half - 8); py = dz / d * (half - 8); }
       mctx.save(); mctx.translate(px, py); mctx.rotate(-player.yaw); drawMarker(mctx, m, 0, 0); mctx.restore();
     }
     const now = performance.now() / 1000;

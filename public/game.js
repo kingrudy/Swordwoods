@@ -190,6 +190,7 @@ export async function startGame({ net, joined, user }) {
   const sparkles = new Particles(scene, 0xffe08a, 0.16, 400, true, -1.5);
   const blood = new Particles(scene, 0xb8332d, 0.13, 300, false, 12);
   const splash = new Particles(scene, 0xcfeaff, 0.12, 200, false, 9);
+  const sand = new Particles(scene, 0xe2c27e, 0.2, 400, false, 6);
   const AU = createAudio(), { audio, tone, noise, burst, ambience, sfx, music, vol } = AU;
 
   /* ================================================================ status en HUD */
@@ -300,8 +301,8 @@ export async function startGame({ net, joined, user }) {
     return { group: g, body: model.group, model, x: 0, z: 0, y: 0, yaw: 0, tx: 0, tz: 0, ty: 0, tyaw: 0, phase: 0, speed: 0, hp: 1, maxhp: 1, first: true };
   }
   /* ---------------- geanimeerde 3D-figuren (worden ingewisseld zodra ze geladen zijn) */
-  const RIG_FOR_MONSTER = (type, id) => ({ 0: id % 2 ? 'skeleton_rogue' : 'skeleton_minion', 2: 'forest_monster', 3: 'forest_monster', 4: 'skeleton_mage', 5: 'rogue_hooded', 6: 'skeleton_warrior' })[type] || null;
-  const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10, 4: 1.7, 5: 1.75, 6: 2.15 };   // bosmonster: hoogte inclusief de boom op zijn rug
+  const RIG_FOR_MONSTER = (type, id) => ({ 0: id % 2 ? 'skeleton_rogue' : 'skeleton_minion', 2: 'forest_monster', 3: 'forest_monster', 4: 'skeleton_mage', 5: 'rogue_hooded', 6: 'skeleton_warrior', 7: 'skeleton_minion', 8: 'skeleton_warrior' })[type] || null;
+  const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10, 4: 1.7, 5: 1.75, 6: 2.15, 7: 1.75, 8: 4.4 };   // bosmonster: hoogte inclusief de boom op zijn rug
   const CLIPS = {
     skeleton: { idle: 'Idle_Combat', walk: 'Walking_D_Skeletons', run: 'Running_C', walkSpeed: 2.2, runSpeed: 5.2, attack: '1H_Melee_Attack_Chop', atkSpeed: 1.4, die: 'Death_A', hit: 'Hit_A', spawn: 'Spawn_Ground_Skeletons' },
     forest: { idle: 'Idle', walk: 'Walk', run: 'Walk', walkSpeed: 1.6, runSpeed: 99, attack: 'Attack', atkSpeed: 1.0, die: 'Dying', hit: null, spawn: null },
@@ -315,10 +316,12 @@ export async function startGame({ net, joined, user }) {
       const t = CH.template('crossbow'), cb = t && t.scene.getObjectByName('1H_Crossbow');
       if (cb && rig.handR) { const c = cb.clone(true); c.position.set(0, 0, 0); rig.handR.add(c); } else e.needBow = true;
     }
-    if (e.type === 5 || e.type === 6) rig.inner.traverse(o => {
+    if (e.type >= 5) rig.inner.traverse(o => {
       if (!o.isMesh) return;
       if (e.type === 5) { o.material.color.multiply(new THREE.Color(0x5a4a6e)); o.material.transparent = true; (e.stealthMats ||= []).push(o.material); }
-      else o.material.color.multiply(new THREE.Color(0xffb8a8));
+      else if (e.type === 6) o.material.color.multiply(new THREE.Color(0xffb8a8));
+      else if (e.type === 7) o.material.color.multiply(new THREE.Color(0xf0dcae));                                       // mummie: zandkleurige zwachtels
+      else if (e.type === 8) { o.material.color.multiply(new THREE.Color(0xffd27a)); if (o.material.emissive) { o.material.emissive.set(0x4a3000); o.material.emissiveIntensity = 0.5; } }   // farao: goud
     });
   }
   let bossSkin = null;
@@ -425,9 +428,9 @@ export async function startGame({ net, joined, user }) {
   }
   const seenMons = new Set();
   function makeMonster(id, type) {
-    const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.isMon = true; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 0 ? 0.85 : 1;
+    const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.isMon = true; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 8 ? 2.0 : type === 0 ? 0.85 : 1;
     e.bar = M.makeBar(0.9 + model.height * 0.18); scene.add(e.bar); e.barY = model.height + 0.35;
-    if (type === 3) { const l = M.makeLabel(MONSTERS[3].name, '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
+    if (type === 3 || type === 8) { const l = M.makeLabel(MONSTERS[type].name, type === 8 ? '#ffd27a' : '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
     wantRig(e, RIG_FOR_MONSTER(type, id), RIG_HEIGHT[type], !seenMons.has(id));   // uit de grond opstaan alleen de eerste keer
     seenMons.add(id); if (seenMons.size > 2000) seenMons.clear();
     mons.set(id, e); return e;
@@ -658,16 +661,20 @@ export async function startGame({ net, joined, user }) {
         if (Math.hypot(m.x - player.x, m.z - player.z) < 30) sfx.arrow();
         break;
       }
-      case 'roots': {
+      case 'roots': case 'sandblast': {
+        const sb = m.k === 'sandblast', R = sb ? 2.8 : 2.4;
         for (const [x, z] of m.pts) {
-          const ring = new THREE.Mesh(new THREE.RingGeometry(2.1, 2.4, 40), M.warnRingMat.clone()); ring.rotation.x = -Math.PI / 2;
-          const fill = new THREE.Mesh(new THREE.CircleGeometry(2.4, 40), M.warnRingMat.clone()); fill.rotation.x = -Math.PI / 2; fill.material.opacity = 0.18;
+          const ring = new THREE.Mesh(new THREE.RingGeometry(R - 0.3, R, 40), M.warnRingMat.clone()); ring.rotation.x = -Math.PI / 2;
+          const fill = new THREE.Mesh(new THREE.CircleGeometry(R, 40), M.warnRingMat.clone()); fill.rotation.x = -Math.PI / 2; fill.material.opacity = 0.18;
+          if (sb) { ring.material.color.set(0xffc35a); fill.material.color.set(0xffc35a); }
           const g = new THREE.Group(); g.add(ring, fill); g.position.set(x, heightAt(x, z) + 0.08, z); scene.add(g);
-          fx.push({ kind: 'warn', mesh: g, fill, t: 0, delay: m.delay, x, z });
+          fx.push({ kind: 'warn', mesh: g, fill, t: 0, delay: m.delay, x, z, sand: sb });
         }
-        if (m.pts.some(([x, z]) => Math.hypot(x - player.x, z - player.z) < 3)) toast('⚠️ Wortels onder je voeten! Rol weg (C / 🌀).', '#ff9a6a');
+        if (m.pts.some(([x, z]) => Math.hypot(x - player.x, z - player.z) < R + 0.5)) toast(sb ? '⚠️ Zandstraal onder je voeten! Rol weg (C / 🌀).' : '⚠️ Wortels onder je voeten! Rol weg (C / 🌀).', '#ff9a6a');
+        if (sb) { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once(clipsOf(e).attack, { speed: 0.7 }); }
         break;
       }
+      case 'enrage': { const e = mons.get(m.id); if (e) { sparkles.emit(e.x, heightAt(e.x, e.z) + 2, e.z, 60, 3, 3, 1.2); if (Math.hypot(e.x - player.x, e.z - player.z) < 40) { banner('👑 De farao wordt woest!', 2200); sfx.rumble(); } } break; }
       case 'summon': for (const [x, z] of m.pts) sparkles.emit(x, heightAt(x, z) + 0.5, z, 30, 1.5, 3, 1.2); { const e = mons.get(m.id); if (e && e.model.kind === 'rig') e.model.once(CLIPS.forest.attack, { speed: 0.8 }); } break;
       case 'lunge': { const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once('Dodge_Forward', { speed: 1.4 }); break; }
       case 'roll': { const e = remotes.get(m.id); if (e && e.model.kind === 'rig') e.model.once('Dodge_Forward', { speed: 1.5 }); break; }
@@ -1223,7 +1230,7 @@ export async function startGame({ net, joined, user }) {
         else e.group.visible = !hidden;
         if (e.alphaOld !== a > 0.95) { e.alphaOld = a > 0.95; e.group.traverse(o => { if (o.isMesh) o.castShadow = a > 0.95; }); }
       }
-      if (e.bar) e.bar.visible = !hidden && (e.hp < e.maxhp || e.type === 3);
+      if (e.bar) e.bar.visible = !hidden && (e.hp < e.maxhp || e.type === 3 || e.type === 8);
       if (e.bar && e.bar.visible) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
     }
     for (const e of dogs.values()) {
@@ -1268,7 +1275,11 @@ export async function startGame({ net, joined, user }) {
       } else if (f.kind === 'warn') {
         f.t += dt; const k = Math.min(1, f.t / f.delay);
         f.fill.scale.setScalar(Math.max(0.01, k)); f.mesh.children[0].material.opacity = 0.35 + Math.sin(time * 20) * 0.2;
-        if (k >= 1) {
+        if (k >= 1 && f.sand) {
+          scene.remove(f.mesh); fx.splice(i, 1);
+          const y = heightAt(f.x, f.z); sand.emit(f.x, y + 0.3, f.z, 70, 3.5, 9, 1.3); sparkles.emit(f.x, y + 1, f.z, 12, 2, 4, 0.8);
+          if (Math.hypot(f.x - player.x, f.z - player.z) < 30) sfx.rumble();
+        } else if (k >= 1) {
           scene.remove(f.mesh); fx.splice(i, 1);
           const r = M.makeRoots(); r.position.set(f.x, heightAt(f.x, f.z) - 2.6, f.z); scene.add(r);
           fx.push({ kind: 'roots', mesh: r, t: 0, y0: heightAt(f.x, f.z) });
@@ -1370,7 +1381,7 @@ export async function startGame({ net, joined, user }) {
       if (b.dip > 0 && Math.random() < 0.3) splash.emit(b.x, WATER + 0.05, b.z, 2, 0.8, 1.2, 0.4);
     }
     for (const c of clouds) { c.position.x += dt * 2.2; if (c.position.x > 480) c.position.x = -480; }
-    chips.update(dt); leaves.update(dt); sparkles.update(dt); blood.update(dt); splash.update(dt);
+    chips.update(dt); leaves.update(dt); sparkles.update(dt); blood.update(dt); splash.update(dt); sand.update(dt);
   }
 
   /* ================================================================ start */

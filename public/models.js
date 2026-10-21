@@ -242,6 +242,8 @@ export function buildMonster(type) {
     case 4: return { kind: 'biped', ...buildHumanoid({ skin: 0xe8e2cf, cloth: 0x4a4458, scale: 0.9, eye: 0x7ad0ff, hairStyle: false }), height: 1.8 };
     case 5: return { kind: 'biped', ...buildHumanoid({ skin: 0x2a2433, cloth: 0x1a1622, scale: 0.95, eye: 0xc070ff, hairStyle: false }), height: 1.8 };
     case 6: return { kind: 'biped', ...buildHumanoid({ skin: 0xd9cfba, cloth: 0x7a2a22, scale: 1.15, bulk: 1.2, eye: 0xff5a2a, club: true, hairStyle: false }), height: 2.2 };
+    case 7: return { kind: 'biped', ...buildHumanoid({ skin: 0xe6d6a8, cloth: 0xcfbf90, scale: 0.95, eye: 0x7aff6a, hairStyle: false }), height: 1.8 };
+    case 8: return { kind: 'biped', ...buildHumanoid({ skin: 0xe6d6a8, cloth: 0xf2c14e, scale: 2.0, bulk: 1.3, eye: 0x7aff6a, club: true, hairStyle: false }), height: 4.2 };
     default: return { kind: 'biped', ...buildHumanoid({ skin: 0x5a3d6b, cloth: 0x2a1f33, scale: 3.6, bulk: 1.55, tusks: true, eye: 0xff4a10, club: true, hairStyle: false }), height: 7.6 };
   }
 }
@@ -671,6 +673,25 @@ export function buildStatue(kind = 'brons') {
   add(new THREE.ConeGeometry(0.06, 0.12, 6), m, 0, y0 + 0.55, 0.12).rotation.x = 0.4;                              // slang op het voorhoofd
   if (kind === 'masker') for (let i = 0; i < 4; i++) add(new THREE.TorusGeometry(0.24 - i * 0.02, 0.018, 6, 16, Math.PI), i % 2 ? lapisMat : m, 0, y0 - 0.1 - i * 0.06, 0.06).rotation.set(Math.PI / 2, 0, Math.PI);
   return g;
+}
+/** Getrapte piramide (16 m breed) met ingang en zegel aan de +Z-kant en een gouden top. */
+export function buildPyramid() {
+  const g = new THREE.Group(), sand = std(0xd9b46e), sand2 = std(0xc9a05c), dark = new THREE.MeshBasicMaterial({ color: 0x120a04 });
+  const add = (geo, mat, x, y, z) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
+  const N = 7, H = 1.55;
+  for (let i = 0; i < N; i++) { const w = 16.4 - i * 2.25; add(new THREE.BoxGeometry(w, H, w), i % 2 ? sand2 : sand, 0, H / 2 + i * H, 0); }
+  const cap = add(new THREE.ConeGeometry(1.25, 1.9, 4), statueMats.goud, 0, N * H + 0.95, 0); cap.rotation.y = Math.PI / 4;
+  // ingang: donkere gang met zuilen en een latei
+  add(new THREE.BoxGeometry(2.6, 3.2, 0.3), dark, 0, 1.6, 8.12);
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.7, 3.8, 0.9), sand2, s * 1.75, 1.9, 8.35);
+  add(new THREE.BoxGeometry(4.4, 0.8, 1.0), sand2, 0, 4.1, 8.35);
+  const eye = add(new THREE.TorusGeometry(0.42, 0.07, 6, 18), statueMats.goud, 0, 4.1, 8.88); eye.scale.y = 0.55;
+  const seal = add(new THREE.BoxGeometry(2.5, 3.1, 0.25), std(0xb48a4c, { emissive: 0x6a4a00, emissiveIntensity: 0.25 }), 0, 1.55, 8.32);
+  const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.4, 14, 14, 1, true).translate(0, 7, 0), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  glow.position.set(0, 0, 10.4); g.add(glow);
+  for (const s of [-1, 1]) { const st = buildStatue('zilver'); st.scale.setScalar(1.5); st.position.set(s * 3.4, 0, 10); g.add(st); }
+  const label = makeLabel('Piramide van de farao', '#ffd27a'); label.position.set(0, N * H + 3.4, 0); label.scale.multiplyScalar(2.2); g.add(label);
+  return { group: g, seal, glow };
 }
 /** Houten bootje met mast en zeil. Lengte langs Z, voorkant naar -Z. */
 export function buildBoat() {

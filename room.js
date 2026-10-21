@@ -20,6 +20,7 @@ import { Social } from './room/social.js';
 import { WorldEvents } from './room/worldEvents.js';
 import { Desert } from './room/desert.js';
 import { Building } from './room/building.js';
+import { Pyramid } from './room/pyramid.js';
 export { ensureSave, ensureDaily, applyTalent } from './room/save.js';
 export { CFG } from './room/shared.js';
 
@@ -70,6 +71,7 @@ export class Room {
     for (let i = 0; i < CFG.animalTarget; i++) this.spawnAnimal(i < 8);
     for (let i = 0; i < CFG.desertAnimals; i++) this.spawnAnimal(false, true);
     this.moundBack = new Map();   // idx -> tijd waarop de zandberg terug is
+    this.pyr = { st: 'idle', until: 0, empty: 0 };   // idle | guards | boss | cool
     for (let i = 0; i < CFG.strays; i++) this.spawnStray();
     for (const P of this.players.values()) if (P.u.save.dog) this.spawnOwnedDog(P);
     this.emptySince = this.players.size ? null : Date.now();
@@ -112,7 +114,7 @@ export class Room {
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look })),
       felled: [...this.felled.keys()], chests: [...this.chestOpen.keys()], ores: [...this.oreBack.keys()], mounds: [...this.moundBack.keys()],
       builds: [...this.builds.values()].map(b => this.btuple(b)),
-      ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(), pot: this.potInfo(),
+      ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(), pot: this.potInfo(), pyr: this.pyrInfo(),
     });
     this.sendInv(P);
     return P;
@@ -189,6 +191,7 @@ export class Room {
       case 'unboard': this.unboard(P); break;
       case 'dig': this.dig(P, m.i | 0); break;
       case 'sell': this.sellStatues(P, String(m.k)); break;
+      case 'pyramid': this.openPyramid(P); break;
       case 'bzbuy': this.bazaarBuy(P, String(m.id)); break;
       case 'dogcmd': this.dogCmd(P, String(m.c), m.id | 0); break;
       case 'give': this.give(P, m.to | 0, String(m.what), m.n | 0, m.i | 0); break;
@@ -210,12 +213,14 @@ export class Room {
     const sc = this.waveScale || { hp: 1, dmg: 1, spd: 1 };
     if (cmd === 'spawn') for (let i = 0; i < Math.min(10, +b || 1); i++) {
       const t = Math.max(0, Math.min(MONSTERS.length - 1, a | 0)), ang = Math.random() * 6.28, x = P.x + Math.cos(ang) * 12, z = P.z + Math.sin(ang) * 12;
-      this.spawnMonster(t, x, z, sc.hp, sc.dmg, sc.spd); this.wave.ph = 1;
+      const m = this.spawnMonster(t, x, z, sc.hp, sc.dmg, sc.spd); this.wave.ph = 1;
+      if (inDesert(P.x, P.z)) { m.zone = 'desert'; m.wave = false; }
     }
     if (cmd === 'golf') { this.monsters.clear(); this.startWave(a || null); }
     if (cmd === 'god') P.god = !P.god;
     if (cmd === 'hond' && !P.u.save.dog) { P.u.save.dog = { name: 'Testje', level: 3, xp: 0, fur: 1, breed: breedOf(a).id }; this.spawnOwnedDog(P); this.sendInv(P); }
     if (cmd === 'weer') { this.weather.k = WEATHERS.some(w => w.k === a) ? a : 'onweer'; this.weather.until = this.T + 600; this.weather.bolt = this.T + 2; this.bc({ t: 'weather', k: this.weather.k }); }
+    if (cmd === 'piramide') { if (this.pyr.st === 'cool') this.pyrSet('idle'); P.u.save.gold += 30; this.sendInv(P); }
     if (cmd === 'handelaar') { this.trader = null; this.traderAt = this.T; }
     if (cmd === 'zwaard') this.giveSword(P, rollSwordOfRarity(Math.max(0, Math.min(4, a | 0))), 'chest');
     if (cmd === 'erts') { P.u.save.ore += Math.min(1000, a | 0); this.sendInv(P); }
@@ -255,6 +260,7 @@ export class Room {
     else if (this.waveLeft() === 0) this.endWave();
 
     this.updateWorldEvents(dt);
+    this.updatePyramid();
     this.updateMonsters(dt);
     this.updateTowers();
     this.updateAnimals(dt);
@@ -285,7 +291,7 @@ export class Room {
     for (const P of this.players.values()) {
       const near = (e, r) => Math.abs(e.x - P.x) < r && Math.abs(e.z - P.z) < r && len(e.x - P.x, e.z - P.z) < r;
       const m = [], a = [];
-      for (const [e, t] of mons) if (e.type === 3 || near(e, rm)) m.push(t);
+      for (const [e, t] of mons) if (e.type === 3 || e.type === 8 || near(e, rm)) m.push(t);
       for (const [e, t] of anis) if (near(e, ra)) a.push(t);
       const you = { hp: Math.round(P.hp), mhp: P.mhp, bf: this.buffInfo(P), hu: Math.round(P.hunger), sc: P.u.save.stats.score, rs: P.dead ? Math.max(0, Math.ceil(P.respawnAt - this.T)) : 0 };
       P.conn.send(head + ',"m":' + JSON.stringify(m) + ',"a":' + JSON.stringify(a) + ',"y":' + JSON.stringify(you) + '}');
@@ -295,6 +301,6 @@ export class Room {
 }
 
 // De rest van de kamer staat per onderwerp in room/*.js.
-for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building]) {
+for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid]) {
   for (const k of Object.getOwnPropertyNames(Mixin.prototype)) if (k !== 'constructor') Object.defineProperty(Room.prototype, k, Object.getOwnPropertyDescriptor(Mixin.prototype, k));
 }

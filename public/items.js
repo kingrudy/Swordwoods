@@ -64,7 +64,12 @@ export const MONSTERS = [
   { key: 'schutter', name: 'Skeletschutter', hp: 20, dmg: 9, speed: 3.4, r: 0.5, score: 14, minWave: 3, weight: 3, atkCd: 2.4, ranged: true },
   { key: 'sluiper',  name: 'Sluiper',        hp: 16, dmg: 13, speed: 6.4, r: 0.45, score: 16, minWave: 5, weight: 2, atkCd: 1.3, stealth: true },
   { key: 'jager',    name: 'Hondenjager',    hp: 60, dmg: 12, speed: 4.6, r: 0.6, score: 22, minWave: 6, weight: 2, atkCd: 1.2, hunter: true },
+  // Alleen in de piramide op het Woestijneiland (komen nooit in golven voor)
+  { key: 'mummie',   name: 'Mummie',         hp: 48, dmg: 10, speed: 3.3, r: 0.55, score: 25, minWave: 99, weight: 0, atkCd: 1.3 },
+  { key: 'farao',    name: 'Mummie-farao',   hp: 650, dmg: 24, speed: 3.0, r: 1.2, score: 400, minWave: 99, weight: 0, atkCd: 1.8 },
 ];
+/** Piramide: betaal goud bij de ingang om de mummies en daarna de farao te wekken. */
+export const PYRAMID = { cost: 30, cooldown: 1800, guards: 5, perPlayer: 2, giveUp: 25, reward: [40, 80], maskChance: 0.25 };
 /** Golfmodificaties: soms krijgt een golf een extra eigenschap (en meer beloning). */
 export const WAVE_MODS = [
   { id: 'snel',    name: 'Snelle golf', desc: 'Monsters zijn 25% sneller', spd: 1.25 },

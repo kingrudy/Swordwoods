@@ -270,6 +270,30 @@ export function createWorld(seed) {
     return null;
   };
   // palmen rond de oase en verspreid langs de kust (hakbaar: zo kun je een boot terug bouwen)
+  // piramide: de vlakste plek aan de oostkant (ver van de haven), zonder rng zodat de rest gelijk blijft
+  const pyramid = (() => {
+    let best = null, bestScore = 1e9;
+    for (let k = 0; k < 36; k++) for (const r of [34, 42, 50]) {
+      const a = (k / 36 - 0.5) * Math.PI * 1.3, x = D.cx + Math.cos(a) * r, z = D.cz + Math.sin(a) * r;
+      if (len(x - oasis.x, z - oasis.z) < 26 || len(x - bazaar.x, z - bazaar.z) < 40) continue;
+      let lo = 1e9, hi = -1e9;
+      for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) { const h = heightAt(x + i * 5, z + j * 5); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+      if (lo < 1.2) continue;
+      const score = (hi - lo) + Math.abs(a) * 0.5;
+      if (score < bestScore) { bestScore = score; best = { x, z, lo }; }
+    }
+    if (!best) best = { x: D.cx + 40, z: D.cz, lo: heightAt(D.cx + 40, D.cz) };
+    const rotY = Math.atan2(D.cx - best.x, D.cz - best.z);   // ingang (lokale +Z) wijst naar het midden van het eiland
+    const p = { x: best.x, z: best.z, y: best.lo - 0.4, rotY, half: 8, r: 8.6, solid: true, pyramid: true };
+    gAdd(p);
+    for (const [cx, cz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {   // hoeken van het vierkant
+      const c = Math.cos(rotY), sn = Math.sin(rotY), lx = cx * 6.3, lz = cz * 6.3;
+      gAdd({ x: p.x + lx * c + lz * sn, z: p.z - lx * sn + lz * c, r: 2.4, solid: true, pyramid: true });
+    }
+    const ex = p.x + Math.sin(rotY) * 10.5, ez = p.z + Math.cos(rotY) * 10.5;   // vlak voor de ingang
+    p.entrance = { x: ex, z: ez, y: heightAt(ex, ez) };
+    return p;
+  })();
   for (let tries = 0; tries < 3000 && trees.length < 420 + 46; tries++) {
     const nearO = drng() < 0.55, a = drng() * Math.PI * 2, d = nearO ? 9 + drng() * 14 : 10 + drng() * D.r * 0.8;
     const x = (nearO ? oasis.x : D.cx) + d * Math.cos(a), z = (nearO ? oasis.z : D.cz) + d * Math.sin(a), h = heightAt(x, z);
@@ -282,13 +306,13 @@ export function createWorld(seed) {
   const mounds = [];
   for (let tries = 0; tries < 4000 && mounds.length < 34; tries++) {
     const p = desertPoint(drng, 12, D.r * 0.8, 1.2); if (!p) continue;
-    if (len(p.x - bazaar.x, p.z - bazaar.z) < 10 || len(p.x - oasis.x, p.z - oasis.z) < 13) continue;
+    if (len(p.x - bazaar.x, p.z - bazaar.z) < 10 || len(p.x - oasis.x, p.z - oasis.z) < 13 || len(p.x - pyramid.entrance.x, p.z - pyramid.entrance.z) < 9) continue;
     let ok = true; gNear(p.x, p.z, o => { if (len(o.x - p.x, o.z - p.z) < 3.5) ok = false; });
     for (const m of mounds) if (len(m.x - p.x, m.z - p.z) < 11) ok = false;
     if (!ok) continue;
     mounds.push({ idx: mounds.length, x: p.x, z: p.z, y: heightAt(p.x, p.z), size: 0.9 + drng() * 0.6, rotY: drng() * 6.28 });
   }
-  const desert = { ...D, harbor, bazaar, mounds, oasis, point: desertPoint };
+  const desert = { ...D, harbor, bazaar, mounds, oasis, pyramid, point: desertPoint };
 
   return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, ruins, pot, arena, desert, biomeW, biomeAt, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
 }

@@ -11,6 +11,7 @@ export class Waves {
   wipe() {
     bump('wipe.' + String(this.wave.n).padStart(2, '0'));
     this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.wave.mod = null;
+    if (this.pyr.st === 'guards' || this.pyr.st === 'boss') this.pyrSet('idle');
     this.wave.n = Math.max(0, this.wave.n - 1); this.wave.ph = 0; this.wave.t = CFG.wipeDelay;
     this.bc({ t: 'wave', ph: 0, n: this.wave.n, wipe: true, next: this.wave.t });
   }
@@ -54,7 +55,7 @@ export class Waves {
       id: this.eid++, type, x, z, yaw: 0, hp: M.hp * hpMul, maxhp: M.hp * hpMul,
       dmg: M.dmg * dmgMul, speed: M.speed * spdMul, nextAtk: 0, stun: 0, retarget: 0, target: null,
       wave: true,   // telt mee voor het einde van de golf (bewakers van ruïnes en piramide niet)
-      abRoots: this.T + 6, abSummon: this.T + 12, lungeCd: 0, lungeUntil: 0, strafe: Math.random() < 0.5 ? 1 : -1,
+      abRoots: this.T + 6, abSummon: this.T + 12, abSand: this.T + 5, lungeCd: 0, lungeUntil: 0, strafe: Math.random() < 0.5 ? 1 : -1,
     };
     this.monsters.set(m.id, m);
     return m;
@@ -84,6 +85,7 @@ export class Waves {
   killMonster(m, P) {
     this.monsters.delete(m.id);
     if (m.guard !== undefined) this.guardGone(m);
+    if (m.type === 8) this.pharaohDown(m);
     if (!P) { this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type }); return; }
     const M = MONSTERS[m.type], s = P.u.save;
     s.stats.kills++; s.stats.score += M.score * Math.max(1, this.wave.n);
@@ -125,30 +127,33 @@ export class Waves {
     return b;
   }
 
-  targetOk(t) { return t && !inDesert(t.x, t.z) && (t.isDog ? this.dogs.has(t.id) && t.state === 'follow' : !t.dead && !t.boat && this.players.has(t.id)); }
+  /** Bosmonsters jagen alleen op het bos-eiland, piramidemonsters alleen in de woestijn. */
+  targetOk(t, zone) { return t && inDesert(t.x, t.z) === (zone === 'desert') && (t.isDog ? this.dogs.has(t.id) && t.state === 'follow' : !t.dead && !t.boat && this.players.has(t.id)); }
 
   updateMonsters(dt) {
-    const alive = [...this.players.values()].filter(p => !p.dead && !inDesert(p.x, p.z) && !p.boat);   // monsters blijven op het bos-eiland
-    for (const d of this.dogs.values()) if (d.state === 'follow' && !inDesert(d.x, d.z)) alive.push(d);
+    const alive = [], aliveD = [];   // doelen op het bos-eiland en in de woestijn
+    for (const p of this.players.values()) if (!p.dead && !p.boat) (inDesert(p.x, p.z) ? aliveD : alive).push(p);
+    for (const d of this.dogs.values()) if (d.state === 'follow') (inDesert(d.x, d.z) ? aliveD : alive).push(d);
     const arr = [...this.monsters.values()];
     for (const m of arr) {
       if (m.stun > 0) { m.stun -= dt; continue; }
-      const M = MONSTERS[m.type];
+      const M = MONSTERS[m.type], pool = m.zone === 'desert' ? aliveD : alive;
       m.retarget -= dt;
-      if (m.retarget <= 0 || !this.targetOk(m.target)) {
+      if (m.retarget <= 0 || !this.targetOk(m.target, m.zone)) {
         m.retarget = 0.6;
-        const dogT = M.hunter ? this.nearest([...this.dogs.values()].filter(d => d.state === 'follow'), m.x, m.z, 80) : null;   // hondenjager: eerst de honden
-        const taunt = this.nearest([...this.dogs.values()].filter(d => d.state === 'follow' && d.breed === 'waak'), m.x, m.z, 8);   // waakhond trekt de aandacht
-        m.target = dogT || taunt || this.nearest(alive, m.x, m.z, 400);
+        const dogT = M.hunter ? this.nearest(pool.filter(d => d.isDog), m.x, m.z, 80) : null;   // hondenjager: eerst de honden
+        const taunt = this.nearest(pool.filter(d => d.isDog && d.breed === 'waak'), m.x, m.z, 8);   // waakhond trekt de aandacht
+        m.target = dogT || taunt || this.nearest(pool, m.x, m.z, m.pyr ? 70 : 400);
       }
       const tg = m.target; if (!tg) continue;
       let dx = tg.x - m.x, dz = tg.z - m.z, d = len(dx, dz);
-      if (d > 140) {   // te ver weg geraakt: dichter bij de speler zetten
+      if (d > 140 && !m.pyr) {   // te ver weg geraakt: dichter bij de speler zetten
         const pt = this.world.landPoint(Math.random, tg.x, tg.z, 45, 60, 0.0);
         if (pt) { m.x = pt.x; m.z = pt.z; dx = tg.x - m.x; dz = tg.z - m.z; d = len(dx, dz); }
       }
       m.yaw = Math.atan2(-dx, -dz);
       if (m.type === 3) this.bossAbilities(m, alive);
+      else if (m.type === 8) this.pharaohAbilities(m, pool);
       if (M.ranged && !m.siege) { this.archerAI(m, M, tg, dx, dz, d, dt); continue; }
       let speed = m.speed;
       if (M.stealth) {                              // sluiper: springt het laatste stuk naar voren
@@ -252,8 +257,8 @@ export class Waves {
       for (const P of this.players.values()) {
         if (P.dead || len(P.x - h.x, P.z - h.z) > h.r) continue;
         if (this.T < (P.iframe || 0)) { P.conn.send({ t: 'ev', k: 'dodged' }); continue; }
-        this.hurt(P, h.dmg, null, 'melee', h.bolt ? 'bliksem' : 'wortels');
-        if (!h.bolt) { P.rootUntil = this.T + 1.5; P.conn.send({ t: 'rooted', s: 1.5 }); }
+        this.hurt(P, h.dmg, null, 'melee', h.bolt ? 'bliksem' : h.sand ? 'zandstraal' : 'wortels');
+        if (!h.bolt && !h.sand) { P.rootUntil = this.T + 1.5; P.conn.send({ t: 'rooted', s: 1.5 }); }
       }
       for (const d of this.dogs.values()) if (d.state === 'follow' && len(d.x - h.x, d.z - h.z) < h.r) this.hurtDog(d, h.dmg * 0.6);
       if (h.bolt) {
