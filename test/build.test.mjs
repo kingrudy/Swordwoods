@@ -62,6 +62,22 @@ const hp0 = wall.hp; let crossed = false;
 for (let i = 0; i < 200; i++) { R.update(0.05); P.hp = 100; const side = (m.x - wall.x) * nx + (m.z - wall.z) * nz; const along = Math.abs((m.x - wall.x) * nz - (m.z - wall.z) * nx); if (side < 0 && along < 1.4) crossed = true; }
 ok(!crossed, 'monster loopt niet door de muur');
 ok(wall.hp < hp0 || !R.builds.has(wall.id), 'monster slaat op de muur: ' + hp0 + ' -> ' + Math.round(wall.hp));
+// spelers kunnen niet door een muur heen (ook niet met een aangepaste client)
+if (R.builds.has(wall.id)) {
+  R.monsters.clear(); wall.hp = wall.maxhp;
+  const walk = (x, z) => { R.T += 0.1; R.handle(P, { t: 'in', x, z, y: R.world.heightAt(x, z), yaw: 0 }); };
+  goto(wall.x - nx * 1.5, wall.z - nz * 1.5); P.lastInT = R.T; msgs.length = 0;
+  walk(wall.x + nx * 1.5, wall.z + nz * 1.5);
+  const side = (P.x - wall.x) * nx + (P.z - wall.z) * nz;
+  ok(side < 0 && msgs.some(m => m.t === 'correct'), 'speler die door de muur loopt wordt teruggezet (kant ' + side.toFixed(2) + ')');
+  goto(wall.x - nx * 1.5, wall.z - nz * 1.5); P.lastInT = R.T; msgs.length = 0;
+  for (let i = 1; i <= 10; i++) walk(wall.x - nx * 1.5 + nz * i * 0.4, wall.z - nz * 1.5 - nx * i * 0.4);
+  ok(!msgs.some(m => m.t === 'correct'), 'langs de muur lopen mag gewoon');
+  goto(wall.x - nx * 0.6, wall.z - nz * 0.6); P.lastInT = R.T; msgs.length = 0; walk(wall.x - nx * 0.4, wall.z - nz * 0.4);
+  ok(!msgs.some(m => m.t === 'correct') && Math.abs(P.x - (wall.x - nx * 0.4)) < 0.01, 'tegen de muur aan staan (client-straal 0,38) mag');
+  goto(wall.x, wall.z); P.lastInT = R.T; msgs.length = 0; walk(wall.x - nx * 1.2, wall.z - nz * 1.2);
+  ok(!msgs.some(m => m.t === 'correct'), 'wie in een muur staat mag eruit lopen');
+}
 // toren schiet
 R.monsters.clear();
 sp = findSpot('tower'); goto(sp.px, sp.pz); R.handle(P, { t: 'build', kind: 'tower', x: sp.x, z: sp.z, rot: sp.rot });

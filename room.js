@@ -146,6 +146,13 @@ export class Room {
           x = P.x; z = P.z;
         }
         if (this.T < (P.rootUntil || 0)) { x = P.x; z = P.z; }       // vastgegroeid door de Woudreus
+        if (!P.boat) {                                                // niet door muren heen
+          const stop = this.wallBlock(P.x, P.z, x, z);
+          if (stop) {
+            [x, z] = stop; P.wallHits = (P.wallHits || 0) + 1;
+            if (this.T - (P.lastCorrect || -9) > 0.25) { P.lastCorrect = this.T; P.conn.send({ t: 'correct', x: r2(x), y: r2(this.world.heightAt(x, z)), z: r2(z) }); }
+          }
+        }
         [x, z] = clampXZ(x, z);
         P.vx = (x - P.x) / since; P.vz = (z - P.z) / since;
         P.x = x; P.z = z;

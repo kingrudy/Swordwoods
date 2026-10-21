@@ -2,10 +2,36 @@
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
 import { XP } from '../public/progress.js';
 import { bump } from '../stats.js';
-import { BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, canPlace } from '../public/builds.js';
+import { BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, canPlace, pushOut, boundR } from '../public/builds.js';
 import { r1, r2, len } from './shared.js';
 
 export class Building {
+  /**
+   * Controleert of een stap van (ox,oz) naar (x,z) dwars door een muur, palissade, toren of kampvuur gaat.
+   * De client botst zelf al met straal 0,38; hier testen we ruim (0,12), zodat alleen echte doorsteken worden
+   * tegengehouden. Geeft de laatste geldige plek terug, of null als de stap mag.
+   */
+  wallBlock(ox, oz, x, z) {
+    if (!this.builds.size) return null;
+    const r = 0.12, cand = [];
+    for (const b of this.builds.values()) {
+      const B = BUILD_BY_ID[b.kind]; if (!B.solid) continue;
+      const R = boundR(B) + r + 0.2;
+      if (Math.max(ox, x) < b.x - R || Math.min(ox, x) > b.x + R || Math.max(oz, z) < b.z - R || Math.min(oz, z) > b.z + R) continue;
+      if (pushOut(b, ox, oz, r)) continue;          // stond er al in (bv. net iets op je gebouwd): eruit lopen mag
+      cand.push(b);
+    }
+    if (!cand.length) return null;
+    const n = Math.max(1, Math.ceil(len(x - ox, z - oz) / 0.2));
+    let px = ox, pz = oz;
+    for (let i = 1; i <= n; i++) {
+      const sx = ox + (x - ox) * i / n, sz = oz + (z - oz) * i / n;
+      for (const b of cand) if (pushOut(b, sx, sz, r)) return [px, pz];
+      px = sx; pz = sz;
+    }
+    return null;
+  }
+
   btuple(b) { return [b.id, BUILD_BY_ID[b.kind].idx, r2(b.x), r2(b.z), r2(b.rot), Math.round(b.hp), b.maxhp, b.owner]; }
 
   saveBuilds() {
