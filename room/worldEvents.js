@@ -1,7 +1,7 @@
 // Buffs, ruïnes met bewakers, weer met bliksem en de reizende handelaar.
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
 import { WATER } from '../public/world.js';
-import { rollSword, MAX_POTIONS, TRADER_ITEMS, WEATHERS } from '../public/items.js';
+import { MAX_POTIONS, TRADER_ITEMS, WEATHERS, rollSwordAtLeast } from '../public/items.js';
 import { bump } from '../stats.js';
 import { r1, len } from './shared.js';
 
@@ -27,7 +27,7 @@ export class WorldEvents {
     else if (st.st === 'ready') {
       st.st = 'cool'; st.until = this.T + 1200;
       const s = P.u.save, ore = 4 + Math.floor(Math.random() * 5), wood = 15 + Math.floor(Math.random() * 16);
-      let sw = rollSword(1.4); for (let k = 0; k < 6 && sw.rarity < 2; k++) sw = rollSword(1.4);
+      const sw = rollSwordAtLeast(2, 1.4);
       s.ore += ore; s.wood += wood; s.stats.dungeons++; bump('dungeon');
       this.giveSword(P, sw, 'chest');
       P.conn.send({ t: 'loot', kind: 'dungeon', ore, wood });
@@ -53,7 +53,7 @@ export class WorldEvents {
     s.wood -= it.cost; s.stats.spent = (s.stats.spent | 0) + it.cost; bump('trader.' + id);
     P.buffs = P.buffs || {};
     switch (id) {
-      case 'mystery': { let sw = rollSword(1.8); for (let k = 0; k < 8 && sw.rarity < 2; k++) sw = rollSword(1.8); this.giveSword(P, sw, 'chest'); break; }
+      case 'mystery': { const sw = rollSwordAtLeast(2, 1.8); this.giveSword(P, sw, 'chest'); break; }
       case 'elixir': P.buffs.elixir = Math.max(P.buffs.elixir || 0, this.T) + 300; break;
       case 'haste': P.buffs.haste = Math.max(P.buffs.haste || 0, this.T) + 180; break;
       case 'ore': s.ore += 10; break;

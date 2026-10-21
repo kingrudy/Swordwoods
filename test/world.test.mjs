@@ -35,7 +35,7 @@ const m = R.spawnMonster(0, bolt.x, bolt.z, 1, 0, 0); m.speed = 0; step(1.2);
 ok(!R.monsters.has(m.id), 'monster op de inslag gedood');
 R.weather.k = 'helder';
 // ---- handelaar
-R.traderAt = R.T; step(0.2);
+R.traderAt = R.T; for (let i = 0; i < 60 && !R.trader; i++) step(0.5);   // de plek moet vrij zijn; anders probeert hij het over 5 s opnieuw
 ok(!!R.trader && msgs.some(m => m.t === 'trader' && m.arrived), 'reizende handelaar komt langs');
 R.trader.stock = ['elixir', 'haste', 'ore', 'mystery'];
 P.x = R.trader.x + 2; P.z = R.trader.z; const w0 = P.u.save.wood;

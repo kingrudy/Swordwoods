@@ -11,8 +11,16 @@ const P = R.addPlayer(conn('Zeevaarder')); const W = R.world, s = P.u.save;
 const step = t => { for (let i = 0; i < Math.round(t / 0.05); i++) R.update(0.05); };
 const walk = (x, z) => { R.handle(P, { t: 'in', x, z, y: Math.max(W.heightAt(x, z), WATER), yaw: P.yaw }); R.update(0.1); };
 // boot bouwen aan de oostkust van het bos
-let spot = null;
-for (let zz = 0; zz < 120 && !spot; zz += 7) for (let x = 120; x < 230 && !spot; x += 1) { const z = zz % 2 ? -zz : zz; if (W.heightAt(x, z) > 0.5) continue; const pp = placePoint(BUILD_BY_ID.boat, x - 3.6, z, -Math.PI / 2); if (!canPlace(W, R.builds.values(), 'boat', pp.x, pp.z, pp.rot)) spot = { px: x - 3.6, pz: z, ...pp }; }
+let spot = null;   // vanaf open zee (straal 200) naar binnen tot de kust, rondom het eiland; begin aan de oostkant
+for (let k = 0; k < 72 && !spot; k++) {
+  const a = (k % 2 ? 1 : -1) * Math.floor((k + 1) / 2) * 0.09, ca = Math.cos(a), sa = Math.sin(a);
+  let r = 200; while (r > 40 && W.heightAt(r * ca, r * sa) < 0.8) r -= 0.5;
+  if (r <= 40) continue;
+  for (let d = r - 1; d < r + 8 && !spot; d += 0.5) {
+    const pp = placePoint(BUILD_BY_ID.boat, d * ca, d * sa, Math.atan2(-ca, -sa));
+    if (!canPlace(W, R.builds.values(), 'boat', pp.x, pp.z, pp.rot)) spot = { px: d * ca, pz: d * sa, a, ...pp };
+  }
+}
 ok(!!spot, 'plek voor een boot gevonden bij x=' + (spot && spot.x.toFixed(1)));
 P.x = spot.px; P.z = spot.pz; P.lastInT = R.T;
 R.handle(P, { t: 'build', kind: 'boat', x: spot.x, z: spot.z, rot: spot.rot });
@@ -24,7 +32,12 @@ ok(!!canPlace(W, [], 'boat', land.x, land.z, land.rot), 'boot op het land kan ni
 R.handle(P, { t: 'board', id: boat.id });
 ok(P.boat === boat, 'ingestapt');
 const H = W.desert.harbor; let x = P.x, z = P.z;
-while (Math.hypot(H.x - 4 - x, H.z - z) > 1) { const d = Math.hypot(H.x - 4 - x, H.z - z), st = Math.min(d, 0.9); x += (H.x - 4 - x) / d * st; z += (H.z - z) / d * st; if (W.heightAt(x, z) > WATER - 0.2) break; walk(x, z); }
+const route = [[205 * Math.cos(spot.a), 205 * Math.sin(spot.a)]];        // naar open zee, langs de buitenkant naar het oosten, dan naar de haven
+for (let k = 1; k <= 12; k++) { const b = spot.a * (1 - k / 12); route.push([205 * Math.cos(b), 205 * Math.sin(b)]); }
+route.push([235, 0], [235, H.z], [H.x - 4, H.z]);
+for (const [tx, tz] of route) {
+  while (Math.hypot(tx - x, tz - z) > 0.5) { const d = Math.hypot(tx - x, tz - z), st = Math.min(d, 0.9), nx = x + (tx - x) / d * st, nz = z + (tz - z) / d * st; if (W.heightAt(nx, nz) > WATER - 0.2) break; x = nx; z = nz; walk(x, z); }
+}
 ok(Math.hypot(boat.x - P.x, boat.z - P.z) < 0.01 && P.x > 240, 'over zee gevaren tot x=' + P.x.toFixed(0) + ' (boot vaart mee)');
 ok(!msgs.some(m => m.t === 'correct'), 'snelheidscontrole laat varen toe');
 // monsters negeren spelers op zee / in de woestijn

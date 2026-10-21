@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer. Hier: opbouw, invoer van spelers, hoofdlus en snapshots.
 // Alle onderwerpen (golven, honden, bouwen, woestijn, ...) staan in room/*.js en worden onderaan aan Room gekoppeld.
 
-import { createWorld, WATER, clampXZ, inDesert } from './public/world.js';
+import { createWorld, worldOk, WATER, clampXZ, inDesert } from './public/world.js';
 import { rollSwordOfRarity, AXE, MONSTERS, eqCode, WEATHERS, DOG_BREEDS, breedOf, ROLL_CD, ROLL_IFRAME } from './public/items.js';
 import { tal, maxHp } from './public/progress.js';
 import { bump } from './stats.js';
@@ -33,7 +33,8 @@ export class Room {
   constructor(id, name, max, permanent, markDirty, store = null) {
     this.id = id; this.name = name; this.max = max; this.permanent = permanent; this.markDirty = markDirty;
     this.store = store || {};                                  // blijvende kamerdata (vaste kamers: in db.json)
-    this.seed = Number.isInteger(this.store.seed) ? this.store.seed : 1 + Math.floor(Math.random() * 9000);
+    if (Number.isInteger(this.store.seed)) this.seed = this.store.seed;
+    else for (let k = 0; k < 30; k++) { this.seed = 1 + Math.floor(Math.random() * 9000); if (worldOk(getWorld(this.seed))) break; }   // geen piepkleine eilanden
     this.store.seed = this.seed;
     this.builds = new Map(); this.bid = 1;
     if (!this.store.pot || typeof this.store.pot !== 'object') this.store.pot = { have: 0, lvl: 1 };

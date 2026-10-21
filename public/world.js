@@ -23,6 +23,13 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const len = (x, z) => Math.sqrt(x * x + z * z);
 
+/** Is dit een goede wereld? Sommige seeds geven een piepklein eiland of geen ruïnes; die slaan we over. */
+export function worldOk(W) {
+  let land = 0;
+  for (let x = -200; x < 200; x += 10) for (let z = -200; z < 200; z += 10) if (W.heightAt(x, z) > 1) land++;
+  return land >= 260 && W.ruins.length >= 4 && W.trees.length >= 420 + 30 && W.desert.mounds.length >= 25;
+}
+
 export function createWorld(seed) {
   function hash(ix, iz) {
     let h = (Math.imul(ix, 374761393) + Math.imul(iz, 668265263) + Math.imul(seed, 1442695041)) | 0;
@@ -180,15 +187,17 @@ export function createWorld(seed) {
 
   // ---- ruïnes met een kerkerkist (eigen rng)
   const rrng = mulberry32(seed * 41 + 7), ruins = [];
-  for (let tries = 0; tries < 20000 && ruins.length < 5; tries++) {
-    const r = 50 + rrng() * (HALF * 0.82 - 50), a = rrng() * TAU;
+  // eerste ronde streng; lukt dat niet vijf keer (dichte bossen), dan een tweede, iets ruimere ronde
+  for (const L of [{ rMin: 50, h0: 1.0, slope: 0.38, dh: 2.2, clear: 6.6, apart: 40, tries: 20000 }, { rMin: 32, h0: 0.8, slope: 0.5, dh: 3.2, clear: 5.4, apart: 28, tries: 30000 }])
+  for (let tries = 0; tries < L.tries && ruins.length < 5; tries++) {
+    const r = L.rMin + rrng() * (HALF * 0.82 - L.rMin), a = rrng() * TAU;
     const x = r * Math.cos(a), z = r * Math.sin(a), h = heightAt(x, z);
-    if (h < 1.0 || h > 15 || slopeAt(x, z) > 0.38) continue;
+    if (h < L.h0 || h > 15 || slopeAt(x, z) > L.slope) continue;
     let ok = true;
-    for (let k = 0; k < 8 && ok; k++) { const px = x + Math.cos(k / 8 * TAU) * 6, pz = z + Math.sin(k / 8 * TAU) * 6; if (heightAt(px, pz) < 0.8 || Math.abs(heightAt(px, pz) - h) > 2.2) ok = false; }
-    gNear(x, z, o => { if (len(o.x - x, o.z - z) < 6.6) ok = false; });
-    for (const g2 of [[x + 5, z], [x - 5, z], [x, z + 5], [x, z - 5]]) gNear(g2[0], g2[1], o => { if (len(o.x - x, o.z - z) < 6.6) ok = false; });
-    for (const o of ruins) if (len(o.x - x, o.z - z) < 40) ok = false;
+    for (let k = 0; k < 8 && ok; k++) { const px = x + Math.cos(k / 8 * TAU) * 6, pz = z + Math.sin(k / 8 * TAU) * 6; if (heightAt(px, pz) < 0.8 || Math.abs(heightAt(px, pz) - h) > L.dh) ok = false; }
+    gNear(x, z, o => { if (len(o.x - x, o.z - z) < L.clear) ok = false; });
+    for (const g2 of [[x + 5, z], [x - 5, z], [x, z + 5], [x, z - 5]]) gNear(g2[0], g2[1], o => { if (len(o.x - x, o.z - z) < L.clear) ok = false; });
+    for (const o of ruins) if (len(o.x - x, o.z - z) < L.apart) ok = false;
     if (len(x - shop.x, z - shop.z) < 30) ok = false;
     if (!ok) continue;
     const rotY = rrng() * TAU, idx = ruins.length, parts = [];

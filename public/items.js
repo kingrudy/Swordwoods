@@ -28,6 +28,12 @@ export function rollSword(luck, rnd = Math.random) {
   return rollSwordOfRarity(ri, rnd);
 }
 
+/** Zwaard van minstens deze zeldzaamheid (kerkerkist, mysterieuze kist): gewone kans, maar nooit eronder. */
+export function rollSwordAtLeast(minRarity, luck, rnd = Math.random) {
+  const sw = rollSword(luck, rnd);
+  return sw.rarity >= minRarity ? sw : rollSwordOfRarity(minRarity, rnd);
+}
+
 /** Zwaard van een vaste zeldzaamheid (winkel). */
 export function rollSwordOfRarity(ri, rnd = Math.random) {
   const R = RARITIES[ri], bi = Math.floor(rnd() * BASES.length), B = BASES[bi];
