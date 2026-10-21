@@ -1,7 +1,7 @@
 // Ervaring, niveaus, talenten (effect op levens en hond), dagelijkse opdrachten en prestaties.
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
 import { dogStats, breedOf } from '../public/items.js';
-import { levelInfo, tal, maxHp, ACHIEVEMENTS } from '../public/progress.js';
+import { levelInfo, tal, maxHp, ACHIEVEMENTS, TUTORIAL } from '../public/progress.js';
 import { bump } from '../stats.js';
 import { ensureDaily } from './save.js';
 
@@ -26,7 +26,17 @@ export class Progress {
     }
   }
 
+  /** Uitleg voor nieuwe spelers: één stap verder als de huidige stap bij deze handeling hoort. */
+  tutorial(P, kind) {
+    const s = P.u.save, step = TUTORIAL[s.tut];
+    if (!step || step.kind !== kind) return;
+    s.tut++; s.wood += step.wood; if (step.gold) s.gold += step.gold;
+    this.addXp(P, step.xp); bump('tut.' + s.tut);
+    P.conn.send({ t: 'ev', k: 'tut', step: s.tut, done: s.tut >= TUTORIAL.length });
+    this.sendInv(P); this.markDirty();
+  }
   quest(P, kind, n = 1, best = false) {
+    this.tutorial(P, kind);
     const d = ensureDaily(P.u), s = P.u.save;
     for (const q of d.q) {
       if (q.kind !== kind || q.done) continue;

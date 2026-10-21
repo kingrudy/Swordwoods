@@ -83,7 +83,7 @@ export class Room {
   sendInv(P) {
     const s = P.u.save;
     this.checkAch(P);
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach });
   }
 
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
@@ -192,6 +192,7 @@ export class Room {
       case 'cast': this.cast(P, num(m.x, NaN), num(m.z, NaN)); break;
       case 'reel': this.reel(P); break;
       case 'feeddog': this.feedDog(P); break;
+      case 'tutskip': P.u.save.tut = 999; ensureSave(P.u); this.sendInv(P); this.markDirty(); break;
     }
   }
 
@@ -239,7 +240,7 @@ export class Room {
       if (P.digging && this.T >= P.digging.until) this.finishDig(P);
       if ((this.tickN + P.id) % 10 === 0) {
         const des = inDesert(P.x, P.z);
-        if (des && !P.wasDesert && !P.boat) { P.u.save.stats.voyages++; bump('voyages'); this.toast(P, '🏝️ Welkom op het Woestijneiland! Graaf in zandbergen (E) naar faraobeelden en verkoop ze bij Farid voor goud.', '#f2c14e'); this.sendInv(P); }
+        if (des && !P.wasDesert && !P.boat) { P.u.save.stats.voyages++; bump('voyages'); this.tutorial(P, 'voyage'); this.toast(P, '🏝️ Welkom op het Woestijneiland! Graaf in zandbergen (E) naar faraobeelden en verkoop ze bij Farid voor goud.', '#f2c14e'); this.sendInv(P); }
         if (!P.boat) P.wasDesert = des;
       }
     }

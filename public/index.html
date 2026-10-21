@@ -308,6 +308,15 @@
   #questhud .quest { padding:5px 8px; border-radius:10px; background:var(--panel); backdrop-filter:blur(6px); grid-template-columns:auto 1fr; gap:6px; }
   #questhud .quest b { font-size:11.5px; margin-bottom:3px; } #questhud .quest > span { font-size:15px; } #questhud .quest.done { opacity:.55; }
   body.touch #questhud { display:none; }
+  #tutcard { position:absolute; left:50%; top:64px; transform:translateX(-50%); width:min(420px,70vw); padding:9px 14px; border-radius:14px; background:rgba(18,28,20,.86); border:1px solid rgba(242,193,78,.6); box-shadow:0 6px 18px rgba(0,0,0,.35); display:none; pointer-events:auto; }
+  #tutcard.on { display:block; animation:in .3s ease-out; }
+  #tutcard .tt { display:flex; gap:8px; align-items:baseline; font-size:15px; } #tutcard .tt b { color:var(--gold); }
+  #tutcard .tt span.st { margin-left:auto; font-size:11px; color:var(--dim); white-space:nowrap; }
+  #tutcard p { margin:4px 0 0; font-size:12.5px; color:var(--dim); line-height:1.35; }
+  #tutcard button { margin-top:4px; padding:0; border:0; background:none; color:var(--dim); font:11px system-ui; text-decoration:underline; cursor:pointer; }
+  body.touch #tutcard { top:max(44px,calc(env(safe-area-inset-top) + 36px)); width:min(360px,46vw); padding:6px 10px; }
+  body.touch.tut #toasts { top:118px; }
+  body.touch #tutcard p { font-size:11px; } body.touch #tutcard .tt { font-size:13px; }
   #toasts { top:340px; }
   #xpbar { position:relative; height:8px; border-radius:4px; background:rgba(0,0,0,.45); overflow:hidden; border:1px solid var(--line); }
   #xpbar i { position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,#c9a24a,#f2c14e); }
@@ -474,6 +483,7 @@
   <div id="mapkey"><kbd>M</kbd> kaart · <kbd>Enter</kbd> chat</div>
   <div id="chatlog"></div>
   <div id="questhud"></div>
+  <div id="tutcard"></div>
   <div id="vitals">
     <div id="lvlchip"></div>
     <div id="xpbar"><i></i></div>

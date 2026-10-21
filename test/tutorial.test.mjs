@@ -1,0 +1,21 @@
+// Uitleg voor nieuwe spelers: stappen in volgorde, beloningen, overslaan, ervaren spelers zien hem niet.
+import { Room, ensureSave } from '../room.js';
+import { TUTORIAL } from '../public/progress.js';
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+const msgs = [];
+const conn = (name, save = {}) => ({ user: { name, save }, send: m => msgs.push(typeof m === 'string' ? JSON.parse(m) : m) });
+const R = new Room(1, 'T', 8, false, () => {}); R.wave.t = 9999;
+const P = R.addPlayer(conn('Nieuweling')), s = P.u.save;
+ok(s.tut === 0, 'nieuwe speler begint bij stap 1');
+R.quest(P, 'chest'); ok(s.tut === 0, 'verkeerde volgorde telt niet');
+const w0 = s.wood, x0 = s.xp;
+R.quest(P, 'tree'); ok(s.tut === 1 && s.wood === w0 + TUTORIAL[0].wood && s.xp > x0, 'stap 1 klaar met beloning');
+ok(msgs.some(m => m.k === 'tut' && m.step === 1), 'melding naar de speler');
+for (const k of ['chest', 'animal']) R.quest(P, k);
+s.meat = 2; P.hunger = 50; P.lastEat = -9; R.eat(P); ok(s.tut === 4, 'eten telt (stap 4)');
+R.quest(P, 'build'); s.wood = 100; P.x = R.world.shop.x + 2; P.z = R.world.shop.z; R.buy(P, 'meat1'); ok(s.tut === 6, 'iets kopen telt (stap 6)');
+R.quest(P, 'kill'); R.tutorial(P, 'voyage'); const g0 = s.gold; R.quest(P, 'dig');
+ok(s.tut === TUTORIAL.length && s.gold === g0 + 20 && msgs.some(m => m.k === 'tut' && m.done), 'hele uitleg voltooid, laatste stap geeft goud');
+const Q = R.addPlayer(conn('Overslaander')); R.handle(Q, { t: 'tutskip' }); ok(Q.u.save.tut === TUTORIAL.length, 'overslaan kan');
+const old = { name: 'Veteraan', save: { stats: { kills: 300, playSec: 99999 } } }; ensureSave(old); ok(old.save.tut === TUTORIAL.length, 'ervaren spelers zien de uitleg niet');
+console.log(fails ? fails + ' MISLUKT' : 'ALLES GESLAAGD'); process.exit(fails ? 1 : 0);

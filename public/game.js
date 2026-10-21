@@ -9,7 +9,7 @@ import * as CH from './characters.js';
 import { openInvite, closeInvite } from './invite.js';
 import { createHud } from './hud.js';
 import { createBuildSystem } from './buildmode.js';
-import { levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
+import { TUTORIAL, levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
 import { renderTalents, renderQuests } from './progressui.js';
 import { createWorldFx } from './worldfx.js';
 import { createSocial } from './social.js';
@@ -194,7 +194,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ================================================================ status en HUD */
   const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: Math.atan2(-(W.shop.x - joined.you.x), -(W.shop.z - joined.you.z)), pitch: 0, onGround: true, bob: 0 };   // start met zicht op de winkel
-  const inv = { wood: 0, meat: 0, potions: 0, fish: 0, ore: 0, xp: 0, tal: {}, daily: null, ach: {}, up: { shield: 0, axe: 0, rod: 0 }, swords: [], equip: 0, stats: {} };
+  const inv = { wood: 0, meat: 0, potions: 0, fish: 0, ore: 0, xp: 0, tal: {}, daily: null, ach: {}, tut: 999, up: { shield: 0, axe: 0, rod: 0 }, swords: [], equip: 0, stats: {} };
   const you = { hp: 100, hu: 80, sc: 0, rs: 0 };
   const wave = { n: 0, ph: 0, t: 0, left: 0 };
   const names = new Map(joined.players.map(p => [p.id, p.name]));
@@ -223,6 +223,13 @@ export async function startGame({ net, joined, user }) {
     const down = myDogHp && myDogHp.down;
     c.innerHTML = '🐕 ' + esc(d.name) + ' · nv ' + d.level + (myDogHp ? (down ? ' · rust uit' : ' · ' + myDogHp.hp + '/' + myDogHp.max) : '') + (myDogHp && myDogHp.boost ? ' · <b style="color:#6fe0ff">⚡ ' + myDogHp.boost + ' s</b>' : '') +
       (d.level < 10 ? '<span class="xp"><i style="width:' + Math.round(100 * d.xp / dogXpNeeded(d.level)) + '%"></i></span>' : '');
+  }
+  function renderTut() {
+    const el = $('tutcard'), step = TUTORIAL[inv.tut | 0];
+    el.classList.toggle('on', !!step); document.body.classList.toggle('tut', !!step);
+    if (!step) return;
+    el.innerHTML = '<div class="tt">' + step.icon + ' <b>' + esc(step.text) + '</b><span class="st">Uitleg ' + ((inv.tut | 0) + 1) + '/' + TUTORIAL.length + '</span></div><p>' + esc(step.hint) + '</p><button type="button" id="tut-skip">Uitleg overslaan</button>';
+    $('tut-skip').onclick = e => { e.stopPropagation(); net.send({ t: 'tutskip' }); };
   }
   function renderInv() {
     $('wood').textContent = '🪵 Hout: ' + inv.wood;
@@ -516,6 +523,7 @@ export async function startGame({ net, joined, user }) {
     const hint = $('prompt');
   });
   net.on('inv', m => {
+    inv.tut = m.tut | 0; renderTut();
     inv.gold = m.gold | 0; inv.statues = m.statues || {}; inv.ore = m.ore | 0; inv.xp = m.xp | 0; inv.tal = m.tal || {}; inv.daily = m.daily || null; inv.ach = m.ach || {};
     inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     renderInv(); rebuildHeld(); if (shopOpen && !smithOpen && !(wfx && wfx.traderOpen)) renderShop();
@@ -639,6 +647,7 @@ export async function startGame({ net, joined, user }) {
         break;
       }
       case 'quest': sfx.happy(); break;
+      case 'tut': sfx.happy(); if (m.done) banner('Uitleg voltooid!<small>Je kent nu de basis. Veel plezier in Swordwoods.</small>', 4200); else toast('✔ Goed zo! Volgende stap: <b>' + esc(TUTORIAL[m.step].text) + '</b>', '#6fd37a'); break;
       case 'ach': { const A = ACHIEVEMENTS.find(a => a.id === m.id); if (A) { banner(A.icon + ' ' + esc(A.name) + '<small>Prestatie behaald: ' + esc(A.desc) + '</small>', 4200); sfx.reveal(3); } break; }
       case 'shot': {
         const e = mons.get(m.id); if (e && e.model.kind === 'rig' && !e.dying) e.model.once(CLIPS.archer.attack, { speed: 1.3 });

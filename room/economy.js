@@ -54,7 +54,7 @@ export class Economy {
     P.lastEat = this.T; s.meat--;
     P.hunger = Math.min(100, P.hunger + 30);
     P.hp = Math.min(P.mhp, P.hp + 8);
-    P.conn.send({ t: 'ev', k: 'ate' });
+    P.conn.send({ t: 'ev', k: 'ate' }); this.tutorial(P, 'eat');
     this.sendInv(P); this.markDirty();
   }
 
@@ -94,13 +94,13 @@ export class Economy {
         const sw = rollSwordOfRarity(it.rarity);
         if (s.swords.length >= MAX_SWORDS && sw.damage <= Math.min(...s.swords.map(x => x.damage))) return fail('Je rugzak zit vol met betere zwaarden. Niets afgerekend.');
         s[cur] -= it.cost; if (!it.gold) s.stats.spent = (s.stats.spent | 0) + it.cost; bump("buy." + it.id);
-        this.giveSword(P, sw, 'shop'); this.sendInv(P); this.markDirty();
+        this.giveSword(P, sw, 'shop'); this.tutorial(P, 'buy'); this.sendInv(P); this.markDirty();
         P.conn.send({ t: 'ev', k: 'bought' });
         return;
       }
     }
     s[cur] -= it.cost; if (!it.gold) s.stats.spent = (s.stats.spent | 0) + it.cost; bump("buy." + it.id);
-    P.conn.send({ t: 'ev', k: 'bought' });
+    P.conn.send({ t: 'ev', k: 'bought' }); this.tutorial(P, 'buy');
     this.toast(P, it.name + ' gekocht voor ' + it.cost + ' ' + curName + '.', '#f2c14e');
     this.sendInv(P); this.markDirty();
   }

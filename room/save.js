@@ -1,6 +1,6 @@
 // Opgeslagen spelersgegevens: controleren/aanvullen bij laden, dagelijkse opdrachten en talenten.
 import { MAX_POTIONS, DOG_MAX_LEVEL, DOG_FURS, statueOf, breedOf } from '../public/items.js';
-import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, dailyQuests, FORGE_MAX } from '../public/progress.js';
+import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, dailyQuests, FORGE_MAX, TUTORIAL } from '../public/progress.js';
 import { clamp } from './shared.js';
 
 export function ensureSave(u) {
@@ -23,6 +23,9 @@ export function ensureSave(u) {
   for (const k of Object.keys(s.tal)) { const T = TALENT_BY_ID[k]; if (!T) delete s.tal[k]; else s.tal[k] = clamp(s.tal[k] | 0, 0, T.max); }
   if (spentPoints(s.tal) > talentPoints(levelInfo(s.xp).level)) s.tal = {};
   if (!s.ach || typeof s.ach !== 'object') s.ach = {};
+  // uitleg: nieuwe spelers beginnen bij stap 0; wie al lang speelt slaat hem over
+  if (!Number.isInteger(s.tut)) s.tut = (s.stats.kills > 20 || s.stats.playSec > 1800) ? TUTORIAL.length : 0;
+  s.tut = clamp(s.tut, 0, TUTORIAL.length);
   for (const w of s.swords) { if (!Number.isFinite(w.d0)) w.d0 = w.damage; w.f = clamp(w.f | 0, 0, FORGE_MAX); }
   ensureDaily(u);
   return s;

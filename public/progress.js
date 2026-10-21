@@ -93,6 +93,20 @@ export const ACHIEVEMENTS = [
   { id: 'opdrachten', icon: '📅', name: 'Plichtsgetrouw',    desc: 'Voltooi 10 dagelijkse opdrachten', test: s => st(s, 'quests') >= 10 },
 ];
 
+/* ---------------------------------------------------------------- uitleg voor nieuwe spelers */
+// Een vaste reeks kleine opdrachten. kind = wat de server meldt (zelfde namen als bij de dagelijkse opdrachten, plus eat/buy/voyage).
+export const TUTORIAL = [
+  { kind: 'tree',   icon: '🌲', text: 'Hak een boom om',          hint: 'Loop naar een boom en sla erop (klik of A) tot hij valt.', wood: 10, xp: 20 },
+  { kind: 'chest',  icon: '🧰', text: 'Open een kist',            hint: 'Kisten herken je aan een oranje lichtzuil. Ga ervoor staan en druk E (X).', wood: 5, xp: 25 },
+  { kind: 'animal', icon: '🦌', text: 'Jaag op een dier',         hint: 'Konijnen en herten geven vlees. Pas op: everzwijnen vechten terug.', wood: 5, xp: 25 },
+  { kind: 'eat',    icon: '🍖', text: 'Eet een stuk vlees',       hint: 'Druk R (of Y) als je honger hebt. Eten herstelt ook wat gezondheid.', wood: 5, xp: 15 },
+  { kind: 'build',  icon: '🔥', text: 'Bouw een kampvuur',        hint: 'Druk B (🔨), kies het kampvuur en klik. Bij het vuur genees je.', wood: 15, xp: 25 },
+  { kind: 'buy',    icon: '🏪', text: 'Koop iets bij Bram',       hint: 'De winkel staat vlak bij het begin (blauwe lichtzuil). Druk daar E.', wood: 10, xp: 25 },
+  { kind: 'kill',   icon: '🗡️', text: 'Versla een monster',       hint: 'Monsters komen in golven. Houd de muisknop vast voor een zware slag.', wood: 15, xp: 40 },
+  { kind: 'voyage', icon: '⛵', text: 'Vaar naar het Woestijneiland', hint: 'Bouw een boot (B, vakje 7) in het water bij de kust en vaar naar het oosten.', wood: 0, xp: 60 },
+  { kind: 'dig',    icon: '🏜️', text: 'Graaf in een zandberg',    hint: 'Sta naast een zandberg en druk E. Misschien vind je een faraobeeld!', wood: 0, xp: 60, gold: 20 },
+];
+
 /* ---------------------------------------------------------------- smid */
 export const FORGE_MAX = 5;
 export const forgeCost = f => ({ ore: 2 + f * 2, wood: 15 + f * 15 });     // van +f naar +f+1
