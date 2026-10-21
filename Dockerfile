@@ -1,6 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY package.json *.js ./
+COPY room ./room
 COPY public ./public
 # Accounts en voortgang staan in /data (koppel hier een volume aan)
 RUN mkdir -p /data && chown -R node:node /data

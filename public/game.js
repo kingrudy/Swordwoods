@@ -13,7 +13,8 @@ import { levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENT
 import { renderTalents, renderQuests } from './progressui.js';
 import { createWorldFx } from './worldfx.js';
 import { createSocial } from './social.js';
-import { createMusic } from './music.js';
+import { createAudio } from './audio.js';
+import { Particles } from './particles.js';
 import { createDesert } from './desert.js';
 import { breedOf, DOG_BREEDS } from './items.js';
 
@@ -184,131 +185,12 @@ export async function startGame({ net, joined, user }) {
   await nextFrame();
 
   /* ================================================================ deeltjes en geluid */
-  const dotTex = (() => {
-    const c = document.createElement('canvas'); c.width = c.height = 64;
-    const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-    x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
-  })();
-  class Particles {
-    constructor(color, size, max, additive = false, gravity = 9) {
-      this.max = max; this.gravity = gravity; this.n = 0;
-      this.pos = new Float32Array(max * 3); this.vel = new Float32Array(max * 3); this.life = new Float32Array(max);
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3)); this.attr = g.attributes.position;
-      this.points = new THREE.Points(g, new THREE.PointsMaterial({ color, size, map: dotTex, alphaTest: 0.05, sizeAttenuation: true, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending }));
-      this.points.frustumCulled = false;
-      for (let i = 0; i < max; i++) this.pos[i * 3 + 1] = -9999;
-      scene.add(this.points);
-    }
-    emit(x, y, z, count, speed, up = 3, life = 0.8) {
-      for (let k = 0; k < count; k++) {
-        const i = this.n++ % this.max;
-        this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
-        const a = Math.random() * 6.28, s = Math.random() * speed;
-        this.vel[i * 3] = Math.cos(a) * s; this.vel[i * 3 + 1] = up * (0.4 + Math.random()); this.vel[i * 3 + 2] = Math.sin(a) * s;
-        this.life[i] = life * (0.6 + Math.random() * 0.6);
-      }
-    }
-    update(dt) {
-      for (let i = 0; i < this.max; i++) {
-        if (this.life[i] <= 0) { this.pos[i * 3 + 1] = -9999; continue; }
-        this.life[i] -= dt; this.vel[i * 3 + 1] -= this.gravity * dt;
-        this.pos[i * 3] += this.vel[i * 3] * dt; this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt; this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
-      }
-      this.attr.needsUpdate = true;
-    }
-  }
-  const chips = new Particles(0xc89a5e, 0.11, 300);
-  const leaves = new Particles(0x4c8f36, 0.14, 300, false, 3);
-  const sparkles = new Particles(0xffe08a, 0.16, 400, true, -1.5);
-  const blood = new Particles(0xb8332d, 0.13, 300, false, 12);
-  const splash = new Particles(0xcfeaff, 0.12, 200, false, 9);
-
-  let actx = null;
-  const audio = () => { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { actx = false; } } return actx || null; };
-  // volume: muziek en geluidseffecten apart (onthouden in de browser)
-  const vol = { music: 0.45, sfx: 0.9 }; try { Object.assign(vol, JSON.parse(localStorage.getItem('sw-vol') || '{}')); } catch {}
-  let sfxBus = null;
-  const bus = () => { const a = audio(); if (!a) return null; if (!sfxBus) { sfxBus = a.createGain(); sfxBus.gain.value = vol.sfx; sfxBus.connect(a.destination); } return sfxBus; };
-  const music = createMusic(audio); music.setVolume(vol.music * 0.6);
-  let noiseBuf = null;
-  const nbuf = a => { if (!noiseBuf) { noiseBuf = a.createBuffer(1, a.sampleRate * 2, a.sampleRate); const ch = noiseBuf.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1; } return noiseBuf; };
-  /** Kort gefilterd geruis (voetstappen, regen, wind) zonder elke keer een nieuwe buffer. */
-  function burst(d, v, type, fc, q = 1, delay = 0) {
-    const a = audio(); if (!a) return; const t = a.currentTime + delay;
-    const s = a.createBufferSource(); s.buffer = nbuf(a); const f = a.createBiquadFilter(); f.type = type; f.frequency.value = fc; f.Q.value = q;
-    const g = a.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    s.connect(f).connect(g).connect(bus()); s.start(t, Math.random() * 1.5); s.stop(t + d + 0.02);
-  }
-  // doorlopende omgevingslaag: regen en wind
-  let amb = null;
-  function ambience(rain, wind) {
-    const a = audio(); if (!a || a.state !== 'running') return;
-    if (!amb) {
-      amb = {};
-      for (const [k, type, fc] of [['rain', 'highpass', 1200], ['wind', 'lowpass', 420]]) {
-        const s = a.createBufferSource(); s.buffer = nbuf(a); s.loop = true; const f = a.createBiquadFilter(); f.type = type; f.frequency.value = fc;
-        const g = a.createGain(); g.gain.value = 0; s.connect(f).connect(g).connect(bus()); s.start(); amb[k] = g;
-      }
-    }
-    amb.rain.gain.setTargetAtTime(rain * 0.12, a.currentTime, 1.2); amb.wind.gain.setTargetAtTime(wind * 0.18, a.currentTime, 1.5);
-  }
-  function tone(f, d, type = 'sine', v = 0.08, slide = 0, delay = 0) {
-    const a = audio(); if (!a) return; const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + delay;
-    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, f + slide), t + d);
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); o.connect(g).connect(bus()); o.start(t); o.stop(t + d + 0.02);
-  }
-  function noise(d, v = 0.15, fc = 900) {
-    const a = audio(); if (!a) return; const len = Math.floor(a.sampleRate * d), buf = a.createBuffer(1, len, a.sampleRate), ch = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    const s = a.createBufferSource(); s.buffer = buf; const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = fc;
-    const g = a.createGain(); g.gain.value = v; s.connect(f).connect(g).connect(bus()); s.start();
-  }
-  const sfx = {
-    dig: () => { burst(0.2, 0.08, 'bandpass', 700 + Math.random() * 300, 1.2); burst(0.1, 0.05, 'highpass', 3000, 1, 0.08); },
-    swing: () => { burst(0.18, 0.09, 'bandpass', 900, 0.8); burst(0.12, 0.05, 'bandpass', 2600, 1.2, 0.04); },
-    step: biome => {
-      if (biome === 'snow') { burst(0.12, 0.06, 'bandpass', 3200, 2); burst(0.08, 0.04, 'highpass', 5000, 1, 0.03); }
-      else if (biome === 'swamp') { burst(0.18, 0.07, 'lowpass', 500, 4); tone(180 + Math.random() * 60, 0.08, 'sine', 0.02, -80); }
-      else burst(0.09, 0.05, 'lowpass', 900 + Math.random() * 400, 1);
-    },
-    bird: () => { const f = 2400 + Math.random() * 1600, n = 2 + Math.floor(Math.random() * 3); for (let i = 0; i < n; i++) tone(f * (1 + Math.random() * 0.15), 0.07, 'sine', 0.018, 600 * (Math.random() - 0.3), i * 0.11); },
-    cricket: () => { for (let i = 0; i < 6; i++) tone(4300, 0.025, 'square', 0.006, 0, i * 0.045); },
-    owl: () => { tone(420, 0.35, 'sine', 0.03, -40); tone(400, 0.5, 'sine', 0.03, -50, 0.45); },
-    heavy: () => { noise(0.3, 0.12, 1400); tone(90, 0.3, 'sawtooth', 0.08, -40); },
-    roll: () => noise(0.3, 0.08, 600),
-    clang: () => { tone(1400, 0.18, 'square', 0.05, -300); tone(2100, 0.25, 'triangle', 0.04, -500); noise(0.08, 0.1, 4000); },
-    arrow: () => noise(0.12, 0.05, 3500),
-    thunder: (v = 1) => { noise(1.8, 0.45 * v, 180); noise(0.35, 0.3 * v, 900); tone(40, 1.6, 'sine', 0.25 * v, -15); },
-    rumble: () => { noise(0.9, 0.25, 220); tone(55, 0.9, 'sine', 0.2, -20); },
-    chop: () => { noise(0.12, 0.28, 700); tone(150, 0.12, 'triangle', 0.22, -70); },
-    hit: () => { burst(0.12, 0.3, 'lowpass', 1400, 1); tone(150, 0.12, 'triangle', 0.14, -80); burst(0.05, 0.12, 'highpass', 4000, 1); },
-    hurt: () => { noise(0.25, 0.3, 500); tone(110, 0.25, 'sawtooth', 0.12, -60); },
-    fall: () => { noise(0.9, 0.3, 350); tone(80, 0.6, 'sine', 0.25, -40); },
-    creak: () => tone(140, 0.5, 'sawtooth', 0.05, 90),
-    bark: (pan = 0, vol = 1) => {
-      const a = audio(); if (!a) return;
-      for (const [dl, f] of [[0, 520], [0.16, 470]]) {
-        const t = a.currentTime + dl, o = a.createOscillator(), g = a.createGain(), p = a.createStereoPanner ? a.createStereoPanner() : null;
-        o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.45, t + 0.11);
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13 * vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-        const flt = a.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 900; flt.Q.value = 1.2;
-        o.connect(flt).connect(g); if (p) { p.pan.value = pan; g.connect(p).connect(bus()); } else g.connect(bus());
-        o.start(t); o.stop(t + 0.15);
-      }
-    },
-    plop: () => { noise(0.12, 0.12, 1400); tone(420, 0.1, 'sine', 0.06, -200); },
-    bite: () => { noise(0.25, 0.22, 2200); tone(880, 0.12, 'square', 0.06); tone(1175, 0.16, 'square', 0.06, 0, 0.12); },
-    catch: gold => { noise(0.3, 0.2, 1800); for (let i = 0; i < (gold ? 6 : 3); i++) tone(700 + i * 140, 0.14, 'triangle', 0.07, 0, 0.1 + i * 0.07); },
-    yelp: () => tone(900, 0.18, 'triangle', 0.06, 500),
-    happy: () => { for (let i = 0; i < 4; i++) tone(660 + i * 110, 0.12, 'triangle', 0.06, 0, i * 0.07); },
-    coin: () => { tone(988, 0.08, 'square', 0.05); tone(1319, 0.16, 'square', 0.05, 0, 0.08); },
-    drink: () => { noise(0.2, 0.1, 900); tone(260, 0.2, 'sine', 0.08, 140); },
-    eat: () => { noise(0.08, 0.12, 1200); tone(300, 0.09, 'triangle', 0.08, 120, 0.09); },
-    kill: () => tone(180, 0.25, 'triangle', 0.1, -100),
-    horn: () => { tone(120, 1.2, 'sawtooth', 0.09, 10); tone(180, 1.2, 'sawtooth', 0.06, 10, 0.02); },
-    reveal: ri => { const base = [523, 587, 659, 784, 1047][ri]; for (let i = 0; i < 3 + ri; i++) tone(base * (1 + i * 0.25), 0.5, 'triangle', 0.07, 0, i * 0.09); },
-  };
+  const chips = new Particles(scene, 0xc89a5e, 0.11, 300);
+  const leaves = new Particles(scene, 0x4c8f36, 0.14, 300, false, 3);
+  const sparkles = new Particles(scene, 0xffe08a, 0.16, 400, true, -1.5);
+  const blood = new Particles(scene, 0xb8332d, 0.13, 300, false, 12);
+  const splash = new Particles(scene, 0xcfeaff, 0.12, 200, false, 9);
+  const AU = createAudio(), { audio, tone, noise, burst, ambience, sfx, music, vol } = AU;
 
   /* ================================================================ status en HUD */
   const player = { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: Math.atan2(-(W.shop.x - joined.you.x), -(W.shop.z - joined.you.z)), pitch: 0, onGround: true, bob: 0 };   // start met zicht op de winkel
@@ -804,8 +686,7 @@ export async function startGame({ net, joined, user }) {
   function showVeil(on) { veil.classList.toggle('on', on); }
   function enterSoft() { if (locked) return; soft = true; locked = true; showVeil(false); }
   function requestLock() {
-    audio(); if (actx && actx.state === 'suspended') actx.resume();
-    music.start();
+    AU.resume();
     if (isTouch) {      // geen pointer lock op touch: direct spelen en (waar mogelijk) volledig scherm + landschap
       try { const p = document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }); if (p && p.then) p.then(() => screen.orientation?.lock?.('landscape')?.catch?.(() => {})).catch(() => {}); } catch {}
       enterSoft(); return;
@@ -1027,10 +908,7 @@ export async function startGame({ net, joined, user }) {
   // volumeregelaars in het pauzemenu
   for (const k of ['music', 'sfx']) {
     const el = $('vol-' + k); el.value = Math.round(vol[k] * 100);
-    el.oninput = () => {
-      vol[k] = el.value / 100; try { localStorage.setItem('sw-vol', JSON.stringify(vol)); } catch {}
-      if (k === 'music') music.setVolume(vol.music * 0.6); else if (sfxBus) sfxBus.gain.value = vol.sfx;
-    };
+    el.oninput = () => AU.setVolume(k, el.value / 100);
   }
   $('ptabs').addEventListener('click', e => { const b = e.target.closest('[data-pt]'); if (b) { ptab = b.dataset.pt; renderPauseTabs(); } });
   new MutationObserver(() => { if (veil.classList.contains('on')) renderPauseTabs(); }).observe(veil, { attributes: true, attributeFilter: ['class'] });
@@ -1526,6 +1404,6 @@ export async function startGame({ net, joined, user }) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.__game = { des: () => des, music, getAudio: () => actx, hud, bs, fx, wfx: () => wfx, soc: () => soc, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
+  window.__game = { des: () => des, music, getAudio: () => AU.ctx, hud, bs, fx, wfx: () => wfx, soc: () => soc, chargeLevel, getLocked: () => [locked, soft], net, scene, mountItem, CH, getMerchant: () => merchant, G, findWater, bobbers, getFishing: () => fishing, feedDog, renderer, camera, dogs, findWildDog, pollPad, gp, isTouch, virt, openShop, closeShop, interact, W, pause: false, forceRender: false, update, player, inv, you, wave, remotes, mons, anis, treeObjs, chestObjs, W, net, startSwing, tryOpen, renderOnce: () => G.render() };
   net.flush();      // berichten die tijdens het laden binnenkwamen (inventaris, snapshots) alsnog verwerken
 }

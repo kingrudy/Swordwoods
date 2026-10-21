@@ -93,6 +93,11 @@ Met vakje 7 (🪓) breek je je eigen bouwwerken af en krijg je tot de helft van 
 
 Besturing: WASD, Shift rennen, Spatie springen, muis kijken, linkermuisknop slaan/hakken, E kist openen of winkel gebruiken, R eten, Q drankje, 1-9 of scrollwiel item kiezen, Esc pauze. Werkt de muis niet vast, dan kun je slepen om te kijken.
 
+## Ontwikkelen
+- `npm test` draait alle tests in `test/` (spelregels direct op de kamer, en echte servers met bots via WebSocket). `test/docker.test.mjs` bootst de Docker-image na en faalt als er een bestand in de `Dockerfile` ontbreekt. Op GitHub draaien de tests en een echte Docker-build bij elke push (`.github/workflows/test.yml`).
+- Server: `server.js` (HTTP, WebSocket, accounts, lobby), `room.js` (één kamer: invoer, hoofdlus, snapshots) en per onderwerp `room/*.js` (golven, gevecht, honden, bouwen, woestijn, ...). `stats.js` houdt de balansstatistieken bij.
+- Client: `public/main.js` (inloggen en lobby) laadt `public/game.js` (het spel); losse onderdelen staan in eigen bestanden (`hud.js`, `buildmode.js`, `worldfx.js`, `social.js`, `desert.js`, `audio.js`, `music.js`, `particles.js`, `models.js`, `graphics.js`). `world.js`, `items.js`, `builds.js` en `progress.js` worden door server én client gebruikt.
+
 ## Beheer
 - Data: volume `swordwoods-data` (bestand `db.json`). Maak hier een back-up van. Wachtwoorden zijn gehasht (scrypt).
 - Zet er bij internetgebruik een reverse proxy met HTTPS voor (Caddy, Traefik, nginx). WebSockets (`/ws`) moeten doorgelaten worden. Zonder HTTPS gaan wachtwoorden onversleuteld over het netwerk.
