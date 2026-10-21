@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { Room, ensureSave, applyTalent, ensureDaily } from './room.js';
 import { initStats, statsData, statsHtml } from './stats.js';
+import { createStorage } from './storage.js';
 
 const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -22,22 +23,22 @@ const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dir
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 /* ------------------------------------------------------------------ opslag */
-const DB_FILE = path.join(DATA_DIR, 'db.json');
 const STATS_KEY = process.env.STATS_KEY || '';
-let db = { users: {}, sessions: {} };
-try { db = Object.assign(db, JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') console.error('db lezen mislukt:', e.message); }
+const storage = createStorage(DATA_DIR);
+let db;
+try { const r = storage.load({ users: {}, sessions: {} }); db = r.db; if (r.source !== 'db.json' && r.source !== 'nieuw') console.error('Database geladen uit ' + r.source); }
+catch (e) { console.error(e.message); process.exit(1); }
 db.balance = initStats(db.balance);
 let saveTimer = null;
 function flush() {
   clearTimeout(saveTimer); saveTimer = null;
-  try {
-    const tmp = DB_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db));
-    fs.renameSync(tmp, DB_FILE);
-  } catch (e) { console.error('db schrijven mislukt:', e.message); }
+  try { storage.save(db); } catch (e) { console.error('db schrijven mislukt:', e.message); }
 }
 function markDirty() { if (!saveTimer) saveTimer = setTimeout(flush, 1500); }
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { flush(); process.exit(0); });
+// dagelijkse back-up (bij de start en daarna elk uur controleren of het tijd is)
+const doBackup = () => { try { flush(); storage.backup(); } catch (e) { console.error('back-up mislukt:', e.message); } };
+setTimeout(doBackup, 5000).unref?.(); setInterval(doBackup, 3600 * 1000).unref?.();
 
 /* ------------------------------------------------------------------ accounts */
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
