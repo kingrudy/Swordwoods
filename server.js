@@ -164,7 +164,7 @@ const onRequest = async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(statsHtml(VERSION));
       }
       if (req.method === 'GET' && url.pathname === '/api/leaderboard') return json(res, 200, leaderboard());
-      if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, build: BUILD, rooms: rooms.size, users: Object.keys(db.users).length });
+      if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, build: BUILD, rooms: rooms.size, users: Object.keys(db.users).length, online: [...conns].filter(c => c.user).length, net: { kbIn: Math.round(netStats.raw / 1024), kbOut: Math.round(netStats.sent / 1024), sec: Math.round((Date.now() - netStats.since) / 1000) } });
       if (req.method === 'POST' && (url.pathname === '/api/register' || url.pathname === '/api/login')) {
         if (limited(ip + (req.headers['x-forwarded-for'] || ''))) return json(res, 429, { err: 'Te veel pogingen. Probeer het over een minuut opnieuw.' });
         let body; try { body = await readJson(req); } catch { return json(res, 400, { err: 'Ongeldig verzoek.' }); }
@@ -183,8 +183,12 @@ const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const conns = new Set();
 const byUser = new Map();   // lowercase naam -> Conn
 
+// permessage-deflate (RFC 7692) zonder gedeelde context: berichten worden los gecomprimeerd.
+const DEFLATE_MIN = 160, TAIL = Buffer.from([0x00, 0x00, 0xff, 0xff]);
+const netStats = { raw: 0, sent: 0, since: Date.now() };
 class Conn {
-  constructor(sock) {
+  constructor(sock, deflate = false) {
+    this.deflate = deflate; this.rsv1 = false;
     this.sock = sock; this.buf = Buffer.alloc(0); this.frag = []; this.user = null; this.room = null; this.player = null;
     this.msgCount = 0; this.pongAt = Date.now(); this.closed = false;
     sock.setNoDelay(true);
@@ -197,7 +201,7 @@ class Conn {
     if (this.buf.length > (1 << 20)) return this.kill();
     let buf = this.buf;
     while (buf.length >= 2) {
-      const b0 = buf[0], b1 = buf[1], fin = !!(b0 & 0x80), op = b0 & 0x0f, masked = !!(b1 & 0x80);
+      const b0 = buf[0], b1 = buf[1], fin = !!(b0 & 0x80), op = b0 & 0x0f, masked = !!(b1 & 0x80), rsv1 = !!(b0 & 0x40);
       let n = b1 & 0x7f, off = 2;
       if (n === 126) { if (buf.length < 4) break; n = buf.readUInt16BE(2); off = 4; }
       else if (n === 127) { if (buf.length < 10) break; n = Number(buf.readBigUInt64BE(2)); off = 10; }
@@ -211,24 +215,35 @@ class Conn {
       if (op === 0x9) { this.raw(0xA, payload); continue; }
       if (op === 0xA) { this.pongAt = Date.now(); continue; }
       if (op === 0x1 || op === 0x2 || op === 0x0) {
+        if (op !== 0x0) this.rsv1 = rsv1 && this.deflate;
         this.frag.push(payload);
-        if (fin) { const msg = Buffer.concat(this.frag).toString('utf8'); this.frag = []; this.onMessage(msg); }
+        if (fin) {
+          let data = Buffer.concat(this.frag); this.frag = [];
+          if (this.rsv1) { try { data = zlib.inflateRawSync(Buffer.concat([data, TAIL]), { maxOutputLength: 1 << 20, finishFlush: zlib.constants.Z_SYNC_FLUSH }); } catch { return this.kill(); } }
+          this.onMessage(data.toString('utf8'));
+        }
       }
     }
     this.buf = buf;
   }
-  raw(op, data) {
+  raw(op, data, rsv = 0) {
     if (this.closed || this.sock.destroyed) return;
-    let hdr;
-    if (data.length < 126) hdr = Buffer.from([0x80 | op, data.length]);
-    else if (data.length < 65536) { hdr = Buffer.alloc(4); hdr[0] = 0x80 | op; hdr[1] = 126; hdr.writeUInt16BE(data.length, 2); }
-    else { hdr = Buffer.alloc(10); hdr[0] = 0x80 | op; hdr[1] = 127; hdr.writeBigUInt64BE(BigInt(data.length), 2); }
+    let hdr; const b0 = 0x80 | rsv | op;
+    if (data.length < 126) hdr = Buffer.from([b0, data.length]);
+    else if (data.length < 65536) { hdr = Buffer.alloc(4); hdr[0] = b0; hdr[1] = 126; hdr.writeUInt16BE(data.length, 2); }
+    else { hdr = Buffer.alloc(10); hdr[0] = b0; hdr[1] = 127; hdr.writeBigUInt64BE(BigInt(data.length), 2); }
     this.sock.write(Buffer.concat([hdr, data]));
+    netStats.sent += hdr.length + data.length;
   }
   send(obj) {
     if (this.closed || this.sock.destroyed) return;
     if (this.sock.writableLength > 2e6) return;   // trage client: sla updates over
-    this.raw(0x1, Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)));
+    let data = Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)); netStats.raw += data.length;
+    if (this.deflate && data.length >= DEFLATE_MIN) {
+      const z = zlib.deflateRawSync(data, { level: 4, memLevel: 7, finishFlush: zlib.constants.Z_SYNC_FLUSH });   // eindigt op 00 00 ff ff, dat laten we weg
+      return this.raw(0x1, z.subarray(0, z.length - 4), 0x40);
+    }
+    this.raw(0x1, data);
   }
   kill() { if (!this.closed) { try { this.sock.destroy(); } catch {} } this.onClose(); }
   onClose() {
@@ -298,8 +313,10 @@ const onUpgrade = (req, socket) => {
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
-  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
-  conns.add(new Conn(socket));
+  const deflate = /permessage-deflate/i.test(req.headers['sec-websocket-extensions'] || '') && process.env.WS_DEFLATE !== '0';
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n' +
+    (deflate ? 'Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n' : '') + '\r\n');
+  conns.add(new Conn(socket, deflate));
 };
 
 setInterval(() => {

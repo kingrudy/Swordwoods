@@ -19,7 +19,7 @@ export class WorldEvents {
       const types = [0, 0, 4, n >= 4 ? 6 : 0, n >= 6 ? 2 : 0];
       types.forEach((t, k) => {
         const p = R.parts[k % R.parts.length], x = (p.x + R.x) / 2, z = (p.z + R.z) / 2;
-        const m = this.spawnMonster(t, x, z, sc.hp * 1.2, sc.dmg, 1); m.guard = i; m.retarget = 0; st.guards.add(m.id);
+        const m = this.spawnMonster(t, x, z, sc.hp * 1.2, sc.dmg, 1); m.guard = i; m.wave = false; m.retarget = 0; st.guards.add(m.id);
       });
       this.bc({ t: 'ev', k: 'ruin', i, st: 'awake', by: P.id });
       this.toast(P, 'De bewakers van de ruïne ontwaken! Versla ze om de kist te openen.', '#c58cff');

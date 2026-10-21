@@ -22,6 +22,9 @@ import { Building } from './room/building.js';
 export { ensureSave, ensureDaily, applyTalent } from './room/save.js';
 export { CFG } from './room/shared.js';
 
+/** Stralen (m) voor wat een speler te zien krijgt; mist begint op zo'n 60-90 m. */
+const SNAP = { monFar: 140, aniFar: 100, near: 45 };
+
 const worlds = new Map();
 function getWorld(seed) {
   let w = worlds.get(seed);
@@ -247,7 +250,7 @@ export class Room {
 
     const w = this.wave;
     if (w.ph === 0) { w.t -= dt; if (w.t <= 0) this.startWave(); }
-    else if (this.monsters.size === 0) this.endWave();
+    else if (this.waveLeft() === 0) this.endWave();
 
     this.updateWorldEvents(dt);
     this.updateMonsters(dt);
@@ -264,18 +267,29 @@ export class Room {
     if (this.tickN % 2 === 0) this.snapshot();
   }
 
+  /**
+   * Stuurt elke speler zijn eigen snapshot: spelers en honden altijd, monsters en dieren alleen in de buurt.
+   * Om de keer een 'volle' snapshot (f:1, alles binnen de grote straal; wat ontbreekt mag de client opruimen)
+   * en daartussen een kleine met alleen wat dichtbij is (de client houdt de rest gewoon vast).
+   */
   snapshot() {
-    const p = [], m = [], a = [], d = [];
+    const full = this.tickN % 4 === 0, p = [], d = [];
     for (const e of this.dogs.values()) d.push([e.id, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), e.maxhp, e.owner ? e.owner.id : 0, e.state === 'wild' ? (e.sit ? 3 : 0) : e.state === 'down' ? 2 : (e.cmd === 'stay' && !e.target ? 3 : 1), e.level, e.name, e.fur, e.boostUntil > this.T ? Math.ceil(e.boostUntil - this.T) : 0, DOG_BREEDS.findIndex(b => b.id === e.breed)]);
     for (const P of this.players.values()) p.push([P.id, r1(P.x), r1(P.y), r1(P.z), r2(P.yaw), Math.round(P.hp), eqCode(this.eqItem(P)), P.dead ? 1 : 0, P.swings, P.boat ? P.boat.id : 0, P.digging ? 1 : 0]);
-    for (const e of this.monsters.values()) m.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
-    for (const e of this.animals.values()) a.push([e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]);
-    const head = JSON.stringify({ t: 's', p, m, a, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.monsters.size, mod: this.wave.mod } }).slice(0, -1);
+    const mons = [...this.monsters.values()].map(e => [e, [e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]]);
+    const anis = [...this.animals.values()].map(e => [e, [e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]]);
+    const head = JSON.stringify({ t: 's', f: full ? 1 : 0, p, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.waveLeft(), mod: this.wave.mod } }).slice(0, -1);
+    const rm = full ? SNAP.monFar : SNAP.near, ra = full ? SNAP.aniFar : SNAP.near;
     for (const P of this.players.values()) {
+      const near = (e, r) => Math.abs(e.x - P.x) < r && Math.abs(e.z - P.z) < r && len(e.x - P.x, e.z - P.z) < r;
+      const m = [], a = [];
+      for (const [e, t] of mons) if (e.type === 3 || near(e, rm)) m.push(t);
+      for (const [e, t] of anis) if (near(e, ra)) a.push(t);
       const you = { hp: Math.round(P.hp), mhp: P.mhp, bf: this.buffInfo(P), hu: Math.round(P.hunger), sc: P.u.save.stats.score, rs: P.dead ? Math.max(0, Math.ceil(P.respawnAt - this.T)) : 0 };
-      P.conn.send(head + ',"y":' + JSON.stringify(you) + '}');
+      P.conn.send(head + ',"m":' + JSON.stringify(m) + ',"a":' + JSON.stringify(a) + ',"y":' + JSON.stringify(you) + '}');
     }
   }
+
 }
 
 // De rest van de kamer staat per onderwerp in room/*.js.

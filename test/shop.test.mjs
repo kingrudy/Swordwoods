@@ -42,14 +42,15 @@ r = await buy('sword4'); ok(/Te weinig hout/.test(r), 'legendarisch zwaard te du
 r = await buy('bestaatniet'); ok(r === '', 'onbekend item genegeerd');
 // bijl-upgrade op bomen: gebruik bijl (equip 0), boom hakken moet met 6-7 hp / (1+3)=2 slagen
 send({ t: 'equip', i: 0 }); await sleep(100);
-const tr = W.trees.slice().sort((a, b) => Math.hypot(a.x - sh.x, a.z - sh.z) - Math.hypot(b.x - sh.x, b.z - sh.z))[0];
+const animalNear = t => (snap.a || []).some(a => Math.hypot(a[2] - t.x, a[3] - t.z) < 14);   // geen dier per ongeluk raken
+const tr = W.trees.filter(t => !animalNear(t) && t.type !== 'palm').sort((a, b) => Math.hypot(a.x - sh.x, a.z - sh.z) - Math.hypot(b.x - sh.x, b.z - sh.z))[0];
 at(tr.x + 1.8, tr.z); let sw = 0; while (!evs.includes('felled') && sw < 20) { await sleep(60); send({ t: 'in', x: tr.x + 1.8, y: W.heightAt(tr.x + 1.8, tr.z), z: tr.z, yaw: Math.atan2(1.8, 0) * 0 + 1.5708, pitch: 0 }); send({ t: 'swing' }); await sleep(560); sw++; }
 ok(evs.includes('felled') && sw <= 3, 'boom omgehakt met bijl niveau 3 in ' + sw + ' slagen (zonder upgrade 5-7)');
 // golf: schild vermindert schade, drankje herstelt
 at(sh.x - Math.sin(sh.rotY) * -3.5, sh.z - Math.cos(sh.rotY) * -3.5);
 for (let i = 0; i < 40 && hurts.length < 4; i++) await sleep(500);
 console.log('   schade-ticks met schild 3:', hurts.join(','), '(kobold golf 1 doet 6 zonder schild)');
-ok(hurts.length > 0 && hurts.every(d => d <= 4), 'schade is verlaagd door schild');
+ok(hurts.length > 0 && hurts.some(d => d <= 4) && !hurts.some(d => d >= 5 && d <= 6), 'schade van kobolds is verlaagd door schild (een everzwijn in de buurt doet meer)');
 let hp = snap.y.hp; const p0 = inv.potions; send({ t: 'drink' }); await sleep(400);
 ok(inv.potions === p0 - 1 && snap.y.hp >= hp, `drankje gedronken: potions ${p0}->${inv.potions}, hp ${hp}->${snap.y.hp}`);
 send({ t: 'leave' }); await sleep(2200); await stop(); await start();

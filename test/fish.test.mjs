@@ -27,7 +27,7 @@ ok(B.inv.up.rod === 1 && B.inv.wood === 75, 'vishengel gekocht voor 25 hout (hou
 send({ t: 'buy', id: 'rod' }); await sleep(250); ok(B.toasts.at(-1).includes('al een vishengel'), 'tweede hengel geweigerd');
 // waterkant zoeken
 let shore = null;
-for (let a = 0; a < 64 && !shore; a++) { const ang = a / 64 * Math.PI * 2; for (let r = 10; r < 200; r += 1) { const x = Math.cos(ang) * r, z = Math.sin(ang) * r; if (W.heightAt(x, z) < WATER - 0.6) { shore = { lx: Math.cos(ang) * (r - 4), lz: Math.sin(ang) * (r - 4), wx: Math.cos(ang) * (r + 1), wz: Math.sin(ang) * (r + 1) }; break; } } }
+for (let a = 0; a < 64 && !shore; a++) { const ang = a / 64 * Math.PI * 2; for (let r = 10; r < 200; r += 1) { const x = Math.cos(ang) * r, z = Math.sin(ang) * r; if (W.heightAt(x, z) < WATER - 0.6) { let b = r - 1; while (b > 5 && W.heightAt(Math.cos(ang) * b, Math.sin(ang) * b) < 0.5) b--; if (r - b > 5) break; shore = { lx: Math.cos(ang) * b, lz: Math.sin(ang) * b, wx: Math.cos(ang) * (r + 1), wz: Math.sin(ang) * (r + 1) }; break; } } }
 console.log('   waterkant op', shore.lx.toFixed(0), shore.lz.toFixed(0), 'land h=', W.heightAt(shore.lx, shore.lz).toFixed(1), 'water h=', W.heightAt(shore.wx, shore.wz).toFixed(1));
 at(shore.lx, shore.lz); await sleep(300);
 send({ t: 'cast', x: shore.lx, z: shore.lz }); await sleep(250); ok(B.toasts.at(-1).includes('in het water'), 'uitgooien op land geweigerd');

@@ -53,11 +53,14 @@ export class Waves {
     const m = {
       id: this.eid++, type, x, z, yaw: 0, hp: M.hp * hpMul, maxhp: M.hp * hpMul,
       dmg: M.dmg * dmgMul, speed: M.speed * spdMul, nextAtk: 0, stun: 0, retarget: 0, target: null,
+      wave: true,   // telt mee voor het einde van de golf (bewakers van ruïnes en piramide niet)
       abRoots: this.T + 6, abSummon: this.T + 12, lungeCd: 0, lungeUntil: 0, strafe: Math.random() < 0.5 ? 1 : -1,
     };
     this.monsters.set(m.id, m);
     return m;
   }
+
+  waveLeft() { let n = 0; for (const m of this.monsters.values()) if (m.wave) n++; return n; }
 
   endWave() {
     const w = this.wave, modW = w.mod ? 1.5 : 1; w.ph = 0; w.t = CFG.waveGap; w.mod = null;

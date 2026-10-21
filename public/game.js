@@ -423,11 +423,13 @@ export async function startGame({ net, joined, user }) {
     e.item.traverse(o => { o.castShadow = true; });
     mountItem(e);
   }
+  const seenMons = new Set();
   function makeMonster(id, type) {
     const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.isMon = true; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 0 ? 0.85 : 1;
     e.bar = M.makeBar(0.9 + model.height * 0.18); scene.add(e.bar); e.barY = model.height + 0.35;
     if (type === 3) { const l = M.makeLabel(MONSTERS[3].name, '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
-    wantRig(e, RIG_FOR_MONSTER(type, id), RIG_HEIGHT[type], true);
+    wantRig(e, RIG_FOR_MONSTER(type, id), RIG_HEIGHT[type], !seenMons.has(id));   // uit de grond opstaan alleen de eerste keer
+    seenMons.add(id); if (seenMons.size > 2000) seenMons.clear();
     mons.set(id, e); return e;
   }
   function makeAnimal(id, type) {
@@ -488,14 +490,14 @@ export async function startGame({ net, joined, user }) {
     }
     return best;
   }
-  function syncList(map, list, make) {
+  function syncList(map, list, make, full = true) {
     const seen = new Set();
     for (const a of list) {
       const [id, type, x, z, yaw, hp, maxhp] = a; seen.add(id);
       const e = map.get(id) || make(id, type);
       e.tx = x; e.tz = z; e.tyaw = yaw; e.hp = hp; e.maxhp = maxhp;
     }
-    for (const id of [...map.keys()]) if (!seen.has(id) && !map.get(id).dying) killEnt(map, id);
+    if (full) for (const id of [...map.keys()]) if (!seen.has(id) && !map.get(id).dying) killEnt(map, id);   // tussensnapshots bevatten alleen wat dichtbij is
   }
   const fx = [];      // pijlen, waarschuwingen en wortels
   net.on('rooted', m => { player.rootUntil = performance.now() / 1000 + m.s; player.roll = null; shake = Math.max(shake, 0.3); toast('🌿 Vastgegroeid door wortels!', '#9adf6a'); });
@@ -516,7 +518,7 @@ export async function startGame({ net, joined, user }) {
       if (e.sw !== sw) { e.sw = sw; e.swingT = 0; if (e.model.kind === 'rig') e.model.once('1H_Melee_Attack_Chop', { speed: 1.35 }); }
     }
     for (const id of [...remotes.keys()]) if (!seen.has(id)) killEnt(remotes, id);
-    syncList(mons, m.m, makeMonster); syncList(anis, m.a, makeAnimal); if (m.d) syncDogs(m.d);
+    const full = m.f !== 0; syncList(mons, m.m, makeMonster, full); syncList(anis, m.a, makeAnimal, full); if (m.d) syncDogs(m.d);
     Object.assign(you, m.y); Object.assign(wave, m.w);
     if (dead) $('dead-sub').textContent = you.rs > 0 ? 'Terug in het spel over ' + you.rs + ' s' : '';
     renderVitals();
