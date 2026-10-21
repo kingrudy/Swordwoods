@@ -5,6 +5,7 @@ import { createWorld, worldOk, WATER, clampXZ, inDesert } from './public/world.j
 import { rollSwordOfRarity, AXE, MONSTERS, eqCode, WEATHERS, DOG_BREEDS, breedOf, ROLL_CD, ROLL_IFRAME } from './public/items.js';
 import { tal, maxHp } from './public/progress.js';
 import { bump } from './stats.js';
+import { logChat, mutedUntil, muteText } from './moderation.js';
 import { BUILD_BY_ID } from './public/builds.js';
 import { num, r1, r2, len, clamp, CFG } from './room/shared.js';
 import { ensureSave, applyTalent } from './room/save.js';
@@ -173,7 +174,8 @@ export class Room {
         const text = String(m.text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 140);
         if (!text) return;
         if (CFG.cheats && text.startsWith('/')) { this.cheat(P, text.slice(1).split(/\s+/)); return; }
-        P.lastChat = this.T;
+        if (mutedUntil(P.u)) { P.lastChat = this.T; return this.toast(P, muteText(P.u), '#ff9c8a'); }
+        P.lastChat = this.T; logChat(this.name, P.name, text);
         this.bc({ t: 'chat', id: P.id, name: P.name, text, ping: m.ping ? { x: r1(P.x), z: r1(P.z) } : null });
         break;
       }

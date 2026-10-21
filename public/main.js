@@ -112,6 +112,11 @@ $('install').onclick = async () => {
   if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch {} installEvt = null; $('install').classList.remove('on'); }
   else alert('Op iPhone/iPad: tik op het deel-icoon (vierkant met pijl) en kies "Zet op beginscherm".');
 };
+$('btn-pw').onclick = async () => {
+  const old = prompt('Je huidige wachtwoord:'); if (old === null) return;
+  const pw = prompt('Nieuw wachtwoord (minimaal 6 tekens):'); if (pw === null) return;
+  try { const r = await fetch('/api/password', { method: 'POST', body: JSON.stringify({ token: store.get(), old, pw }) }); const j = await r.json(); alert(j.ok ? 'Je wachtwoord is gewijzigd.' : j.err); } catch { alert('Dat lukte niet. Probeer het opnieuw.'); }
+};
 $('btn-logout').onclick = () => { store.del(); try { net.ws.close(); } catch {} location.reload(); };
 
 /* ---------------- verbinding ---------------- */
@@ -135,7 +140,8 @@ function setHandlers() {
   net.on('rooms', m => renderRooms(m.rooms));
   net.on('save', m => { save = m.save; renderLobby(); });
   net.on('err', m => { $('lb-err').textContent = m.msg; });
-  net.on('kicked', () => overlay('Elders ingelogd', 'Je account is op een ander apparaat of tabblad gestart.'));
+  net.on('kicked', m => { if (m.reason) store.del(); overlay(m.reason ? 'Uit het spel gezet' : 'Elders ingelogd', m.reason || 'Je account is op een ander apparaat of tabblad gestart.'); });
+  net.on('announce', m => { const el = $('announce'); el.textContent = '📢 ' + m.text; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 12000); });
   net.on('_close', () => { if (!$('overlay').classList.contains('on')) overlay('Verbinding verloren', 'De verbinding met de server is verbroken.'); });
   net.on('joined', async m => {
     net.buffering = true;                 // berichten opvangen tot het spel klaar is

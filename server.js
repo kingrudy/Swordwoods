@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { Room, ensureSave, applyTalent, ensureDaily } from './room.js';
 import { initStats, statsData, statsHtml } from './stats.js';
 import { createStorage } from './storage.js';
+import { handleAdmin } from './admin.js';
+import { isBanned } from './moderation.js';
 
 const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -77,6 +79,7 @@ async function login(name, pw) {
   const salt = u ? u.salt : 'x'.repeat(32);
   const h = await hashPw(typeof pw === 'string' ? pw.slice(0, 72) : '', salt);
   if (!u || !crypto.timingSafeEqual(Buffer.from(h, 'hex'), Buffer.from(u.hash, 'hex'))) return { err: 'Onjuiste gebruikersnaam of wachtwoord.' };
+  if (isBanned(u)) return { err: 'Dit account is geblokkeerd door de beheerder.' + (u.mod.reason ? ' Reden: ' + u.mod.reason : '') };
   return { token: newSession(key), name: u.name };
 }
 
@@ -152,6 +155,21 @@ const json = (res, code, obj) => res.writeHead(code, { 'Content-Type': 'applicat
 const onRequest = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/admin' || url.pathname.startsWith('/api/admin/')) {
+      const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+      if (await handleAdmin(req, res, url, ip, { db, conns, byUser, rooms, storage, markDirty, flush, hashPw, json, readJson, version: VERSION, dataDir: DATA_DIR })) return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/password') {
+      let body; try { body = await readJson(req); } catch { return json(res, 400, { err: 'Ongeldig verzoek.' }); }
+      const u = userByToken(body.token);
+      if (!u) return json(res, 401, { err: 'Log opnieuw in.' });
+      if (limited('pw' + u.name)) return json(res, 429, { err: 'Te veel pogingen. Probeer het over een minuut opnieuw.' });
+      const h = await hashPw(String(body.old || '').slice(0, 72), u.salt);
+      if (!crypto.timingSafeEqual(Buffer.from(h, 'hex'), Buffer.from(u.hash, 'hex'))) return json(res, 400, { err: 'Je huidige wachtwoord klopt niet.' });
+      const pw = String(body.pw || ''); if (pw.length < 6 || pw.length > 72) return json(res, 400, { err: 'Nieuw wachtwoord: minimaal 6 tekens.' });
+      u.salt = crypto.randomBytes(16).toString('hex'); u.hash = await hashPw(pw, u.salt); markDirty();
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'GET' && url.pathname === '/stats') {
       if (STATS_KEY && url.searchParams.get('key') !== STATS_KEY) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Geef ?key=... mee (STATS_KEY).'); }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(statsHtml(VERSION));
@@ -259,6 +277,8 @@ class Conn {
     if (m.t === 'auth') {
       const u = userByToken(m.token);
       if (!u) return this.send({ t: 'authfail' });
+      if (isBanned(u)) { this.send({ t: 'kicked', reason: 'Dit account is geblokkeerd.' }); return this.kill(); }
+      u.lastSeen = Date.now();
       const key = u.name.toLowerCase(), old = byUser.get(key);
       if (old && old !== this) { old.send({ t: 'kicked' }); old.kill(); }
       this.user = u; byUser.set(key, this); ensureSave(u);
@@ -304,6 +324,7 @@ class Conn {
     const room = this.room; const P = this.player;
     this.room = null; this.player = null;
     if (P) room.removePlayer(P);
+    if (this.user) this.user.lastSeen = Date.now();
     if (notify && !this.closed) { ensureDaily(this.user); this.send({ t: 'left', save: this.user.save, rooms: roomList() }); }
   }
 }

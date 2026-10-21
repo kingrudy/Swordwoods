@@ -12,6 +12,10 @@ services:
       # WAVE_GAP: 120          # seconden tussen "laatste vijand weg" en de volgende golf
       # HUNGER_RATE: 0.22      # hongerpunten per seconde (100 = vol)
       PORT: "8304"
+      # Beheerpagina op /admin: kies een lang geheim en vul het hier in (zonder ADMIN_KEY staat beheer uit)
+      # ADMIN_KEY: "verander-mij-in-iets-lang-en-geheims"
+      # STATS_KEY: "geheim"   # optioneel: /stats alleen met ?key=geheim
+      # BACKUP_DAYS: 7        # hoeveel dagelijkse back-ups bewaard blijven
       TZ: Europe/Amsterdam
     restart: unless-stopped
 volumes:
