@@ -1,0 +1,60 @@
+import { ROOT, tmpData } from './helpers.mjs';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { createWorld } from '../public/world.js';
+const PORT = 8125, BASE = 'http://localhost:' + PORT, sleep = ms => new Promise(r => setTimeout(r, ms));
+const DATA = tmpData('shop');
+fs.rmSync(DATA, { recursive: true, force: true });
+let srv;
+const start = async env => { srv = spawn('node', ['server.js'], { cwd: ROOT, env: { ...process.env, PORT, EXTRA_PORTS: '', DATA_DIR: DATA, MAX_SPEED: 99999, FIRST_WAVE_DELAY: 4, WAVE_GAP: 60, ...env }, stdio: ['ignore', 'pipe', 'inherit'] }); await new Promise(r => srv.stdout.on('data', d => String(d).includes('luistert') && r())); globalThis.BUILD = (await (await fetch(BASE + '/api/health')).json()).build; };
+const stop = () => new Promise(r => { srv.on('exit', r); srv.kill('SIGTERM'); });
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+const post = (p, b) => fetch(BASE + p, { method: 'POST', body: JSON.stringify(b) }).then(r => r.json());
+await start();
+await post('/api/register', { username: 'Shopper', password: 'geheim123' });
+await sleep(1800); await stop();
+const db = JSON.parse(fs.readFileSync(DATA + '/db.json', 'utf8')); db.users.shopper.save.wood = 800; db.users.shopper.save.swords = [];
+fs.writeFileSync(DATA + '/db.json', JSON.stringify(db));
+await start();
+const tok = (await post('/api/login', { username: 'Shopper', password: 'geheim123' })).token;
+const ws = new WebSocket('ws://localhost:' + PORT + '/ws'); let inv, snap, joined; const toasts = [], hurts = [], evs = [];
+ws.onopen = () => ws.send(JSON.stringify({ t: 'auth', build: globalThis.BUILD, token: tok }));
+ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'authed') ws.send(JSON.stringify({ t: 'create', name: 'Winkeltest', max: 2 })); if (m.t === 'joined') joined = m; if (m.t === 'inv') inv = m; if (m.t === 's') snap = m; if (m.t === 'toast') toasts.push(m.msg); if (m.t === 'hurt') hurts.push(m.dmg); if (m.t === 'ev') evs.push(m.k); };
+const send = o => ws.send(JSON.stringify(o));
+while (!joined || !inv) await sleep(50);
+const W = createWorld(joined.room.seed), sh = W.shop;
+console.log('winkel op', sh.x.toFixed(1), sh.z.toFixed(1), 'hout', inv.wood);
+const at = (x, z) => send({ t: 'in', x, y: W.heightAt(x, z), z, yaw: 0, pitch: 0 });
+const buy = async id => { const n = toasts.length; send({ t: 'buy', id }); await sleep(250); return toasts.slice(n).join(' | '); };
+// te ver weg
+at(sh.x + 40, sh.z); await sleep(150); let r = await buy('meat1'); ok(/te ver/.test(r), 'te ver weg: ' + r);
+// dichtbij
+const px = sh.x + 3 * Math.sin(sh.rotY) * -1, pz = sh.z + 3 * Math.cos(sh.rotY) * -1; at(sh.x - Math.sin(sh.rotY) * -3.5, sh.z - Math.cos(sh.rotY) * -3.5); await sleep(150);
+let w0 = inv.wood, m0 = inv.meat; r = await buy('meat5'); ok(inv.meat === m0 + 5 && inv.wood === w0 - 13, `vleespakket: vlees ${m0}->${inv.meat}, hout ${w0}->${inv.wood}`);
+r = await buy('potion'); ok(inv.potions === 1, 'drankje gekocht, potions=' + inv.potions);
+for (let i = 0; i < 6; i++) await buy('potion'); ok(inv.potions === 5 && toasts.some(t => /al 5/.test(t)), 'max 5 drankjes: ' + inv.potions);
+r = await buy('shield2'); ok(/eerst het vorige/.test(r), 'schild 2 zonder 1 geweigerd: ' + r);
+await buy('shield1'); await buy('shield2'); await buy('shield3'); ok(inv.up.shield === 3, 'schilden 1-3 gekocht, niveau ' + inv.up.shield);
+r = await buy('shield1'); ok(/al/.test(r), 'schild opnieuw geweigerd: ' + r);
+await buy('axe1'); await buy('axe2'); await buy('axe3'); ok(inv.up.axe === 3, 'bijl niveau ' + inv.up.axe);
+const wBefore = inv.wood; r = await buy('sword2'); ok(inv.swords.length === 1 && inv.swords[0].rarity === 2 && inv.wood === wBefore - 85, `zeldzaam zwaard: ${inv.swords[0]?.name} (${inv.swords[0]?.damage}), hout ${wBefore}->${inv.wood}`);
+r = await buy('sword4'); ok(/Te weinig hout/.test(r), 'legendarisch zwaard te duur: ' + r);
+r = await buy('bestaatniet'); ok(r === '', 'onbekend item genegeerd');
+// bijl-upgrade op bomen: gebruik bijl (equip 0), boom hakken moet met 6-7 hp / (1+3)=2 slagen
+send({ t: 'equip', i: 0 }); await sleep(100);
+const tr = W.trees.slice().sort((a, b) => Math.hypot(a.x - sh.x, a.z - sh.z) - Math.hypot(b.x - sh.x, b.z - sh.z))[0];
+at(tr.x + 1.8, tr.z); let sw = 0; while (!evs.includes('felled') && sw < 20) { await sleep(60); send({ t: 'in', x: tr.x + 1.8, y: W.heightAt(tr.x + 1.8, tr.z), z: tr.z, yaw: Math.atan2(1.8, 0) * 0 + 1.5708, pitch: 0 }); send({ t: 'swing' }); await sleep(560); sw++; }
+ok(evs.includes('felled') && sw <= 3, 'boom omgehakt met bijl niveau 3 in ' + sw + ' slagen (zonder upgrade 5-7)');
+// golf: schild vermindert schade, drankje herstelt
+at(sh.x - Math.sin(sh.rotY) * -3.5, sh.z - Math.cos(sh.rotY) * -3.5);
+for (let i = 0; i < 40 && hurts.length < 4; i++) await sleep(500);
+console.log('   schade-ticks met schild 3:', hurts.join(','), '(kobold golf 1 doet 6 zonder schild)');
+ok(hurts.length > 0 && hurts.every(d => d <= 4), 'schade is verlaagd door schild');
+let hp = snap.y.hp; const p0 = inv.potions; send({ t: 'drink' }); await sleep(400);
+ok(inv.potions === p0 - 1 && snap.y.hp >= hp, `drankje gedronken: potions ${p0}->${inv.potions}, hp ${hp}->${snap.y.hp}`);
+send({ t: 'leave' }); await sleep(2200); await stop(); await start();
+const tok2 = (await post('/api/login', { username: 'Shopper', password: 'geheim123' })).token;
+const ws2 = new WebSocket('ws://localhost:' + PORT + '/ws'); let au; ws2.onopen = () => ws2.send(JSON.stringify({ t: 'auth', build: globalThis.BUILD, token: tok2 })); ws2.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'authed') au = m; };
+while (!au) await sleep(50);
+ok(au.save.up.shield === 3 && au.save.up.axe === 3 && au.save.potions >= 4 && au.save.swords.length === 1, 'aankopen bewaard na herstart: ' + JSON.stringify({ up: au.save.up, potions: au.save.potions, swords: au.save.swords.length, spent: au.save.stats.spent }));
+await stop(); console.log(fails ? fails + ' MISLUKT' : 'ALLES GESLAAGD'); process.exit(fails ? 1 : 0);

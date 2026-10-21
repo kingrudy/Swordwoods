@@ -1,0 +1,24 @@
+import { ROOT, tmpData } from './helpers.mjs';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+const PORT = 8127, DATA = tmpData('stats');
+fs.rmSync(DATA, { recursive: true, force: true });
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const srv = spawn('node', ['server.js'], { cwd: ROOT, env: { ...process.env, PORT, EXTRA_PORTS: '', DATA_DIR: DATA, FIRST_WAVE_DELAY: 2, HUNGER_RATE: 40, ALLOW_CHEATS: '1' }, stdio: ['ignore', 'pipe', 'inherit'] });
+await new Promise(r => srv.stdout.on('data', d => String(d).includes('luistert') && r()));
+const BUILD = (await (await fetch('http://localhost:' + PORT + '/api/health')).json()).build;
+const j = await (await fetch('http://localhost:' + PORT + '/api/register', { method: 'POST', body: JSON.stringify({ username: 'Teller', password: 'abcdef1' }) })).json();
+const ws = new WebSocket('ws://localhost:' + PORT + '/ws');
+ws.onopen = () => ws.send(JSON.stringify({ t: 'auth', build: BUILD, token: j.token }));
+ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'authed') ws.send(JSON.stringify({ t: 'join', id: 1 })); };
+await sleep(44000);   // honger 40/s: snel verhongeren
+const st = await (await fetch('http://localhost:' + PORT + '/api/stats')).json();
+ok(st.c.sessions >= 1 && st.c.playSec > 3, 'sessie en speeltijd geteld');
+ok(st.c.deaths >= 1 && Object.keys(st.c).some(k => k.startsWith('death.')), 'dood geteld: ' + JSON.stringify(st.c));
+const html = await (await fetch('http://localhost:' + PORT + '/stats')).text();
+ok(html.includes('balansstatistieken') && html.includes('Kerngetallen'), 'statistiekenpagina');
+srv.kill('SIGTERM'); await sleep(800);
+const db = JSON.parse(fs.readFileSync(DATA + '/db.json', 'utf8'));
+ok(db.balance && db.balance.c.sessions >= 1, 'bewaard in db.json');
+console.log(fails ? fails + ' MISLUKT' : 'ALLES GESLAAGD'); process.exit(fails ? 1 : 0);
