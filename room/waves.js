@@ -10,6 +10,7 @@ import { r1, r2, len, CFG } from './shared.js';
 export class Waves {
   wipe() {
     bump('wipe.' + String(this.wave.n).padStart(2, '0'));
+    const w = this.wave; if (w.ph === 1) { if (w.failN === w.n) w.fails++; else { w.failN = w.n; w.fails = 1; } }
     this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.wave.mod = null;
     if (this.pyr.st === 'guards' || this.pyr.st === 'boss') this.pyrSet('idle');
     this.wave.n = Math.max(0, this.wave.n - 1); this.wave.ph = 0; this.wave.t = CFG.wipeDelay;
@@ -23,7 +24,9 @@ export class Waves {
     const n = w.n, alive = [...this.players.values()].filter(p => !p.dead).length || 1;
     const mod = forceMod ? WAVE_MODS.find(x => x.id === forceMod) : (n >= 3 && n % 5 !== 0 && Math.random() < 0.45 ? WAVE_MODS[Math.floor(Math.random() * WAVE_MODS.length)] : null);
     w.mod = mod ? mod.id : null;
-    const scale = { hp: (1 + 0.30 * (n - 1)) * (mod?.hp || 1), dmg: (1 + 0.12 * (n - 1)) * (mod?.dmg || 1), spd: Math.min(1.4, 1 + 0.02 * (n - 1)) * (mod?.spd || 1) };
+    const tired = w.fails && w.failN === n ? Math.min(3, w.fails) : 0;   // na een wipe op deze golf: telkens iets makkelijker (max 3 keer)
+    const ease = 1 - 0.12 * tired;
+    const scale = { hp: (1 + 0.30 * (n - 1)) * (mod?.hp || 1) * ease, dmg: (1 + 0.12 * (n - 1)) * (mod?.dmg || 1) * ease, spd: Math.min(1.4, 1 + 0.02 * (n - 1)) * (mod?.spd || 1) };
     this.waveScale = scale;
     const hpMul = scale.hp * (1 + 0.15 * (alive - 1));
     const count = Math.min(80, Math.round((3 + 1.6 * n) * (0.7 + 0.3 * alive) * (mod?.count || 1)));
@@ -42,10 +45,10 @@ export class Waves {
       const P = this.pickAlive(), cx = P ? P.x : 0, cz = P ? P.z : 0;
       const pt = this.world.landPoint(Math.random, cx, cz, 38, 58, 0.0) || this.world.landPoint(Math.random, 0, 0, 20, 90, 0.0);
       if (!pt) continue;
-      const bossMul = type === 3 ? (1 + 0.25 * (n / 5 - 1)) : 1;
+      const bossMul = type === 3 ? (1 + 0.25 * (n / 5 - 1)) * (alive === 1 ? 0.75 : 1) : 1;   // alleen tegen de baas: wat minder levens
       this.spawnMonster(type, pt.x, pt.z, hpMul * bossMul, scale.dmg * bossMul, scale.spd); spawned++;
     }
-    this.bc({ t: 'wave', ph: 1, n, boss, count: spawned, mod: w.mod });
+    this.bc({ t: 'wave', ph: 1, n, boss, count: spawned, mod: w.mod, ease: tired ? Math.round((1 - ease) * 100) : 0 });
     if (w.mod) bump('mod.' + w.mod);
   }
 
@@ -64,7 +67,7 @@ export class Waves {
   waveLeft() { let n = 0; for (const m of this.monsters.values()) if (m.wave) n++; return n; }
 
   endWave() {
-    const w = this.wave, modW = (w.mod ? 1.5 : 1) * this.wk('wave'); w.ph = 0; w.t = CFG.waveGap; w.mod = null;
+    const w = this.wave, modW = (w.mod ? 1.5 : 1) * this.wk('wave'); w.ph = 0; w.t = CFG.waveGap; w.mod = null; w.fails = 0; w.failN = 0;
     bump('waves'); bump('waveSec', this.T - (w.startT || this.T)); bump('wave.reached.' + String(w.n).padStart(2, '0')); maxOf('wave.max', w.n);
     this.projs.length = 0; this.hazards.length = 0;
     for (const P of this.players.values()) {
@@ -196,15 +199,15 @@ export class Waves {
   archerAI(m, M, tg, dx, dz, d, dt) {
     // blijft op 9-17 m afstand, loopt zijwaarts en schiet pijlen die je kunt ontwijken of blokkeren
     let mx = 0, mz = 0;
-    if (d > 17) { mx = dx / d; mz = dz / d; }
-    else if (d < 9) { mx = -dx / d; mz = -dz / d; }
+    if (d > 15) { mx = dx / d; mz = dz / d; }
+    else if (d < 5.5) { mx = -dx / d * 0.75; mz = -dz / d * 0.75; }   // deinst wat terug, maar je kunt hem bijhouden
     else { mx = -dz / d * m.strafe * 0.5; mz = dx / d * m.strafe * 0.5; if (Math.random() < dt * 0.3) m.strafe *= -1; }
     if (mx || mz) { const ox = m.x, oz = m.z; this.move(m, m.x + mx * m.speed * dt, m.z + mz * m.speed * dt, M.r); if (len(m.x - ox, m.z - oz) < 0.01) m.strafe *= -1; }
-    if (d < 22 && this.T >= m.nextAtk) {
+    if (d < 20 && this.T >= m.nextAtk) {
       m.nextAtk = this.T + M.atkCd * (0.85 + Math.random() * 0.3);
-      const lead = Math.min(0.6, d / 26) * 0.6, ax = tg.x + (tg.vx || 0) * lead, az = tg.z + (tg.vz || 0) * lead;
-      const ddx = ax - m.x, ddz = az - m.z, dd = len(ddx, ddz) || 1, sp = 26;
-      const pr = { x: m.x + ddx / dd * 0.6, z: m.z + ddz / dd * 0.6, vx: ddx / dd * sp, vz: ddz / dd * sp, life: 1.1, dmg: m.dmg, src: m };
+      const lead = Math.min(0.6, d / 20) * 0.3, ax = tg.x + (tg.vx || 0) * lead, az = tg.z + (tg.vz || 0) * lead;   // mikt maar half voor: zijwaarts lopen ontwijkt
+      const ddx = ax - m.x, ddz = az - m.z, dd = len(ddx, ddz) || 1, sp = 20;
+      const pr = { x: m.x + ddx / dd * 0.6, z: m.z + ddz / dd * 0.6, vx: ddx / dd * sp, vz: ddz / dd * sp, life: 1.2, dmg: m.dmg, src: m };
       this.projs.push(pr);
       this.bc({ t: 'ev', k: 'shot', id: m.id, x: r2(pr.x), z: r2(pr.z), vx: r2(pr.vx), vz: r2(pr.vz) });
     }

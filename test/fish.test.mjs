@@ -26,8 +26,15 @@ send({ t: 'buy', id: 'rod' }); await sleep(300);
 ok(B.inv.up.rod === 1 && B.inv.wood === 75, 'vishengel gekocht voor 25 hout (hout ' + B.inv.wood + ')');
 send({ t: 'buy', id: 'rod' }); await sleep(250); ok(B.toasts.at(-1).includes('al een vishengel'), 'tweede hengel geweigerd');
 // waterkant zoeken
-let shore = null;
-for (let a = 0; a < 64 && !shore; a++) { const ang = a / 64 * Math.PI * 2; for (let r = 10; r < 200; r += 1) { const x = Math.cos(ang) * r, z = Math.sin(ang) * r; if (W.heightAt(x, z) < WATER - 0.6) { let b = r - 1; while (b > 5 && W.heightAt(Math.cos(ang) * b, Math.sin(ang) * b) < 0.5) b--; if (r - b > 5) break; shore = { lx: Math.cos(ang) * b, lz: Math.sin(ang) * b, wx: Math.cos(ang) * (r + 1), wz: Math.sin(ang) * (r + 1) }; break; } } }
+let shore = null;   // een droge plek met binnen 6 m diep water, zo dicht mogelijk bij het midden
+for (let r = 6; r < 200 && !shore; r += 2) for (let a = 0; a < 96 && !shore; a++) {
+  const ang = a / 96 * Math.PI * 2, x = Math.cos(ang) * r, z = Math.sin(ang) * r, h = W.heightAt(x, z);
+  if (h < WATER + 0.6 || h > 4 || W.slopeAt(x, z) > 0.8) continue;
+  for (let k = 0; k < 16 && !shore; k++) for (const d of [3, 4.5, 6]) {
+    const b = k / 16 * Math.PI * 2, wx = x + Math.cos(b) * d, wz = z + Math.sin(b) * d;
+    if (W.heightAt(wx, wz) < WATER - 0.6) { shore = { lx: x, lz: z, wx, wz }; break; }
+  }
+}
 console.log('   waterkant op', shore.lx.toFixed(0), shore.lz.toFixed(0), 'land h=', W.heightAt(shore.lx, shore.lz).toFixed(1), 'water h=', W.heightAt(shore.wx, shore.wz).toFixed(1));
 at(shore.lx, shore.lz); await sleep(300);
 send({ t: 'cast', x: shore.lx, z: shore.lz }); await sleep(250); ok(B.toasts.at(-1).includes('in het water'), 'uitgooien op land geweigerd');

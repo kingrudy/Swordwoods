@@ -555,6 +555,7 @@ export async function startGame({ net, joined, user }) {
       const mod = WAVE_MODS.find(x => x.id === m.mod);
       banner('GOLF ' + m.n + (m.boss ? '<small>Een baas nadert: ' + MONSTERS[3].name + '</small>' : mod ? '<small style="color:#ff9a6a">' + mod.name + ': ' + mod.desc + ' · meer beloning</small>' : '<small>' + m.count + ' monsters komen eraan</small>'), 4600);
       sfx.horn();
+      if (m.ease) setTimeout(() => toast('💪 Nieuwe poging: de monsters van deze golf zijn ' + m.ease + '% zwakker.', '#9ad8ff'), 1500);
     } else if (m.wipe) banner('Iedereen is gevallen<small>Golf ' + (m.n + 1) + ' begint opnieuw</small>', 4200);
     else if (m.cleared) banner('Golf ' + m.n + ' verslagen<small>De volgende golf komt over ' + fmt(m.next) + '</small>', 4200);
   });

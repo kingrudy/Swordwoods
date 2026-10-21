@@ -1,4 +1,5 @@
 import { ROOT, tmpData } from './helpers.mjs';
+process.env.WEEK_EVENT = '';   // de echte kalender
 // Weekranglijst (punten = ervaring van deze week), weekwissel met prijzen, en de effecten van weekevents.
 import { Room, ensureSave } from '../room.js';
 import { createWeekly } from '../week.js';

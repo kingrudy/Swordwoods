@@ -5,6 +5,8 @@ import { levelInfo, tal, maxHp, ACHIEVEMENTS, TUTORIAL, isoWeek, weekEvent, WEEK
 import { bump } from '../stats.js';
 import { ensureDaily, ensureWeek } from './save.js';
 
+const NO_EVENT = { id: 'geen', icon: '', name: 'Geen event', desc: '' };   // WEEK_EVENT=geen (tests)
+
 export class Progress {
   applyStats(P) {
     const old = P.mhp || 100; P.mhp = maxHp(P.u.save); if (P.mhp > old && !P.dead) P.hp += P.mhp - old; P.hp = Math.min(P.hp, P.mhp);
@@ -21,7 +23,7 @@ export class Progress {
     const now = Date.now();
     if (!this._wev || now - this._wevAt > 60000) {
       const w = isoWeek(now), force = this.weekForce || process.env.WEEK_EVENT;
-      this._wev = { ...w, ev: WEEK_EVENTS.find(e => e.id === force) || weekEvent(w) }; this._wevAt = now;
+      this._wev = { ...w, ev: force === 'geen' ? NO_EVENT : WEEK_EVENTS.find(e => e.id === force) || weekEvent(w) }; this._wevAt = now;
     }
     return this._wev;
   }

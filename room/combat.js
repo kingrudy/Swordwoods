@@ -111,6 +111,7 @@ export class Combat {
       }
     }
     dmg *= (1 - SHIELD_REDUCE[P.u.save.up.shield]) * (this.buff(P, 'feast') ? 0.9 : 1);
+    if (kind === 'arrow' && (P.arrowHits = (P.arrowHits || 0) + 1) === 3) this.toast(P, '🛡️ Tip: blokkeer pijlen met je schild (rechtermuisknop, LT of 🛡️): van voren houdt het ze helemaal tegen. Of loop zijwaarts.', '#9ad8ff');
     P.hp -= dmg; P.lastHurt = this.T;
     P.conn.send({ t: 'hurt', dmg: Math.round(dmg), x: src ? r1(src.x) : null, z: src ? r1(src.z) : null });
     if (P.hp <= 0) { if (src && src.isPlayer && this.inArena(P)) this.arenaKO(P, src); else this.die(P); }

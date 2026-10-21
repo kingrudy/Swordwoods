@@ -59,9 +59,9 @@ export function validSword(s) {
 export const MONSTERS = [
   { key: 'kobold', name: 'Boskobold',    hp: 24, dmg: 6,  speed: 3.7, r: 0.5, score: 10, minWave: 1, weight: 6, atkCd: 1.1 },
   { key: 'wolf',   name: 'Schaduwwolf',  hp: 18, dmg: 8,  speed: 6.3, r: 0.55, score: 12, minWave: 2, weight: 4, atkCd: 0.8 },
-  { key: 'troll',  name: 'Bosmonster',    hp: 90, dmg: 16, speed: 2.9, r: 0.95, score: 30, minWave: 4, weight: 2, atkCd: 1.6 },
+  { key: 'troll',  name: 'Bosmonster',    hp: 80, dmg: 12, speed: 2.8, r: 0.95, score: 30, minWave: 4, weight: 2, atkCd: 1.9 },
   { key: 'reus',   name: 'Woudreus',   hp: 420, dmg: 30, speed: 3.3, r: 1.7, score: 150, minWave: 99, weight: 0, atkCd: 2.0 },
-  { key: 'schutter', name: 'Skeletschutter', hp: 20, dmg: 9, speed: 3.4, r: 0.5, score: 14, minWave: 3, weight: 3, atkCd: 2.4, ranged: true },
+  { key: 'schutter', name: 'Skeletschutter', hp: 16, dmg: 6, speed: 3.4, r: 0.5, score: 14, minWave: 3, weight: 2, atkCd: 2.9, ranged: true },
   { key: 'sluiper',  name: 'Sluiper',        hp: 16, dmg: 13, speed: 6.4, r: 0.45, score: 16, minWave: 5, weight: 2, atkCd: 1.3, stealth: true },
   { key: 'jager',    name: 'Hondenjager',    hp: 60, dmg: 12, speed: 4.6, r: 0.6, score: 22, minWave: 6, weight: 2, atkCd: 1.2, hunter: true },
   // Alleen in de piramide op het Woestijneiland (komen nooit in golven voor)
