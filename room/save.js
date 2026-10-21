@@ -1,6 +1,6 @@
 // Opgeslagen spelersgegevens: controleren/aanvullen bij laden, dagelijkse opdrachten en talenten.
 import { MAX_POTIONS, DOG_MAX_LEVEL, DOG_FURS, statueOf, breedOf } from '../public/items.js';
-import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, dailyQuests, FORGE_MAX, TUTORIAL } from '../public/progress.js';
+import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, dailyQuests, FORGE_MAX, TUTORIAL, isoWeek } from '../public/progress.js';
 import { clamp } from './shared.js';
 
 export function ensureSave(u) {
@@ -13,7 +13,7 @@ export function ensureSave(u) {
   if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
   if (s.dog) { s.dog.breed = breedOf(s.dog.breed).id; s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
   if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) { let h = 0; for (const ch of String(u.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; s.look = h % 4; }
-  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0, bosses: 0, fish: 0, ore: 0, forgedMax: 0, quests: 0, heavyKills: 0, dungeons: 0, pvpWins: 0, pvpLosses: 0, gifts: 0, feasts: 0, voyages: 0, digs: 0, statues: 0, masks: 0, goldEarned: 0, pharaohs: 0 }, s.stats || {});
+  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0, bosses: 0, fish: 0, ore: 0, forgedMax: 0, quests: 0, heavyKills: 0, dungeons: 0, pvpWins: 0, pvpLosses: 0, gifts: 0, feasts: 0, voyages: 0, digs: 0, statues: 0, masks: 0, goldEarned: 0, pharaohs: 0, weekTop3: 0, weekWins: 0 }, s.stats || {});
   if (!s.biomes || typeof s.biomes !== 'object') s.biomes = {};
   s.xp = Math.max(0, s.xp | 0); s.ore = Math.max(0, s.ore | 0); s.gold = Math.max(0, s.gold | 0);
   s.up.shovel = clamp(s.up.shovel | 0, 0, 1);
@@ -27,6 +27,9 @@ export function ensureSave(u) {
   if (!Number.isInteger(s.tut)) s.tut = (s.stats.kills > 20 || s.stats.playSec > 1800) ? TUTORIAL.length : 0;
   s.tut = clamp(s.tut, 0, TUTORIAL.length);
   for (const w of s.swords) { if (!Number.isFinite(w.d0)) w.d0 = w.damage; w.f = clamp(w.f | 0, 0, FORGE_MAX); }
+  if (!Array.isArray(s.notes)) s.notes = [];
+  s.notes = s.notes.filter(n => typeof n === 'string').slice(-5);
+  ensureWeek(s);
   ensureDaily(u);
   return s;
 }
@@ -45,4 +48,11 @@ export function applyTalent(s, id) {
   const cur = s.tal[id] | 0, free = talentPoints(levelInfo(s.xp).level) - spentPoints(s.tal);
   if (cur >= T.max || free <= 0) return false;
   s.tal[id] = cur + 1; return true;
+}
+
+/** Weekpunten (= ervaring verdiend in deze ISO-week); een nieuwe week begint weer bij 0. */
+export function ensureWeek(s, k = isoWeek().k) {
+  if (!s.week || typeof s.week !== 'object' || s.week.k !== k) s.week = { k, pts: 0 };
+  s.week.pts = Math.max(0, s.week.pts | 0);
+  return s.week;
 }

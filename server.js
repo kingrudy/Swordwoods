@@ -12,6 +12,7 @@ import { initStats, statsData, statsHtml } from './stats.js';
 import { createStorage } from './storage.js';
 import { handleAdmin } from './admin.js';
 import { isBanned } from './moderation.js';
+import { createWeekly } from './week.js';
 
 const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -181,7 +182,7 @@ const onRequest = async (req, res) => {
         if (url.pathname === '/api/stats') return json(res, 200, statsData());
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(statsHtml(VERSION));
       }
-      if (req.method === 'GET' && url.pathname === '/api/leaderboard') return json(res, 200, leaderboard());
+      if (req.method === 'GET' && url.pathname === '/api/leaderboard') return json(res, 200, { all: leaderboard(), week: weekly.board() });
       if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, build: BUILD, rooms: rooms.size, users: Object.keys(db.users).length, online: [...conns].filter(c => c.user).length, net: { kbIn: Math.round(netStats.raw / 1024), kbOut: Math.round(netStats.sent / 1024), sec: Math.round((Date.now() - netStats.since) / 1000) } });
       if (req.method === 'POST' && (url.pathname === '/api/register' || url.pathname === '/api/login')) {
         if (limited(ip + (req.headers['x-forwarded-for'] || ''))) return json(res, 429, { err: 'Te veel pogingen. Probeer het over een minuut opnieuw.' });
@@ -367,6 +368,8 @@ function broadcastRooms() {
 }
 makeRoom('Bos van Aldric', 8, true);
 makeRoom('Zwaardenwoud', 8, true);
+const weekly = createWeekly({ db, rooms, markDirty });
+weekly.tick(); setInterval(weekly.tick, 60000).unref?.();
 
 let last = process.hrtime.bigint(), lobbyT = 0;
 setInterval(() => {

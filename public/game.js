@@ -9,7 +9,7 @@ import * as CH from './characters.js';
 import { openInvite, closeInvite } from './invite.js';
 import { createHud } from './hud.js';
 import { createBuildSystem } from './buildmode.js';
-import { TUTORIAL, levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
+import { TUTORIAL, WEEK_EVENTS, levelInfo, tal, FORGE_MAX, forgeCost, forgeGain, meltValue, ACHIEVEMENTS, talentPoints, spentPoints } from './progress.js';
 import { renderTalents, renderQuests } from './progressui.js';
 import { createWorldFx } from './worldfx.js';
 import { createSocial } from './social.js';
@@ -1077,6 +1077,10 @@ export async function startGame({ net, joined, user }) {
       else { shopOpen = false; if (!isTouch && !soft) requestLock(); }
     },
   });
+  { // weekevent even laten zien na het laden
+    const E = joined.week && WEEK_EVENTS.find(e => e.id === joined.week.ev);
+    if (E) setTimeout(() => toast(E.icon + ' Deze week: <b>' + E.name + '</b> · ' + E.desc + '. Alle ervaring telt mee voor de weekranglijst.', '#ffd27a'), 3500);
+  }
   des = createDesert({
     scene, M, W, G, net, player, inv, heightAt, WATER, sfx, sparkles, chips, toast, banner, myId, joined, anis, remotes,
     builds: () => bs.builds,

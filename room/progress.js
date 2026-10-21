@@ -1,9 +1,9 @@
 // Ervaring, niveaus, talenten (effect op levens en hond), dagelijkse opdrachten en prestaties.
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
 import { dogStats, breedOf } from '../public/items.js';
-import { levelInfo, tal, maxHp, ACHIEVEMENTS, TUTORIAL } from '../public/progress.js';
+import { levelInfo, tal, maxHp, ACHIEVEMENTS, TUTORIAL, isoWeek, weekEvent, WEEK_EVENTS } from '../public/progress.js';
 import { bump } from '../stats.js';
-import { ensureDaily } from './save.js';
+import { ensureDaily, ensureWeek } from './save.js';
 
 export class Progress {
   applyStats(P) {
@@ -16,9 +16,23 @@ export class Progress {
     return { ...st, maxhp: Math.round(st.maxhp * k * B.hp), dmg: st.dmg * k * B.dmg, speed: st.speed * B.spd };
   }
 
+  /** Het event van deze week (voor tests te forceren met WEEK_EVENT=<id> of room.weekForce). */
+  wev() {
+    const now = Date.now();
+    if (!this._wev || now - this._wevAt > 60000) {
+      const w = isoWeek(now), force = this.weekForce || process.env.WEEK_EVENT;
+      this._wev = { ...w, ev: WEEK_EVENTS.find(e => e.id === force) || weekEvent(w) }; this._wevAt = now;
+    }
+    return this._wev;
+  }
+  /** Vermenigvuldiger (of bonus) van het weekevent; zonder effect: def. */
+  wk(key, def = 1) { const v = this.wev().ev[key]; return v === undefined ? def : v; }
+  weekInfo() { const w = this.wev(); return { k: w.k, left: w.left, ev: w.ev.id }; }
+
   addXp(P, n) {
     const s = P.u.save, before = levelInfo(s.xp).level;
     s.xp += Math.round(n);
+    ensureWeek(s, this.wev().k).pts += Math.round(n);
     const after = levelInfo(s.xp).level;
     if (after > before) {
       this.toast(P, '⭐ Niveau ' + after + '! Je hebt een talentpunt te besteden (pauzemenu of lobby).', '#f2c14e');

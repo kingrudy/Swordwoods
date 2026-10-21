@@ -89,7 +89,7 @@ export class Room {
   sendInv(P) {
     const s = P.u.save;
     this.checkAch(P);
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach, week: s.week });
   }
 
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
@@ -114,9 +114,10 @@ export class Room {
       players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look })),
       felled: [...this.felled.keys()], chests: [...this.chestOpen.keys()], ores: [...this.oreBack.keys()], mounds: [...this.moundBack.keys()],
       builds: [...this.builds.values()].map(b => this.btuple(b)),
-      ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(), pot: this.potInfo(), pyr: this.pyrInfo(),
+      ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(), pot: this.potInfo(), pyr: this.pyrInfo(), week: this.weekInfo(),
     });
     this.sendInv(P);
+    for (const n of P.u.save.notes.splice(0)) this.toast(P, n, '#ffd27a');   // berichten van terwijl je weg was (bv. weekprijs)
     return P;
   }
 

@@ -56,7 +56,7 @@ export class Combat {
       if (this.treeHp[best.idx] <= 0) {
         const dx = best.x - P.x, dz = best.z - P.z, d = len(dx, dz) || 1;
         this.felled.set(best.idx, this.T + CFG.treeRespawn);
-        const n = 3 + Math.floor(best.scale * 2) + tal(s, 'houthakker');
+        const n = (3 + Math.floor(best.scale * 2) + tal(s, 'houthakker')) * this.wk('wood');
         s.wood += n; s.stats.trees++; this.addXp(P, XP.tree); this.quest(P, 'tree');
         this.bc({ t: 'ev', k: 'felled', i: best.idx, dx: r2(dx / d), dz: r2(dz / d) });
         this.toast(P, '+' + n + ' hout', '#c89a5e');

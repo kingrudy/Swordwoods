@@ -174,7 +174,8 @@ const main = async () => {
   const a2 = new Bot('Alice2'); const au = await a2.connect(tok2);
   const after = JSON.stringify({ kills: au.save.stats.kills, wood: au.save.wood, meat: au.save.meat, sw: au.save.swords.length });
   ok(au.save.stats.kills > 0 && au.save.swords.length >= 1, 'na serverherstart bewaard: ' + after + ' (voor: ' + before + ')');
-  const lb = await (await fetch(BASE + '/api/leaderboard')).json(); ok(lb.length > 0 && lb[0].score > 0, 'leaderboard: ' + JSON.stringify(lb[0]));
+  const lb = await (await fetch(BASE + '/api/leaderboard')).json(); ok(lb.all.length > 0 && lb.all[0].score > 0, 'leaderboard: ' + JSON.stringify(lb.all[0]));
+  ok(lb.week && /^\d{4}-W\d\d$/.test(lb.week.k) && lb.week.ev.name && lb.week.top.length > 0 && lb.week.top[0].pts > 0, 'weekranglijst: ' + lb.week.k + ' ' + lb.week.ev.name + ' ' + JSON.stringify(lb.week.top[0]));
   // dubbele login kickt oude sessie
   const a3 = new Bot('Alice3'); await a3.connect(tok2); await sleep(300);
   ok(a2.msgs.some(m => m.t === 'kicked'), 'tweede login kickt de eerste');

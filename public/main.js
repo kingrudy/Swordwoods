@@ -3,6 +3,7 @@ import { Net } from './net.js';
 import { RARITIES } from './items.js';
 import { renderTalents, renderQuests, renderAchievements } from './progressui.js';
 import { openInvite, takeInvitedRoom, clearInviteParam } from './invite.js';
+import { WEEK_PRIZES, WEEK_EVENTS } from './progress.js';
 
 let invitedRoom = takeInvitedRoom();
 if (invitedRoom) document.getElementById('invited').hidden = false;
@@ -56,11 +57,21 @@ $('auth-form').addEventListener('submit', async e => {
 /* ---------------- lobby ---------------- */
 async function loadLeaderboard() {
   try {
-    const lb = await (await fetch('/api/leaderboard')).json();
+    const res = await (await fetch('/api/leaderboard')).json(), lb = res.all || [];
+    renderWeek(res.week);
     const html = lb.length ? lb.map((x, i) => '<li class="' + (x.name === myName ? 'me' : '') + '"><span class="n">' + (i + 1) + '</span><span>' + esc(x.name) + '</span><span class="s">golf ' + x.bestWave + ' · ' + x.score + '</span></li>').join('')
       : '<li><span></span><span class="s">Nog niemand. Wees de eerste.</span><span></span></li>';
     $('lb-auth').innerHTML = html; $('lb-lobby').innerHTML = html;
   } catch {}
+}
+function renderWeek(w) {
+  if (!w) return;
+  const mine = save && save.week && save.week.k === w.k ? save.week.pts | 0 : 0;
+  $('wk-ev').innerHTML = '<span class="i">' + w.ev.icon + '</span><div><b>' + esc(w.ev.name) + '</b><small>' + esc(w.ev.desc) + '</small><small>Week ' + w.week + ' · nog ' + w.left + (w.left === 1 ? ' dag' : ' dagen') + '</small></div>';
+  $('lb-week').innerHTML = w.top.length ? w.top.map((x, i) => '<li class="' + (x.name === myName ? 'me' : '') + '"><span class="n">' + (i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1) + '</span><span>' + esc(x.name) + '</span><span class="s">' + x.pts + ' punten</span></li>').join('')
+    : '<li><span></span><span class="s">Nog niemand deze week. Pak de eerste plek!</span><span></span></li>';
+  $('wk-note').innerHTML = 'Jouw weekpunten: <b>' + mine + '</b> (alle ervaring die je deze week verdient). De top 3 wint ' + WEEK_PRIZES.join(' / ') + ' goud als de week maandag omslaat.' +
+    (w.last && w.last.top.length ? '<br>Vorige week: ' + w.last.top.map((x, i) => ['🥇', '🥈', '🥉'][i] + ' ' + esc(x.name)).join(' · ') : '');
 }
 function fmtTime(s) { const m = Math.floor(s / 60); return m >= 60 ? Math.floor(m / 60) + 'u ' + (m % 60) + 'm' : m + ' min'; }
 const HEROES = [['Ridder', '🛡️'], ['Barbaar', '🪓'], ['Magiër', '🔮'], ['Schurk', '🗡️']];

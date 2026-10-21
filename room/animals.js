@@ -8,10 +8,10 @@ import { r1, len, CFG } from './shared.js';
 export class Animals {
   killAnimal(a, P) {
     this.animals.delete(a.id);
-    const A = ANIMALS[a.type], s = P.u.save;
-    s.meat += A.meat; s.stats.animals++; this.addXp(P, XP.animal); this.quest(P, 'animal');
+    const A = ANIMALS[a.type], s = P.u.save, meat = A.meat * this.wk('meat');
+    s.meat += meat; s.stats.animals++; this.addXp(P, XP.animal); this.quest(P, 'animal');
     this.bc({ t: 'ev', k: 'adie', id: a.id, x: r1(a.x), z: r1(a.z), type: a.type });
-    this.toast(P, '+' + A.meat + ' vlees (' + A.name + ')', '#e58b7b');
+    this.toast(P, '+' + meat + ' vlees (' + A.name + ')', '#e58b7b');
     this.sendInv(P); this.markDirty();
   }
 

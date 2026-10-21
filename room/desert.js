@@ -52,7 +52,7 @@ export class Desert {
     const s = P.u.save, shovel = s.up.shovel ? 1 : 0, r = Math.random();
     s.stats.digs++; bump('digs'); this.addXp(P, 6); this.quest(P, 'dig');
     let find = { kind: 'sand' };
-    if (r < 0.32 + shovel * 0.08) {            // faraobeeld
+    if (r < 0.32 + shovel * 0.08 + this.wk('statue', 0)) {            // faraobeeld
       const ws = STATUES.map((x, k) => x.w * (1 + shovel * k * 0.35)), tot = ws.reduce((a, b) => a + b, 0);
       let t = Math.random() * tot, k = 0; for (; k < ws.length - 1; k++) { if (t < ws[k]) break; t -= ws[k]; }
       const S = STATUES[k];
@@ -60,7 +60,7 @@ export class Desert {
       bump('statue.' + S.k); this.addXp(P, 10 + k * 15);
       find = { kind: 'statue', k: S.k };
       if (k >= 2) this.bc({ t: 'toast', msg: P.name + ' vond een ' + S.name.toLowerCase() + '!', color: '#f2c14e' }, P);
-    } else if (r < 0.72) { const n = 2 + Math.floor(Math.random() * 5); s.gold += n; s.stats.goldEarned += n; find = { kind: 'gold', n }; }
+    } else if (r < 0.72) { const n = (2 + Math.floor(Math.random() * 5)) * this.wk('digGold'); s.gold += n; s.stats.goldEarned += n; find = { kind: 'gold', n }; }
     else if (r < 0.8) { s.meat += 1; find = { kind: 'scarab' }; }
     this.bc({ t: 'ev', k: 'dug', i, by: P.id, find });
     this.sendInv(P); this.markDirty();

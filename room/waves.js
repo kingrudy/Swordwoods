@@ -64,13 +64,13 @@ export class Waves {
   waveLeft() { let n = 0; for (const m of this.monsters.values()) if (m.wave) n++; return n; }
 
   endWave() {
-    const w = this.wave, modW = w.mod ? 1.5 : 1; w.ph = 0; w.t = CFG.waveGap; w.mod = null;
+    const w = this.wave, modW = (w.mod ? 1.5 : 1) * this.wk('wave'); w.ph = 0; w.t = CFG.waveGap; w.mod = null;
     bump('waves'); bump('waveSec', this.T - (w.startT || this.T)); bump('wave.reached.' + String(w.n).padStart(2, '0')); maxOf('wave.max', w.n);
     this.projs.length = 0; this.hazards.length = 0;
     for (const P of this.players.values()) {
       if (P.dead) continue;
       const s = P.u.save; s.stats.bestWave = Math.max(s.stats.bestWave, w.n);
-      this.addXp(P, XP.wave * w.n); this.quest(P, 'wave', w.n, true);
+      this.addXp(P, XP.wave * w.n * this.wk('wave')); this.quest(P, 'wave', w.n, true);
       const bonus = Math.round(w.n * 25 * modW); s.stats.score += bonus;
       P.hp = Math.min(P.mhp, P.hp + 30);
       const wb = Math.round(w.n * 3 * modW); s.wood += wb;
@@ -93,7 +93,7 @@ export class Waves {
     bump('kills'); bump('kill.' + M.key);
     this.addXp(P, M.score * XP.kill); this.quest(P, 'kill');
     this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type });
-    if (Math.random() < (m.type === 3 ? 1 : 0.06)) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
+    if (Math.random() < (m.type === 3 ? 1 : 0.06 * this.wk('drop'))) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
     this.sendInv(P); this.markDirty();
   }
 

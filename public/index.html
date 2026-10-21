@@ -72,6 +72,11 @@
   ol.lb { margin:0; padding:0; list-style:none; display:grid; gap:6px; }
   ol.lb li { display:grid; grid-template-columns:22px 1fr auto; gap:8px; padding:7px 10px; border-radius:9px; background:rgba(255,255,255,.04); font-size:14px; }
   ol.lb li.me { outline:1px solid var(--gold); }
+  .wkev { display:flex; gap:12px; align-items:center; padding:10px 12px; margin-bottom:12px; border-radius:12px; background:rgba(242,193,78,.09); border:1px solid rgba(242,193,78,.35); }
+  .wkev .i { font-size:30px; line-height:1; }
+  .wkev b { display:block; color:var(--gold); }
+  .wkev small { display:block; color:var(--dim); margin-top:2px; }
+  .wk-note { color:var(--dim); font-size:13px; margin:10px 0 0; line-height:1.45; }
   ol.lb .n { color:var(--dim); }
   ol.lb .s { color:var(--dim); font-variant-numeric:tabular-nums; }
 .heroes { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
@@ -415,6 +420,7 @@
       </div>
     </div>
     <div class="lobby-grid">
+      <div style="display:grid; gap:20px; align-content:start">
       <div class="card">
         <h2>Kamers</h2>
         <div class="rooms" id="rooms"></div>
@@ -427,6 +433,13 @@
           </div>
         </form>
         <p class="err" id="lb-err" style="margin-top:12px"></p>
+      </div>
+      <div class="card" id="week-card">
+        <h2>Deze week</h2>
+        <div class="wkev" id="wk-ev"></div>
+        <ol class="lb" id="lb-week"></ol>
+        <p class="wk-note" id="wk-note"></p>
+      </div>
       </div>
       <div style="display:grid; gap:20px">
         <div class="card">
