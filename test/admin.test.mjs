@@ -46,6 +46,9 @@ ok(r.j.password && L.closed, 'nieuw wachtwoord gemaakt, speler uitgelogd');
 const t2 = (await post('/api/login', { username: 'Luisteraar', password: r.j.password })).j.token;
 ok(!!t2, 'inloggen met het nieuwe wachtwoord');
 ok((await post('/api/password', { token: t2, old: 'fout', pw: 'nieuw123' })).status === 400, 'wachtwoord wijzigen met verkeerd oud wachtwoord geweigerd');
+const tOther = (await post('/api/login', { username: 'Luisteraar', password: r.j.password })).j.token;   // tweede apparaat
 ok((await post('/api/password', { token: t2, old: r.j.password, pw: 'nieuw123' })).j.ok && (await post('/api/login', { username: 'Luisteraar', password: 'nieuw123' })).j.token, 'speler wijzigt zelf zijn wachtwoord');
+ok((await post('/api/password', { token: tOther, old: 'nieuw123', pw: 'nogeen123' })).status === 401, 'andere apparaten zijn daarna uitgelogd');
+ok((await post('/api/password', { token: t2, old: 'nieuw123', pw: 'nieuw456' })).j.ok, 'het eigen apparaat blijft ingelogd');
 const bk = await admin('backup-now', {}); ok(bk.j.ok && fs.readdirSync(DATA + '/backups').length >= 1, 'back-up op verzoek');
 srv.kill(); console.log(fails ? fails + ' MISLUKT' : 'ALLES GESLAAGD'); process.exit(fails ? 1 : 0);
