@@ -11,7 +11,13 @@ for (const f of files) {
   const r = spawnSync(process.execPath, [path.join('test', f)], { cwd: ROOT, encoding: 'utf8', timeout: 300000 });
   const ok = r.status === 0, out = (r.stdout || '') + (r.stderr || '');
   console.log((ok ? '✔ ' : '✘ ') + f.padEnd(24) + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
-  if (!ok) { failed.push(f); console.log(out.split('\n').filter(l => !l.startsWith('PASS')).slice(-25).join('\n')); }
+  if (!ok) {
+    failed.push(f);
+    const tail = out.split('\n').filter(l => !l.startsWith('PASS')).slice(-25).join('\n');
+    console.log(tail);
+    // op GitHub als annotatie, zodat je zonder logs ziet welke test en waarom
+    if (process.env.GITHUB_ACTIONS) console.log('::error title=' + f + '::' + tail.replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A').slice(-3000));
+  }
 }
 console.log(failed.length ? '\n' + failed.length + ' van ' + files.length + ' mislukt: ' + failed.join(', ') : '\nAlle ' + files.length + ' tests geslaagd.');
 process.exit(failed.length ? 1 : 0);
