@@ -1,4 +1,5 @@
 // Gedeeld tussen client en server: zwaarden en buit.
+import { lerp } from './util.js';
 
 export const RARITIES = [
   { name: 'Gewoon',       color: '#c9c9c9', w: 50, dmg: [4, 8],   names: ['Roestig', 'Oud', 'Eenvoudig', 'Versleten'], blade: 0x9aa0a6, emi: 0 },
@@ -18,7 +19,6 @@ export const BASES = [
 export const AXE = { type: 'axe', name: 'Houthakkersbijl', damage: 3, speed: 1 };
 export const MAX_SWORDS = 8;
 
-const lerp = (a, b, t) => a + (b - a) * t;
 
 /** luck 0..1 schuift kansen richting zeldzamere zwaarden. */
 export function rollSword(luck, rnd = Math.random) {

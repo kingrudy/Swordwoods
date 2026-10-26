@@ -1,7 +1,7 @@
 // Weergave van niveau, talenten, opdrachten en prestaties (lobby en pauzemenu).
 import { levelInfo, TALENTS, talentPoints, spentPoints, questText, questIcon, ACHIEVEMENTS } from './progress.js';
+import { esc } from './util.js';
 
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function levelHtml(save) {
   const L = levelInfo(save.xp | 0);

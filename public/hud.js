@@ -1,6 +1,5 @@
 // Extra HUD: minikaart + grote kaart, kamerchat met snelberichten en markeringen, fps-teller.
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const $ = id => document.getElementById(id);
+import { $, esc } from './util.js';
 
 export const QUICK = [
   { text: 'Help!', ping: true }, { text: 'Kom hierheen!', ping: true }, { text: 'Kist gevonden!', ping: true },

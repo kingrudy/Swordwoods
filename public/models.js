@@ -1,8 +1,8 @@
 // Alle 3D-modellen (three.js): bomen, kisten, zwaarden, spelers, monsters en dieren.
 import * as THREE from 'three';
 import { RARITIES, BASES } from './items.js';
+import { lerp } from './util.js';
 
-const lerp = (a, b, t) => a + (b - a) * t;
 export function mulberryLocal(a) {
   return function () {
     a |= 0; a = a + 0x6D2B79F5 | 0;

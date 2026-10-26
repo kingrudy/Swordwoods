@@ -1,9 +1,8 @@
 // Bouwen aan de clientkant: bouwwerken tonen, botsing, vuurlicht, pijlen van torens en de bouwmodus (voorbeeld + balk).
 import * as THREE from 'three';
 import { BUILDS, BUILD_BY_ID, BUILD_RANGE, FIRE_RADIUS, placePoint, canPlace, pushOut, boundR } from './builds.js';
+import { $, esc } from './util.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const REMOVE = BUILDS.length;          // laatste vakje: afbreken
 
 export function createBuildSystem(ctx) {

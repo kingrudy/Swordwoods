@@ -5,9 +5,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { clamp, sstep } from './util.js';
 
-const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
-const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const C = h => new THREE.Color(h);
 
 export const CYCLE_SEC = 1200;          // één dag + nacht = 20 minuten

@@ -4,12 +4,12 @@ import { RARITIES } from './items.js';
 import { renderTalents, renderQuests, renderAchievements } from './progressui.js';
 import { openInvite, takeInvitedRoom, clearInviteParam } from './invite.js';
 import { WEEK_PRIZES, WEEK_EVENTS } from './progress.js';
+import { $, esc } from './util.js';
 
 let invitedRoom = takeInvitedRoom();
 if (invitedRoom) document.getElementById('invited').hidden = false;
 fetch('/api/health').then(r => r.json()).then(h => { for (const id of ['version-auth', 'version-lobby']) document.getElementById(id).textContent = 'Versie ' + (h.version || '?'); }).catch(() => {});
 
-const $ = id => document.getElementById(id);
 const net = new Net();
 let mode = 'login', myName = null, save = null;
 const TOKEN_KEY = 'sw-token';
@@ -19,7 +19,6 @@ const store = {
   set(v) { try { localStorage.setItem(TOKEN_KEY, v); } catch {} },
   del() { try { localStorage.removeItem(TOKEN_KEY); } catch {} },
 };
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
 function overlay(title, text, btn = 'Opnieuw laden') {

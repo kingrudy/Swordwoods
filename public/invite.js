@@ -1,5 +1,5 @@
 // Uitnodigingen: link naar de kamer, delen via WhatsApp, het deelmenu van de telefoon of kopiëren.
-const $ = id => document.getElementById(id);
+import { $ } from './util.js';
 let ctx = { roomId: null, roomName: '' }, onClose = null, wired = false;
 
 export function inviteUrl(roomId) {

@@ -1,9 +1,8 @@
 // Samen spelen: hondencommando's, spullen geven, de gemeenschapskist en de arena (clientkant).
 import * as THREE from 'three';
 import { DOG_CMDS, RARITIES, MAX_POTIONS } from './items.js';
+import { $, esc } from './util.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function createSocial(ctx) {
   const { scene, M, W, G, net, player, inv, names, remotes, myId, heightAt, sfx, sparkles, toast, banner } = ctx;

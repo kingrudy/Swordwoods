@@ -1,5 +1,6 @@
 // Deterministische wereld per seed. Draait identiek in de browser en op de server.
 // Let op: geen Math.hypot/sin/cos gebruiken in placement, zodat elke JS-engine dezelfde uitkomst geeft.
+import { clamp, lerp, sstep } from './util.js';
 
 export const WORLD = 420, HALF = WORLD / 2, WATER = -2.2;
 /** Het Woestijneiland ligt ten oosten van het bos-eiland, over zee. */
@@ -18,9 +19,6 @@ export function mulberry32(a) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
-const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
-const lerp = (a, b, t) => a + (b - a) * t;
-const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const len = (x, z) => Math.sqrt(x * x + z * z);
 
 /** Is dit een goede wereld? Sommige seeds geven een piepklein eiland of geen ruïnes; die slaan we over. */

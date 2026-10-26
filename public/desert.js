@@ -2,11 +2,8 @@
 // faraobeelden en goud, en varen met de boot.
 import * as THREE from 'three';
 import { STATUES, statueOf, BAZAAR, PYRAMID } from './items.js';
+import { $, esc, clamp, sstep } from './util.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
-const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 export function createDesert(ctx) {
   const { scene, M, W, G, net, player, inv, heightAt, WATER, sfx, sparkles, chips, toast, banner, myId } = ctx;

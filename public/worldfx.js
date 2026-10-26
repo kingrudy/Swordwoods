@@ -1,9 +1,8 @@
 // Wereld aan de clientkant: weer (regen, sneeuw, mist, onweer), biomen, ruïnes met kerkerkist en de reizende handelaar.
 import * as THREE from 'three';
 import { TRADER_ITEMS, WEATHERS, BIOMES } from './items.js';
+import { $, esc } from './util.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function createWorldFx(ctx) {
   const { scene, M, W, G, net, player, heightAt, camera, sfx, sparkles, chips, toast, banner, CH } = ctx;
