@@ -26,7 +26,12 @@ class Bot {
       this.ws.onerror = e => rej(e);
       this.ws.onmessage = ev => {
         const m = JSON.parse(ev.data);
-        if (m.t === 's') { this.snap = m; }
+        if (m.t === 's') {   // tussensnapshots bevatten alleen monsters dichtbij: een eigen lijst bijhouden zoals de client doet
+          this.snap = m;
+          if (m.f !== 0 || !this.monMap) this.monMap = new Map(m.m.map(t => [t[0], t])); else for (const t of m.m) this.monMap.set(t[0], t);
+          this.mons = [...this.monMap.values()];
+        }
+        if (m.t === 'ev' && m.k === 'mdie' && this.monMap) { this.monMap.delete(m.id); this.mons = [...this.monMap.values()]; }
         else if (m.t === 'inv') this.inv = m;
         else if (m.t === 'ev') this.ev.push(m);
         else if (m.t === 'wave') this.waves.push(m);
@@ -139,10 +144,10 @@ const main = async () => {
   await a.wait(() => a.waves.find(w => w.ph === 1 && w.n === 1), 15000);
   ok(true, 'golf 1 gestart, ' + a.waves.find(w => w.ph === 1).count + ' monsters');
   await sleep(300);
-  ok(a.snap.m.length > 0 && a.snap.w.ph === 1, 'snapshot bevat ' + a.snap.m.length + ' monsters');
+  ok(a.mons.length > 0 && a.snap.w.ph === 1, 'snapshot bevat ' + a.mons.length + ' monsters');
   // Alice en Bob vechten met legendarisch zwaard (60 dmg)
   const fight = async (bot, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms && bot.snap.w.ph === 1) {
-    const ms_ = bot.snap.m; if (!ms_.length) break;
+    const ms_ = bot.mons; if (!ms_.length) { await sleep(100); continue; }
     const mo = ms_.slice().sort((p, q) => Math.hypot(p[2] - bot.me.x, p[3] - bot.me.z) - Math.hypot(q[2] - bot.me.x, q[3] - bot.me.z))[0];
     bot.at(mo[2] + 1.5, mo[3], Math.atan2(1.5, 0)); await sleep(40); bot.send({ t: 'swing' }); await sleep(300); } };
   b.at(a.me.x, a.me.z, 0);
@@ -153,12 +158,12 @@ const main = async () => {
   await a.wait(() => a.waves.find(w => w.ph === 1 && w.n === 2), 15000);
   const dt = (Date.now() - t1) / 1000; ok(dt > 3 && dt < 9.5, 'golf 2 komt ' + dt.toFixed(1) + 's na afloop (WAVE_GAP=7)');
   const w2 = a.waves.find(w => w.ph === 1 && w.n === 2); ok(w2.count > a.waves.find(w => w.ph === 1 && w.n === 1).count, 'golf 2 heeft meer monsters (' + w2.count + ')');
-  await a.wait(() => a.snap.m.length > 0);
-  const hp1 = a.snap.m[0]?.[6]; console.log('   monster maxhp in golf 2:', hp1, '(kobold golf1 = 24)');
+  await a.wait(() => a.mons.length > 0);
+  const hp1 = a.mons[0]?.[6]; console.log('   monster maxhp in golf 2:', hp1, '(kobold golf1 = 24)');
   ok(a.inv.stats.kills > 0 && a.inv.stats.score > 0, 'stats: ' + JSON.stringify(a.inv.stats));
 
   // ---- Alice laat zich doden -> respawn
-  a.at(a.snap.m[0][2] + 1, a.snap.m[0][3], 0);
+  a.at(a.mons[0][2] + 1, a.mons[0][3], 0);
   await a.wait(() => a.msgs.find(m => m.t === 'dead'), 60000).catch(() => {});
   ok(!!a.msgs.find(m => m.t === 'dead'), 'Alice gedood door monsters (wood over: ' + a.inv.wood + ', deaths ' + a.inv.stats.deaths + ')');
   await a.wait(() => a.msgs.find(m => m.t === 'respawn'), 14000).catch(() => {});
