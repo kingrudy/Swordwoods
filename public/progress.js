@@ -108,6 +108,7 @@ export const ACHIEVEMENTS = [
   { id: 'feest',      icon: '🍗', name: 'Feestbeest',        desc: 'Vier een feestmaal in je kamer',  test: s => st(s, 'feasts') >= 1 },
   { id: 'zeeman',     icon: '⛵', name: 'Zeeman',            desc: 'Vaar naar het Woestijneiland',   test: s => st(s, 'voyages') >= 1 },
   { id: 'archeoloog', icon: '🗿', name: 'Archeoloog',        desc: 'Vind 10 faraobeelden',           test: s => st(s, 'statues') >= 10 },
+  { id: 'redder',     icon: '❤️', name: 'Reddende engel',    desc: 'Knap 5 keer een gevallen medespeler op', test: s => st(s, 'revives') >= 5 },
   { id: 'weektop',    icon: '🏆', name: 'Weekkampioen',      desc: 'Eindig bovenaan de weekranglijst', test: s => st(s, 'weekWins') >= 1 },
   { id: 'mummie',     icon: '🧟', name: 'Farao gevloerd',    desc: 'Versla de mummie-farao in de piramide', test: s => st(s, 'pharaohs') >= 1 },
   { id: 'farao',      icon: '👑', name: 'Schat van de farao', desc: 'Vind het gouden masker van de farao', test: s => st(s, 'masks') >= 1 },

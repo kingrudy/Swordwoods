@@ -198,6 +198,7 @@ export class Room {
       case 'board': this.board(P, m.id | 0); break;
       case 'unboard': this.unboard(P); break;
       case 'dig': this.dig(P, m.i | 0); break;
+      case 'revive': this.startRevive(P, m.id | 0); break;
       case 'sell': this.sellStatues(P, String(m.k)); break;
       case 'pyramid': this.openPyramid(P); break;
       case 'bzbuy': this.bazaarBuy(P, String(m.id)); break;
@@ -240,6 +241,7 @@ export class Room {
     this.T += dt; this.tickN++;
     for (const P of this.players.values()) {
       if (P.dead) { if (this.T >= P.respawnAt) this.respawn(P); continue; }
+      if (P.reviving) this.updateRevive(P);
       const warm = this.nearFire(P);
       if ((this.tickN + P.id) % 20 === 0) {
         P.biome = this.world.biomeAt(P.x, P.z);

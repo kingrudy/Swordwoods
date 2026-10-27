@@ -6,6 +6,8 @@ import { XP, tal } from '../public/progress.js';
 import { bump } from '../stats.js';
 import { r1, r2, len, CFG } from './shared.js';
 
+export const REVIVE_SEC = 3, REVIVE_R = 2.6;   // opknappen: zo lang naast een gevallen medespeler blijven
+
 export class Combat {
   swing(P, heavy = false) {
     if (P.dead || P.blocking || this.T < P.nextSwing) return;
@@ -120,16 +122,19 @@ export class Combat {
   die(P) {
     this.leaveBoat(P); P.digging = null; P.diedInDesert = inDesert(P.x, P.z);
     P.hp = 0; P.dead = true; P.blocking = false; P.respawnAt = this.T + CFG.respawn; P.pendingHit = -1;
-    const s = P.u.save; s.stats.deaths++; s.wood = Math.floor(s.wood / 2);
+    if (P.reviving) this.stopRevive(P);
+    const s = P.u.save; s.stats.deaths++;
     bump('deaths'); bump('death.' + (P.cause || 'onbekend'));
-    P.conn.send({ t: 'dead', in: CFG.respawn });
+    const helpers = [...this.players.values()].some(q => q !== P && !q.dead);
+    P.conn.send({ t: 'dead', in: CFG.respawn, help: helpers });
     this.bc({ t: 'ev', k: 'pdead', id: P.id });
     this.sendInv(P); this.markDirty();
     if ([...this.players.values()].every(p => p.dead)) this.wipe();
   }
 
   respawn(P) {
-    const sp = this.world.spawn;
+    const sp = this.world.spawn, s = P.u.save, lost = s.wood - Math.floor(s.wood / 2);
+    s.wood -= lost;                 // niemand knapte je op: de helft van je hout ben je kwijt
     P.dead = false; P.hp = P.mhp; P.hunger = Math.max(P.hunger, 50);
     P.x = sp.x + (Math.random() - 0.5) * 4; P.z = sp.z + (Math.random() - 0.5) * 4;
     const bed = this.bedOf(P), H = this.world.desert.harbor;
@@ -137,6 +142,32 @@ export class Combat {
     else if (bed) { const a = bed.rot + Math.PI / 2; P.x = bed.x + Math.sin(a) * 1.3; P.z = bed.z + Math.cos(a) * 1.3; }
     P.y = this.world.heightAt(P.x, P.z);
     P.lastInT = this.T;
-    P.conn.send({ t: 'respawn', x: P.x, y: P.y, z: P.z });
+    P.conn.send({ t: 'respawn', x: P.x, y: P.y, z: P.z, lost });
+    this.sendInv(P); this.markDirty();
+  }
+
+  /* ---------------------------------------------------------------- opknappen: een gevallen medespeler weer op de been helpen */
+  startRevive(P, id) {
+    const T = this.players.get(id);
+    if (!T || T === P || !T.dead || P.dead || P.boat || P.reviving || this.reviverOf(T)) return;
+    if (len(T.x - P.x, T.z - P.z) > REVIVE_R) return;
+    P.reviving = { id, until: this.T + REVIVE_SEC };
+    T.respawnAt = Math.max(T.respawnAt, P.reviving.until + 0.5);     // niet terug naar het begin terwijl iemand je helpt
+    this.bc({ t: 'ev', k: 'revstart', id, by: P.id, dur: REVIVE_SEC });
+  }
+  reviverOf(T) { for (const q of this.players.values()) if (q.reviving && q.reviving.id === T.id) return q; return null; }
+  stopRevive(P) { const R = P.reviving; P.reviving = null; this.bc({ t: 'ev', k: 'revfail', id: R.id, by: P.id }); }
+  updateRevive(P) {
+    const R = P.reviving, T = this.players.get(R.id);
+    if (!T || !T.dead || len(T.x - P.x, T.z - P.z) > REVIVE_R + 0.8) return this.stopRevive(P);
+    if (this.T < R.until) return;
+    P.reviving = null;
+    T.dead = false; T.hp = Math.round(T.mhp * 0.4); T.hunger = Math.max(T.hunger, 30); T.lastInT = this.T; T.lastHurt = this.T; T.iframe = this.T + 1.5;
+    const s = P.u.save; s.stats.revives = (s.stats.revives | 0) + 1; bump('revives');
+    this.addXp(P, 25);
+    T.conn.send({ t: 'revived', by: P.name, hp: T.hp });
+    this.bc({ t: 'ev', k: 'revived', id: T.id, by: P.id, x: r1(T.x), z: r1(T.z) });
+    this.toast(P, '❤️ Je hebt ' + T.name + ' opgeknapt!', '#6fd37a');
+    this.sendInv(P); this.markDirty();
   }
 }

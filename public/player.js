@@ -83,11 +83,31 @@ export function createPlayer(g) {
   net.on('correct', m => { player.x = m.x; player.y = m.y; player.z = m.z; player.vx = player.vz = player.vy = 0; });
   net.on('rooted', m => { player.rootUntil = now() + m.s; player.roll = null; g.shake = Math.max(g.shake, 0.3); g.ui.toast('🌿 Vastgegroeid door wortels!', '#9adf6a'); });
   net.on('hurt', () => { $('vignette').classList.add('on'); setTimeout(() => $('vignette').classList.remove('on'), 90); g.shake = 0.35; sfx.hurt(); });
-  net.on('dead', m => { g.dead = true; blocking = false; charge.start = null; player.roll = null; $('dead').classList.add('on'); $('dead-sub').textContent = 'Terug in het spel over ' + m.in + ' s'; });
+  net.on('dead', m => {
+    g.dead = true; g.deadHelp = !!m.help; g.deadNote = null; blocking = false; charge.start = null; player.roll = null; $('dead').classList.add('on');
+    $('dead-sub').textContent = 'Terug in het spel over ' + m.in + ' s' + (m.help ? ' · een medespeler kan je opknappen' : '');
+  });
   net.on('respawn', m => {
     g.dead = false; $('dead').classList.remove('on');
     player.x = m.x; player.z = m.z; player.y = heightAt(m.x, m.z); player.vx = player.vz = player.vy = 0; player.onGround = true;
-    g.ui.toast('Je bent terug in het spel.', '#6fd37a');
+    g.ui.toast('Je bent terug in het spel.' + (m.lost ? ' Je bent ' + m.lost + ' hout kwijt.' : ''), '#6fd37a');
+  });
+  net.on('revived', m => {          // opgeknapt: op dezelfde plek verder, zonder houtverlies
+    g.dead = false; $('dead').classList.remove('on'); g.ui.actionBar(null);
+    player.vx = player.vz = player.vy = 0; player.onGround = true;
+    g.ui.toast('❤️ ' + m.by + ' heeft je opgeknapt!', '#6fd37a'); sfx.happy();
+  });
+  net.on('ev', m => {
+    if (m.k === 'revstart') {
+      if (m.by === g.myId) g.ui.actionBar('Opknappen… blijf staan', m.dur);
+      if (m.id === g.myId) $('dead-sub').textContent = g.deadNote = (g.names.get(m.by) || 'Iemand') + ' knapt je op…';
+    } else if (m.k === 'revfail') {
+      if (m.by === g.myId) { g.ui.actionBar(null); g.ui.toast('Te ver weg: het opknappen is gestopt.', '#bbb'); }
+      if (m.id === g.myId) g.deadNote = null;
+    } else if (m.k === 'revived') {
+      if (m.by === g.myId) g.ui.actionBar(null);
+      g.particles.sparkles.emit(m.x, heightAt(m.x, m.z) + 1, m.z, 50, 1.5, 3, 1.3);
+    }
   });
 
   /* ---------------------------------------------------------------- per beeld */

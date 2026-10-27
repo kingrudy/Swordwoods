@@ -11,6 +11,13 @@ export function createInteract(g) {
     { id: 'reel', icon: '🎣', test: () => g.fishing,
       prompt: (f, t) => f.bite ? '<b style="color:#ffd27a;font-size:1.25em">Beet! ' + (t ? 'Tik nu op X' : 'Druk nu op E') + '</b>' : 'Wachten op een beet… ' + (t ? '(X = binnenhalen)' : '(<b>E</b> = binnenhalen)'),
       act: () => g.fish.reel() },
+    { id: 'revive', icon: '❤️', test: () => {
+        let best = null, bd = 2.5;
+        for (const e of g.ents.remotes.values()) { if (!e.dead) continue; const d = Math.hypot(e.x - g.player.x, e.z - g.player.z); if (d < bd) { bd = d; best = e; } }
+        return best;
+      },
+      prompt: (e, t) => (t ? 'Opknappen (X)' : '<b>E</b> · ' + (g.names.get(e.id) || 'medespeler') + ' opknappen') + ' · 3 s blijven staan',
+      act: e => net.send({ t: 'revive', id: e.id }) },
     { id: 'desert', icon: '⚒️', test: () => g.des.prompt(false) !== null, prompt: (_, t) => g.des.prompt(t), act: () => g.des.interact() },
     { id: 'dog', icon: '🐕', test: () => g.ents.findWildDog(),
       prompt: (d, t) => {

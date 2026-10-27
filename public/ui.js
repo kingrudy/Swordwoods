@@ -21,6 +21,16 @@ export function createUi(g) {
     clearTimeout(bannerTimer); bannerTimer = setTimeout(() => b.classList.remove('on'), ms);
   }
 
+  /** Voortgangsbalk met tekst voor een handeling die even duurt (opknappen, koken, ...). */
+  let actTimer = null;
+  function actionBar(label, sec) {
+    const el = $('actbar'), fill = el.querySelector('i'); clearTimeout(actTimer);
+    if (!label) { el.classList.remove('on'); return; }
+    el.querySelector('span').textContent = label; el.classList.add('on');
+    fill.style.transition = 'none'; fill.style.width = '0%'; void fill.offsetWidth;
+    fill.style.transition = 'width ' + sec + 's linear'; fill.style.width = '100%';
+    actTimer = setTimeout(() => el.classList.remove('on'), sec * 1000 + 600);
+  }
   function renderDogChip() {
     const c = $('dogchip'), d = inv.dog, st = g.myDog;
     c.classList.toggle('on', !!d);
@@ -92,7 +102,7 @@ export function createUi(g) {
   net.on('s', m => {
     lastPlayers = m.p.map(a => ({ id: a[0], hp: a[5], dead: a[7] }));
     Object.assign(you, m.y); Object.assign(wave, m.w);
-    if (g.dead) $('dead-sub').textContent = you.rs > 0 ? 'Terug in het spel over ' + you.rs + ' s' : '';
+    if (g.dead) $('dead-sub').textContent = g.deadNote || (you.rs > 0 ? 'Terug in het spel over ' + you.rs + ' s' + (g.deadHelp ? ' · een medespeler kan je opknappen' : '') : '');
     renderVitals();
   });
   net.on('inv', m => {
@@ -153,5 +163,5 @@ export function createUi(g) {
     setTimeout(() => { if (!inv.dog) toast('Ergens in het bos zwerven honden. Hoor je geblaf? Geef een hond een stuk vlees en hij wordt je maatje.', '#c8903f'); }, 25000);
   }
   function update(dt, time) { if (Math.floor(time * 5) !== Math.floor((time - dt) * 5)) shopChip(); }
-  return { toast, banner, renderInv, renderVitals, renderTut, renderDogChip, welcome, update };
+  return { toast, banner, actionBar, renderInv, renderVitals, renderTut, renderDogChip, welcome, update };
 }
