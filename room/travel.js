@@ -45,7 +45,7 @@ export class Travel {
     const to = this.world.travel[t.to], a = Math.random() * Math.PI * 2;
     const from = { x: P.x, z: P.z };
     P.x = to.x + Math.cos(a) * 1.8; P.z = to.z + Math.sin(a) * 1.8; P.y = this.world.heightAt(P.x, P.z);
-    P.lastInT = this.T; P.wasDesert = inDesert(P.x, P.z);   // geen 'welkom op het eiland' en geen extra reis in de statistiek
+    P.lastInT = this.T; P.posLock = this.T + 0.4; P.wasDesert = inDesert(P.x, P.z);   // geen 'welkom op het eiland' en geen extra reis in de statistiek
     if (P.dog && P.dog.state !== 'wild') { P.dog.x = P.x + 1.2; P.dog.z = P.z; }
     P.u.save.stats.travels = (P.u.save.stats.travels | 0) + 1; bump('travel');
     P.conn.send({ t: 'correct', x: r2(P.x), y: r2(P.y), z: r2(P.z) });

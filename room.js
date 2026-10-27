@@ -137,6 +137,7 @@ export class Room {
     switch (m.t) {
       case 'in': {
         if (P.dead) return;
+        if (this.T < (P.posLock || 0)) return;          // net door de server verplaatst (reizen): oude posities van onderweg negeren
         let x = num(m.x, P.x), z = num(m.z, P.z);
         // anti-valsspelen: niet verder dan rennen (+ marge) sinds het vorige bericht
         const since = Math.min(2, Math.max(0.05, this.T - (P.lastInT ?? this.T - 0.1)));
@@ -236,6 +237,7 @@ export class Room {
     if (cmd === 'hond' && !P.u.save.dog) { P.u.save.dog = { name: 'Testje', level: 3, xp: 0, fur: 1, breed: breedOf(a).id }; this.spawnOwnedDog(P); this.sendInv(P); }
     if (cmd === 'weer') { this.weather.k = WEATHERS.some(w => w.k === a) ? a : 'onweer'; this.weather.until = this.T + 600; this.weather.bolt = this.T + 2; this.bc({ t: 'weather', k: this.weather.k }); }
     if (cmd === 'piramide') { if (this.pyr.st === 'cool') this.pyrSet('idle'); P.u.save.gold += 30; this.sendInv(P); }
+    if (cmd === 'tp') { const x = +a, z = +b; if (Number.isFinite(x) && Number.isFinite(z)) { P.x = x; P.z = z; P.y = this.world.heightAt(x, z); P.lastInT = this.T; P.posLock = this.T + 0.3; P.conn.send({ t: 'correct', x: r2(x), y: r2(P.y), z: r2(z) }); } }
     if (cmd === 'goud') { P.u.save.gold += Math.min(100000, a | 0); this.sendInv(P); }
     if (cmd === 'handelaar') { this.trader = null; this.traderAt = this.T; }
     if (cmd === 'zwaard') this.giveSword(P, rollSwordOfRarity(Math.max(0, Math.min(4, a | 0))), 'chest');

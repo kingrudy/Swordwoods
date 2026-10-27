@@ -29,6 +29,9 @@ ok(!inDesert(P.x, P.z) && Math.hypot(P.x - F.x, P.z - F.z) < 2.5, 'aangekomen bi
 ok(msgs.some(m => m.t === 'correct') && msgs.some(m => m.t === 'ev' && m.k === 'tp'), 'client krijgt de nieuwe plek');
 ok(P.dog && Math.hypot(P.dog.x - P.x, P.dog.z - P.z) < 2, 'de hond reist mee');
 ok(s.stats.travels === 1, 'reis geteld');
+// een oude positie die de browser nog onderweg had, mag je niet terugzetten
+const tx = P.x; R.handle(P, { t: 'in', x: D.x + 1.5, z: D.z, y: W.heightAt(D.x + 1.5, D.z), yaw: 0 });
+ok(P.x === tx, 'oude positie van voor de reis wordt genegeerd');
 // opladen
 R.handle(P, { t: 'travel' }); ok(!P.travel && /opladen/.test(toast()), 'de steen moet eerst opladen');
 R.T += TRAVEL.cooldown;

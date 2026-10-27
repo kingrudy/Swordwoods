@@ -51,10 +51,12 @@ def cheat(page, text, wait=500):
     page.evaluate("t => __game.net.send({ t: 'chat', text: t })", text); play(page, wait)
 
 def goto(page, x, z, face=None):
-    """Zet de speler op (x,z), optioneel kijkend naar face=(fx,fz)."""
-    page.evaluate("""([x, z, f]) => { const g = __game, p = g.player; p.x = x; p.z = z; p.y = g.W.heightAt(x, z); p.vx = p.vz = 0;
+    """Zet de speler op (x,z), optioneel kijkend naar face=(fx,fz). Via het testcommando /tp, zodat de server
+    meteen meegaat en de sprong niet als 'dwars door een muur' wordt teruggezet."""
+    page.evaluate("""([x, z, f]) => { const g = __game; g.net.send({ t: 'chat', text: '/tp ' + x.toFixed(2) + ' ' + z.toFixed(2) });
+      const p = g.player; p.x = x; p.z = z; p.y = g.W.heightAt(x, z); p.vx = p.vz = 0;
       if (f) p.yaw = Math.atan2(-(f[0] - x), -(f[1] - z)); p.pitch = 0; }""", [x, z, face])
-    play(page, 250)
+    play(page, 350)
 
 def wait_for(page, js, timeout=8000, arg=None):
     t0 = time.time()
@@ -264,7 +266,7 @@ def mobile(b):
     A.goto(B + "?touch=1"); A.wait_for_selector("#lobby.on")
     A.click("#btn-quick"); A.wait_for_selector("#hud.on", timeout=180000); A.click("#btn-resume"); A.wait_for_timeout(800); play(A, 300)
     check(A.evaluate("document.body.classList.contains('touch') && __game.isTouch"), "touchbesturing aan")
-    A.evaluate("__game.net.send({ t: 'tutskip' })")
+    A.evaluate("__game.net.send({ t: 'tutskip' })"); cheat(A, '/god')   # in dezelfde kamer kunnen nog monsters van het desktopdeel rondlopen
     A.dispatch_event("#tb-atk", "pointerdown"); play(A, 120); A.dispatch_event("#tb-atk", "pointerup"); play(A, 300)
     check(A.evaluate("__game.swingT() < 1 || true"), "slaan via knop")
     s = A.evaluate("[__game.W.shop.x, __game.W.shop.z, __game.W.shop.rotY]")
