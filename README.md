@@ -78,13 +78,17 @@ de server gebruikt alleen ingebouwde Node-modules (Node 22).
 
 **Monsters**: naast kobolds, wolven en het Bosmonster komen er vanaf golf 3 **Skeletschutters** (houden wat afstand en schieten met een kruisboog; loop zijwaarts, blokkeer de pijlen of ren erop af), vanaf golf 5 **Sluipers** (bijna onzichtbaar tot ze dichtbij zijn, en springen dan naar voren) en vanaf golf 6 **Hondenjagers** (gaan eerst op je hond af). De **Woudreus** laat wortels onder spelers uit de grond schieten (een rode cirkel waarschuwt; rol weg of je zit even vast) en roept kobolds op. Soms heeft een golf een **modificatie**: Snelle golf, Gepantserd, Zwerm of Woeste golf, met 50% meer hout en punten als beloning.
 
-**Bouwen**: druk op `B` (mobiel: 🔨, controller: D-pad omlaag) en kies met `1`–`7` of het scrollwiel wat je wilt bouwen. Een groen voorbeeld laat zien waar het komt (rood = kan niet: water, te steil, boom, kist of te dicht bij de winkel); klik of A plaatst het. Alles kost hout:
+**Bouwen**: druk op `B` (mobiel: 🔨, controller: D-pad omlaag) en kies met `1`–`9`, `0` of het scrollwiel wat je wilt bouwen. Een groen voorbeeld laat zien waar het komt (rood = kan niet: water, te steil, boom, kist of te dicht bij de winkel); klik of A plaatst het. Alles kost hout:
 - 🔥 Kampvuur (10): binnen 6 m +3 gezondheid per seconde en de helft minder honger, en licht in de nacht.
 - 🕯️ Fakkel (3): licht.
 - 🧱 Houten muur (8) en 🪵 Palissade (16): houden monsters tegen; muren sluiten vanzelf op elkaar aan. Monsters die vastlopen slaan het bouwwerk kapot. De palissade is sterker en verwondt monsters die erop slaan.
 - 🏹 Wachttoren (45): schiet pijlen op monsters binnen 20 m.
 - 🛏️ Bed (20): je respawnpunt na een val (één per speler).
-Met vakje 7 (🪓) breek je je eigen bouwwerken af en krijg je tot de helft van het hout terug. In de vaste kamers blijven bouwwerken bewaard, ook na een herstart van de server (de wereld blijft dan ook dezelfde).
+- ⛵ Boot (12): om naar het Woestijneiland te varen (zie hieronder).
+- 📦 Opslagkist (15): berg hout, vlees, vis en erts op (`E` naast je eigen kist). Wat erin zit ben je niet kwijt als je valt. Eén per speler.
+- 🚪 Poort (12): een muurstuk met een deur die opengaat als er een speler aankomt; spelers lopen erdoor, monsters niet.
+- 📍 Spijkerval (10): monsters die erover lopen worden half zo snel en raken gewond; de val slijt na een tijdje.
+Met het laatste vakje (🪓, toets `-`) breek je je eigen bouwwerken af en krijg je tot de helft van het hout terug. In de vaste kamers blijven bouwwerken bewaard, ook na een herstart van de server (de wereld blijft dan ook dezelfde).
 
 **Kaart en chat**: rechtsboven staat een minikaart die met je meedraait (winkel, ontdekte kisten, medespelers, je hond, gevonden zwerfhonden en monsters dichtbij). `M` of een tik op de minikaart opent de grote kaart van het hele eiland. `Enter` (mobiel: 💬) opent de kamerchat; snelberichten zoals "Help!" of "Kist gevonden!" zetten een knipperende 📍 op jouw plek op ieders kaart.
 

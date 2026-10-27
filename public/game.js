@@ -90,7 +90,7 @@ export async function startGame({ net, joined, user }) {
   });
   const shared = { scene, M, W, G, net, player, inv, heightAt: W.heightAt, camera, joined, myId, sfx: g.sfx, toast: g.ui.toast, banner: g.ui.banner, sparkles: C.sparkles, chips: C.chips };
   g.bs = createBuildSystem({
-    ...shared, myName: joined.you.name, treeObjs: g.scenery.treeObjs, isTouch, WATER,
+    ...shared, myName: joined.you.name, treeObjs: g.scenery.treeObjs, isTouch, WATER, remotes: g.ents.remotes,
     onToggle: on => { if (on) g.pl.resetSwing(); g.ui.renderInv(); },
     onBoat: m => g.des && g.des.onBoat(m), riderPos: id => g.des ? g.des.riderPos(id) : null,
   });

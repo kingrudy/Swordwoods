@@ -91,7 +91,7 @@ export class Room {
   sendInv(P) {
     const s = P.u.save;
     this.checkAch(P);
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach, week: s.week });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach, week: s.week, stash: s.stash });
   }
 
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
@@ -202,6 +202,7 @@ export class Room {
       case 'dig': this.dig(P, m.i | 0); break;
       case 'revive': this.startRevive(P, m.id | 0); break;
       case 'cook': this.cook(P, String(m.id)); break;
+      case 'stash': this.stash(P, String(m.op)); break;
       case 'sell': this.sellStatues(P, String(m.k)); break;
       case 'pyramid': this.openPyramid(P); break;
       case 'bzbuy': this.bazaarBuy(P, String(m.id)); break;
@@ -277,6 +278,7 @@ export class Room {
     this.updatePyramid();
     this.updateMonsters(dt);
     this.updateTowers();
+    this.updateSpikes(dt);
     this.updateAnimals(dt);
     this.updateDogs(dt);
 

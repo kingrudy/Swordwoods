@@ -474,6 +474,30 @@ export function buildStructure(kind, ownerColor = 0x3b6ea5) {
       g.userData.flag = flag;
       break;
     }
+    case 'stash': {          // houten kist met ijzeren banden en een slot in de kleur van de eigenaar
+      add(new THREE.BoxGeometry(1.2, 0.62, 0.75), bPlank, 0, 0.31, 0);
+      const lid = add(new THREE.BoxGeometry(1.24, 0.16, 0.79), bLight, 0, 0.7, 0);
+      for (const x of [-0.42, 0.42]) add(new THREE.BoxGeometry(0.08, 0.8, 0.8), std(0x5a5f66, { metalness: 0.5, roughness: 0.5 }), x, 0.4, 0);
+      add(new THREE.BoxGeometry(0.16, 0.18, 0.05), std(ownerColor, { metalness: 0.3 }), 0, 0.55, 0.4);
+      g.userData.lid = lid;
+      break;
+    }
+    case 'gate': {           // muurstuk met in het midden een deur die opendraait
+      for (const x of [-1.25, 1.25]) for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.7, 0.48, 0.16), i % 2 ? bPlank : bLight, x, 0.3 + i * 0.52, (i % 2 ? 0.04 : -0.04));
+      for (const x of [-1.5, -0.9, 0.9, 1.5]) add(new THREE.BoxGeometry(0.22, 2.5, 0.3), bDark, x, 1.25, 0);
+      add(new THREE.BoxGeometry(2.1, 0.22, 0.32), bDark, 0, 2.38, 0);
+      const pivot = new THREE.Group(); pivot.position.set(-0.8, 0, 0); g.add(pivot);
+      for (let i = 0; i < 4; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.38, 2.15, 0.1), i % 2 ? bPlank : bLight); p.position.set(0.2 + i * 0.4, 1.1, 0); p.castShadow = true; pivot.add(p); }
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.06), bDark); bar.position.set(0.8, 1.1, 0.08); bar.rotation.z = 0.55; pivot.add(bar);
+      g.userData.door = pivot;
+      break;
+    }
+    case 'spikes': {         // plank met scherpe punten, vlak op de grond
+      add(new THREE.CylinderGeometry(1.2, 1.25, 0.08, 14), bDark, 0, 0.04, 0);
+      const iron = std(0x8a8f96, { metalness: 0.6, roughness: 0.4 });
+      for (let i = 0; i < 26; i++) { const a = rnd() * 6.28, r = Math.sqrt(rnd()) * 1.05; add(new THREE.ConeGeometry(0.06, 0.32 + rnd() * 0.12, 5), iron, Math.cos(a) * r, 0.22, Math.sin(a) * r); }
+      break;
+    }
     case 'bed': {
       add(new THREE.BoxGeometry(1.2, 0.3, 2.2), bPlank, 0, 0.2, 0);
       for (const [x, z] of [[-0.55, -1.05], [0.55, -1.05], [-0.55, 1.05], [0.55, 1.05]]) add(new THREE.BoxGeometry(0.1, 0.42, 0.1), bDark, x, 0.21, z);

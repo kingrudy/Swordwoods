@@ -16,8 +16,17 @@ export const BUILDS = [
     desc: 'Je respawnt hier na een val. Eén per speler; een nieuw bed vervangt het oude.' },
   { id: 'boat', name: 'Boot', icon: '⛵', cost: 12, hp: 60, shape: 'box', w: 1.5, d: 3.4, h: 1.2, solid: false, one: true, water: true,
     desc: 'Zet hem in het water bij de kust en vaar naar het Woestijneiland in het oosten. Eén per speler.' },
+  { id: 'stash', name: 'Opslagkist', icon: '📦', cost: 15, hp: 120, shape: 'box', w: 1.2, d: 0.75, h: 0.9, solid: true, one: true,
+    desc: 'Berg hout, vlees, vis en erts op (E). Wat erin zit ben je niet kwijt als je valt. Eén per speler.' },
+  { id: 'gate', name: 'Poort', icon: '🚪', cost: 12, hp: 200, shape: 'box', w: 3.2, d: 0.45, h: 2.4, solid: true, gate: true,
+    desc: 'Een muur met een deur: spelers lopen erdoor, monsters niet.' },
+  { id: 'spikes', name: 'Spijkerval', icon: '📍', cost: 10, hp: 100, shape: 'circle', r: 1.2, solid: false, spikes: true,
+    desc: 'Monsters die erover lopen worden trager en raken gewond. Slijt na een tijdje.' },
 ];
 export const BUILD_BY_ID = Object.fromEntries(BUILDS.map((b, i) => [b.id, { ...b, idx: i }]));
+/** Spelers botsen tegen alles wat solid is, behalve een poort. */
+export const blocksPlayers = B => B.solid && !B.gate;
+export const STASH_KEYS = ['wood', 'meat', 'fish', 'ore'], STASH_RANGE = 3, SPIKE_DPS = 10, SPIKE_SLOW = 0.5;
 export const BUILD_RANGE = 8, BUILD_MAX_ROOM = 160, BUILD_MAX_PLAYER = 40, BUILD_REFUND = 0.5, FIRE_RADIUS = 6;
 
 export const boundR = B => B.shape === 'circle' ? B.r : Math.hypot(B.w, B.d) / 2;

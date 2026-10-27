@@ -20,7 +20,7 @@ export function createPanels(g) {
   }
 
   /* ---------------------------------------------------------------- winkel */
-  let smithOpen = false, cookOpen = false;
+  let smithOpen = false, cookOpen = false, stashOpen = false;
   function renderShop() {
     $('shop-wood').textContent = '🪵 ' + inv.wood + ' hout' + (inv.gold ? ' · 🪙 ' + inv.gold + ' goud' : '');
     let html = '', group = '';
@@ -48,7 +48,7 @@ export function createPanels(g) {
     if (g.wfx && g.wfx.traderOpen) { g.wfx.closeTrader(); return; }
     if (g.soc && g.soc.potOpen) { g.soc.closePot(); return; }
     if (g.des && g.des.bazOpen) { g.des.closeBazaar(); return; }
-    g.shopOpen = false; smithOpen = false; cookOpen = false; $('shop').classList.remove('on'); $('smith').classList.remove('on'); $('cook').classList.remove('on');
+    g.shopOpen = false; smithOpen = false; cookOpen = false; stashOpen = false; for (const id of ['shop', 'smith', 'cook', 'stash']) $(id).classList.remove('on');
     if (relock && !g.isTouch && !g.soft) g.ctl.requestLock();
   }
   $('shop-close').onclick = () => closeShop(true);
@@ -93,6 +93,20 @@ export function createPanels(g) {
   }
   $('cook-close').onclick = () => closeShop(true);
   $('cook-list').addEventListener('click', e => { const b = e.target.closest('[data-cook]'); if (b && !b.disabled) net.send({ t: 'cook', id: b.dataset.cook }); });
+
+  /* ---------------------------------------------------------------- opslagkist */
+  const STASH_ROWS = [['wood', '🪵 Hout'], ['meat', '🍖 Vlees'], ['fish', '🐟 Vis'], ['ore', '⛏️ Erts']];
+  function renderStash() {
+    const st = inv.stash || {};
+    $('stash-body').innerHTML = '<div class="stash-grid"><b></b><b>Bij je</b><b>In de kist</b>' + STASH_ROWS.map(([k, n]) => '<span>' + n + '</span><span>' + (inv[k] | 0) + '</span><span>' + (st[k] | 0) + '</span>').join('') + '</div>' +
+      '<div class="row"><button class="btn primary" type="button" data-stash="put">Alles opbergen</button><button class="btn" type="button" data-stash="take">Alles pakken</button></div>';
+  }
+  function openStash() {
+    if (g.shopOpen || g.dead) return;
+    panel(true); stashOpen = true; renderStash(); $('stash').classList.add('on');
+  }
+  $('stash-close').onclick = () => closeShop(true);
+  $('stash-body').addEventListener('click', e => { const b = e.target.closest('[data-stash]'); if (b) net.send({ t: 'stash', op: b.dataset.stash }); });
 
   /* ---------------------------------------------------------------- pauzemenu */
   const veil = $('veil');
@@ -141,8 +155,9 @@ export function createPanels(g) {
 
   /* ---------------------------------------------------------------- opnieuw tekenen als de inventaris verandert */
   net.on('inv', () => {
-    if (g.shopOpen && !smithOpen && !cookOpen && !(g.wfx && g.wfx.traderOpen)) renderShop();
+    if (g.shopOpen && !smithOpen && !cookOpen && !stashOpen && !(g.wfx && g.wfx.traderOpen)) renderShop();
     if (cookOpen) renderCook();
+    if (stashOpen) renderStash();
     if (smithOpen) renderSmith();
     if (g.wfx && g.wfx.traderOpen) g.wfx.renderTrader();
     if (g.des && g.des.bazOpen) g.des.renderBazaar();
@@ -150,5 +165,5 @@ export function createPanels(g) {
   });
   net.on('ev', m => { if (m.k === 'forged' && smithOpen) renderSmith(); });
 
-  return { panel, openShop, closeShop, openSmith, openCook, fpsCheck, get cookOpen() { return cookOpen; } };
+  return { panel, openShop, closeShop, openSmith, openCook, openStash, fpsCheck, get cookOpen() { return cookOpen; } };
 }

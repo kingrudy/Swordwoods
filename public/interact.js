@@ -2,6 +2,7 @@
 // Dezelfde lijst bepaalt de aanwijzing in beeld, wat E doet en het icoon op de X-knop, zodat die nooit uit elkaar lopen.
 import { $ } from './util.js';
 import { COOK_RANGE } from './items.js';
+import { STASH_RANGE } from './builds.js';
 
 export function createInteract(g) {
   const { net, inv, you } = g;
@@ -34,6 +35,8 @@ export function createInteract(g) {
     { id: 'smith', icon: '⚒️', test: () => g.scenery.nearSmith(), prompt: (_, t) => key(t, 'Smid', 'naar de smid'), act: () => g.panels.openSmith() },
     { id: 'trader', icon: '⚒️', test: () => g.wfx.nearTrader(), prompt: (_, t) => key(t, 'Handelaar', 'reizende handelaar'), act: () => g.wfx.openTrader() },
     { id: 'pot', icon: '⚒️', test: () => g.soc.nearPot(), prompt: (_, t) => key(t, 'Gemeenschapskist', 'gemeenschapskist') + ' · ' + g.soc.pot.have + '/' + g.soc.pot.goal + ' hout', act: () => g.soc.openPot() },
+    { id: 'stash', icon: '📦', test: () => { for (const b of g.bs.builds.values()) if (b.kind === 'stash' && b.owner === g.joined.you.name && Math.hypot(b.x - g.player.x, b.z - g.player.z) < STASH_RANGE) return b; return null; },
+      prompt: (_, t) => key(t, 'Opslagkist', 'je opslagkist'), act: () => g.panels.openStash() },
     { id: 'cook', icon: '🍲', test: () => { for (const b of g.bs.builds.values()) if (b.kind === 'campfire' && Math.hypot(b.x - g.player.x, b.z - g.player.z) < COOK_RANGE) return b; return null; },
       prompt: (_, t) => key(t, 'Koken', 'koken bij het kampvuur'), act: () => g.panels.openCook() },
     { id: 'fish', icon: '🎣', test: fresh => fresh ? g.fish.findWater() : g.fish.waterAhead(g.time),

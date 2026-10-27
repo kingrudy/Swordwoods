@@ -27,6 +27,8 @@ export function ensureSave(u) {
   if (!Number.isInteger(s.tut)) s.tut = (s.stats.kills > 20 || s.stats.playSec > 1800) ? TUTORIAL.length : 0;
   s.tut = clamp(s.tut, 0, TUTORIAL.length);
   for (const w of s.swords) { if (!Number.isFinite(w.d0)) w.d0 = w.damage; w.f = clamp(w.f | 0, 0, FORGE_MAX); }
+  if (!s.stash || typeof s.stash !== 'object') s.stash = {};
+  for (const k of ['wood', 'meat', 'fish', 'ore']) s.stash[k] = Math.max(0, s.stash[k] | 0);
   if (!Array.isArray(s.notes)) s.notes = [];
   s.notes = s.notes.filter(n => typeof n === 'string').slice(-5);
   ensureWeek(s);

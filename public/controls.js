@@ -107,6 +107,8 @@ export function createControls(g) {
     if (soc.dogMenu && /^Digit[1-4]$/.test(e.code)) { soc.command(DOG_CMDS[+e.code[5] - 1]); return; }
     if (soc.dogMenu && e.code === 'Escape') { soc.toggleDogMenu(false); return; }
     if (/^Digit[1-9]$/.test(e.code)) { if (bs.active) bs.select(+e.code[5] - 1); else pl().equipSlot(+e.code[5] - 1); }
+    if (bs.active && e.code === 'Digit0') bs.select(9);
+    if (bs.active && e.code === 'Minus') bs.select(10);
   });
   addEventListener('keyup', e => { keys[e.code] = false; });
   addEventListener('resize', () => {

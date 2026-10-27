@@ -79,8 +79,8 @@ def desktop(b):
     wood0 = A.evaluate("__game.inv.wood")
     ang = 0
     goto(A, t[0] + 1.3, t[1], (t[0], t[1]))
-    for _ in range(40):
-        A.evaluate("__game.startSwing()"); play(A, 450)
+    for _ in range(70):          # dikke bomen hebben tot ~15 slagen nodig; na elke slag even afkoelen
+        A.evaluate("__game.startSwing()"); play(A, 550)
         if A.evaluate("__game.inv.wood") > wood0: break
     check(A.evaluate("__game.inv.wood") > wood0, "boom omgehakt geeft hout", A.evaluate("__game.inv.wood"))
 
@@ -125,6 +125,23 @@ def desktop(b):
         check(A.evaluate("__game.action()") == "cook", "aanwijzing koken bij het kampvuur", A.evaluate("__game.prompt()"))
         A.evaluate("__game.interact()"); play(A, 300)
         check(A.evaluate("document.getElementById('cook').classList.contains('on') && document.querySelectorAll('[data-cook]').length === 4"), "kookpaneel open met 4 recepten")
+        A.evaluate("__game.closeShop(true)"); play(A, 200)
+    # opslagkist bouwen en gebruiken
+    for k in range(8):
+        goto(A, sx - 6 - k * 3, sz + 6 + k * 2, (sx, sz))
+        A.evaluate("__game.bs.active || __game.bs.toggle(); __game.bs.select(7)"); play(A, 400)
+        A.evaluate("__game.startSwing()"); play(A, 700)
+        if A.evaluate("[...__game.bs.builds.values()].some(b => b.kind === 'stash')"): break
+    A.evaluate("__game.bs.active && __game.bs.toggle()")
+    st = A.evaluate("(() => { const b = [...__game.bs.builds.values()].find(b => b.kind === 'stash'); return b ? [b.x, b.z] : null; })()")
+    check(st, "opslagkist gebouwd")
+    if st:
+        goto(A, st[0] + 1.6, st[1], (st[0], st[1])); play(A, 300)
+        A.evaluate("__game.interact()"); play(A, 300)
+        check(A.evaluate("document.getElementById('stash').classList.contains('on')"), "opslagkist open")
+        A.click("[data-stash=put]"); play(A, 600)
+        check(A.evaluate("__game.inv.stash && __game.inv.stash.wood > 0 && __game.inv.wood === 0"), "hout opgeborgen", A.evaluate("JSON.stringify(__game.inv.stash)"))
+        A.click("[data-stash=take]"); play(A, 600)
         A.evaluate("__game.closeShop(true)"); play(A, 200)
 
     # monsters, treffers en buit

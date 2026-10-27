@@ -112,6 +112,7 @@ export function createUi(g) {
     inv.gold = m.gold | 0; inv.statues = m.statues || {}; inv.ore = m.ore | 0; inv.xp = m.xp | 0; inv.tal = m.tal || {}; inv.daily = m.daily || null; inv.ach = m.ach || {};
     inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     if (m.week) inv.week = m.week;
+    if (m.stash) inv.stash = m.stash;
     renderInv(); g.pl.rebuildHeld();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));

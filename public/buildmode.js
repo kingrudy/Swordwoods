@@ -1,9 +1,10 @@
 // Bouwen aan de clientkant: bouwwerken tonen, botsing, vuurlicht, pijlen van torens en de bouwmodus (voorbeeld + balk).
 import * as THREE from 'three';
-import { BUILDS, BUILD_BY_ID, BUILD_RANGE, FIRE_RADIUS, placePoint, canPlace, pushOut, boundR } from './builds.js';
+import { BUILDS, BUILD_BY_ID, BUILD_RANGE, FIRE_RADIUS, placePoint, canPlace, pushOut, boundR, blocksPlayers } from './builds.js';
 import { $, esc } from './util.js';
 
 const REMOVE = BUILDS.length;          // laatste vakje: afbreken
+const slotKey = i => i < 9 ? i + 1 : i === 9 ? 0 : '-';   // toetsen 1-9, 0 en -
 
 export function createBuildSystem(ctx) {
   const { scene, M, W, G, net, player, inv, myName, heightAt, camera } = ctx;
@@ -41,6 +42,7 @@ export function createBuildSystem(ctx) {
   net.on('ev', m => {
     switch (m.k) {
       case 'bnew': add(m.b, true); break;
+      case 'stashed': { const e = builds.get(m.id); if (e) { e.lidT = 0.6; ctx.sfx.creak(); } break; }
       case 'bgone': remove(m.id, m.how !== 'replace'); if (m.how === 'destroy') ctx.toast('Een bouwwerk is vernield.', '#ff9c8a'); break;
       case 'bhp': { const e = builds.get(m.id); if (e) { e.hp = m.hp; e.hitT = 0.25; ctx.chips.emit(e.x, e.group.position.y + 1, e.z, 6, 2, 2, 0.6); } break; }
       case 'arrow': shoot(m); break;
@@ -67,7 +69,7 @@ export function createBuildSystem(ctx) {
   /* ---------------------------------------------------------------- botsing en warmte */
   function collide(x, z, r) {
     for (const e of builds.values()) {
-      const B = BUILD_BY_ID[e.kind]; if (!B.solid) continue;
+      const B = BUILD_BY_ID[e.kind]; if (!blocksPlayers(B)) continue;
       if (Math.abs(e.x - x) > boundR(B) + r + 0.3 || Math.abs(e.z - z) > boundR(B) + r + 0.3) continue;
       const q = pushOut(e, x, z, r); if (q) { x = q[0]; z = q[1]; }
     }
@@ -78,8 +80,8 @@ export function createBuildSystem(ctx) {
   /* ---------------------------------------------------------------- bouwbalk */
   const bar = $('buildbar');
   function renderBar() {
-    bar.innerHTML = BUILDS.map((B, i) => '<div class="bslot' + (i === sel ? ' sel' : '') + (inv.wood < B.cost ? ' poor' : '') + '" data-b="' + i + '"><small>' + (i + 1) + '</small><span>' + B.icon + '</span><em>' + B.cost + '</em></div>').join('') +
-      '<div class="bslot rm' + (sel === REMOVE ? ' sel' : '') + '" data-b="' + REMOVE + '"><small>' + (REMOVE + 1) + '</small><span>🪓</span><em>weg</em></div>';
+    bar.innerHTML = BUILDS.map((B, i) => '<div class="bslot' + (i === sel ? ' sel' : '') + (inv.wood < B.cost ? ' poor' : '') + '" data-b="' + i + '"><small>' + slotKey(i) + '</small><span>' + B.icon + '</span><em>' + B.cost + '</em></div>').join('') +
+      '<div class="bslot rm' + (sel === REMOVE ? ' sel' : '') + '" data-b="' + REMOVE + '"><small>' + slotKey(REMOVE) + '</small><span>🪓</span><em>weg</em></div>';
     const B = BUILDS[sel];
     $('buildname').innerHTML = sel === REMOVE ? '<b>Afbreken</b> · eigen bouwwerk weghalen, je krijgt tot de helft van het hout terug'
       : '<b>' + esc(B.name) + '</b> · ' + B.cost + ' hout · ' + esc(B.desc);
@@ -167,6 +169,11 @@ export function createBuildSystem(ctx) {
         tmp.push([d, e]);
       }
       if (e.kind === 'tower' && e.group.userData.flag) e.group.userData.flag.rotation.y = Math.sin(time * 2 + e.id) * 0.3;
+      if (e.kind === 'gate') {                   // de deur zwaait open als er een speler vlakbij is (monsters houdt hij tegen)
+        let near = d < 3.2; if (!near && ctx.remotes) for (const r of ctx.remotes.values()) if (Math.hypot(r.x - e.x, r.z - e.z) < 3.2) { near = true; break; }
+        const door = e.group.userData.door, want = near ? -1.6 : 0; door.rotation.y += (want - door.rotation.y) * Math.min(1, dt * 6);
+      }
+      if (e.kind === 'stash' && e.lidT > 0) { e.lidT -= dt; e.group.userData.lid.rotation.x = -Math.sin(Math.min(1, e.lidT / 0.6) * Math.PI) * 0.9; e.group.userData.lid.position.z = -0.1 * Math.sin(Math.min(1, e.lidT / 0.6) * Math.PI); }
     }
     tmp.sort((a, b) => a[0] - b[0]);
     lights.forEach((l, i) => {

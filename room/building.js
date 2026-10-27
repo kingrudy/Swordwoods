@@ -2,7 +2,7 @@
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
 import { XP } from '../public/progress.js';
 import { bump } from '../stats.js';
-import { BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, canPlace, pushOut, boundR } from '../public/builds.js';
+import { BUILD_BY_ID, BUILD_RANGE, BUILD_MAX_ROOM, BUILD_MAX_PLAYER, BUILD_REFUND, FIRE_RADIUS, canPlace, pushOut, boundR, blocksPlayers, STASH_KEYS, STASH_RANGE, SPIKE_DPS, SPIKE_SLOW } from '../public/builds.js';
 import { r1, r2, len } from './shared.js';
 
 export class Building {
@@ -15,7 +15,7 @@ export class Building {
     if (!this.builds.size) return null;
     const r = 0.12, cand = [];
     for (const b of this.builds.values()) {
-      const B = BUILD_BY_ID[b.kind]; if (!B.solid) continue;
+      const B = BUILD_BY_ID[b.kind]; if (!blocksPlayers(B)) continue;
       const R = boundR(B) + r + 0.2;
       if (Math.max(ox, x) < b.x - R || Math.min(ox, x) > b.x + R || Math.max(oz, z) < b.z - R || Math.min(oz, z) > b.z + R) continue;
       if (pushOut(b, ox, oz, r)) continue;          // stond er al in (bv. net iets op je gebouwd): eruit lopen mag
@@ -37,6 +37,39 @@ export class Building {
   saveBuilds() {
     this.store.builds = [...this.builds.values()].map(b => ({ kind: b.kind, x: r2(b.x), z: r2(b.z), rot: r2(b.rot), hp: Math.round(b.hp), owner: b.owner }));
     this.markDirty();
+  }
+
+  /* ---------------------------------------------------------------- opslagkist */
+  stashOf(P) { for (const b of this.builds.values()) if (b.kind === 'stash' && b.owner === P.name) return b; return null; }
+  /** Alles erin ('put') of alles eruit ('take'), alleen naast je eigen kist. */
+  stash(P, op) {
+    const b = this.stashOf(P), s = P.u.save;
+    if (!b || P.dead || len(b.x - P.x, b.z - P.z) > STASH_RANGE) return this.toast(P, 'Ga naast je eigen opslagkist staan.', '#bbb');
+    const st = s.stash; let n = 0;
+    for (const k of STASH_KEYS) {
+      if (op === 'put') { n += s[k] | 0; st[k] = (st[k] | 0) + (s[k] | 0); s[k] = 0; }
+      else if (op === 'take') { n += st[k] | 0; s[k] = (s[k] | 0) + (st[k] | 0); st[k] = 0; }
+    }
+    if (n) this.bc({ t: 'ev', k: 'stashed', id: b.id, op });
+    this.toast(P, n ? (op === 'put' ? '📦 Opgeborgen in je kist.' : '📦 Alles uit je kist gepakt.') : (op === 'put' ? 'Je hebt niets om op te bergen.' : 'Je kist is leeg.'), n ? '#c89a5e' : '#bbb');
+    this.sendInv(P); this.markDirty();
+  }
+
+  /* ---------------------------------------------------------------- spijkerval: monsters erop worden trager en gewond */
+  updateSpikes(dt) {
+    if (!this.builds.size) return;
+    const spikes = []; for (const b of this.builds.values()) if (b.kind === 'spikes') spikes.push(b);
+    for (const m of this.monsters.values()) m.onSpikes = false;
+    if (!spikes.length) return;
+    const R = BUILD_BY_ID.spikes.r;
+    for (const m of [...this.monsters.values()]) for (const b of spikes) {
+      if (Math.abs(b.x - m.x) > R + 1 || Math.abs(b.z - m.z) > R + 1 || len(b.x - m.x, b.z - m.z) > R + 0.3) continue;
+      m.onSpikes = true;
+      m.hp -= SPIKE_DPS * dt * (1 + this.wave.n * 0.1);
+      if (m.hp <= 0) { this.killMonster(m, [...this.players.values()].find(p => p.name === b.owner) || null); break; }
+      if (this.builds.has(b.id)) this.hurtBuild(b, 2 * dt, null);   // slijt
+      break;
+    }
   }
 
   bedOf(P) { for (const b of this.builds.values()) if (b.kind === 'bed' && b.owner === P.name) return b; return null; }

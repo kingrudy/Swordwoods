@@ -4,7 +4,7 @@ import { WATER, clampXZ, inDesert } from '../public/world.js';
 import { rollSword, MONSTERS, WAVE_MODS, bossForWave } from '../public/items.js';
 import { XP } from '../public/progress.js';
 import { bump, maxOf } from '../stats.js';
-import { BUILD_BY_ID, pushOut, boundR } from '../public/builds.js';
+import { BUILD_BY_ID, pushOut, boundR, SPIKE_SLOW } from '../public/builds.js';
 import { r1, r2, len, CFG } from './shared.js';
 
 export class Waves {
@@ -163,6 +163,7 @@ export class Waves {
         if (d < 6 && d > 1.6 && this.T >= m.lungeCd) { m.lungeCd = this.T + 4; m.lungeUntil = this.T + 0.45; this.bc({ t: 'ev', k: 'lunge', id: m.id }); }
       }
       if (this.T < m.lungeUntil) speed *= 2.6;          // sluiper en Schaduwridder: even naar voren stormen
+      if (m.onSpikes) speed *= SPIKE_SLOW;
       const reach = M.r + 0.9;
       if (m.siege && (!this.builds.has(m.siege.id) || len(m.siege.x - m.x, m.siege.z - m.z) > boundR(BUILD_BY_ID[m.siege.kind]) + M.r + 1.2)) m.siege = null;
       if (m.siege && d > reach) {                 // bouwwerk in de weg: eerst kapotslaan
