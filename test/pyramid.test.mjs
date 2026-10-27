@@ -60,7 +60,8 @@ const before = { gold: s.gold, goud: s.statues.goud | 0, swords: s.swords.length
 R.killMonster(boss, P);
 ok(R.pyr.st === 'cool' && ![...R.monsters.values()].some(m => m.pyr), 'farao verslagen: piramide rust, overige mummies weg');
 ok(s.gold >= before.gold + PYRAMID.reward[0] && (s.statues.goud | 0) === before.goud + 1 && s.stats.pharaohs === 1, 'beloning: ' + (s.gold - before.gold) + ' goud + gouden beeld');
-const sw = s.swords[s.swords.length - 1]; ok(s.swords.length > before.swords && sw.rarity >= 3, 'zwaard van minstens episch: ' + sw.name);
+const nieuw = s.swords.slice(before.swords), sw = nieuw.find(w => w.rarity >= 3);   // er kan ook nog gewone monsterbuit bij zitten
+ok(!!sw, 'zwaard van minstens episch: ' + (sw ? sw.name : nieuw.map(w => w.name).join(', ')));
 ok(!!s.ach.mummie, 'prestatie Farao gevloerd');
 s.gold = 100; R.handle(P, { t: 'pyramid' }); ok(R.pyr.st === 'cool' && s.gold === 100, 'tijdens afkoeltijd kan het zegel niet open');
 R.pyr.until = R.T; step(0.1); ok(R.pyr.st === 'idle', 'na afkoeltijd weer open');

@@ -14,7 +14,8 @@ function bot(tok, onAuthed) {
   const b = { toasts: [], evs: [], inv: null, snap: null, joined: null };
   b.ws = new WebSocket('ws://localhost:' + PORT + '/ws');
   b.ws.onopen = () => b.ws.send(JSON.stringify({ t: 'auth', build: globalThis.BUILD, token: tok }));
-  b.ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'authed') onAuthed(b); if (m.t === 'joined') { b.joined = m; b.W = createWorld(m.room.seed); } if (m.t === 'inv') b.inv = m; if (m.t === 's') b.snap = m; if (m.t === 'toast') b.toasts.push(m.msg); if (m.t === 'ev') b.evs.push(m); };
+  b.ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'authed') onAuthed(b); if (m.t === 'joined') { b.joined = m; b.W = createWorld(m.room.seed); } if (m.t === 'inv') b.inv = m; if (m.t === 's') { b.snap = m; if (m.f !== 0 || !b.monMap) b.monMap = new Map(m.m.map(t => [t[0], t])); else for (const t of m.m) b.monMap.set(t[0], t); b.mons = [...b.monMap.values()]; }   // tussensnapshots: alleen wat dichtbij is
+    if (m.t === 'ev' && m.k === 'mdie' && b.monMap) { b.monMap.delete(m.id); b.mons = [...b.monMap.values()]; } if (m.t === 'toast') b.toasts.push(m.msg); if (m.t === 'ev') b.evs.push(m); };
   b.send = o => b.ws.send(JSON.stringify(o));
   b.at = (x, z, yaw = 0) => b.send({ t: 'in', x, y: b.W.heightAt(x, z), z, yaw, pitch: 0 });
   return b;
@@ -66,12 +67,12 @@ ok(dd < 5 || myDog()[12] === 1, 'hond volgt de speler (jachthond mag even jagen;
 // gevecht: wacht op golf, blijf staan, laat de hond vechten (speler slaat niet)
 const home = { x: B.W.spawn.x, z: B.W.spawn.z };
 B.at(home.x, home.z); await sleep(2500);
-for (let i = 0; i < 80 && !(B.snap.w.ph === 1 && B.snap.m.length); i++) await sleep(250);
-ok(B.snap.w.ph === 1, 'golf gestart met ' + B.snap.m.length + ' monsters');
+for (let i = 0; i < 80 && !(B.snap.w.ph === 1 && B.mons.length); i++) await sleep(250);
+ok(B.snap.w.ph === 1, 'golf gestart met ' + B.mons.length + ' monsters');
 const t0 = Date.now(); let dogHits = 0;
-while (Date.now() - t0 < 60000 && B.snap.m.length) {
+while (Date.now() - t0 < 60000 && B.mons.length) {
   // speler blijft in de buurt van het dichtstbijzijnde monster maar valt niet aan
-  const m = B.snap.m.slice().sort((a, b) => Math.hypot(a[2] - home.x, a[3] - home.z) - Math.hypot(b[2] - home.x, b[3] - home.z))[0];
+  const m = B.mons.slice().sort((a, b) => Math.hypot(a[2] - home.x, a[3] - home.z) - Math.hypot(b[2] - home.x, b[3] - home.z))[0];
   B.at(m[2] + 6, m[3]); await sleep(400);
   dogHits = B.evs.filter(e => e.k === 'hit' && e.dog).length;
   if (dogHits > 12) break;
