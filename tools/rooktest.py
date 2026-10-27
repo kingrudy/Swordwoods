@@ -19,6 +19,8 @@ results = []
 def check(ok, name, info=""):
     results.append((bool(ok), name))
     print(("PASS " if ok else "FAIL ") + name + (f"  ({info})" if info != "" else ""), flush=True)
+    if not ok and os.environ.get("GITHUB_ACTIONS"):      # op GitHub als annotatie zichtbaar
+        print(f"::error title=rooktest::{name} {info}".replace("\n", " "), flush=True)
 
 def start_server():
     data = tempfile.mkdtemp(prefix="rooktest-data-")
@@ -239,6 +241,17 @@ def desktop(b):
     A.evaluate("__game.interact()")
     check(wait_for(A, "[...__game.mons.values()].some(e => e.type === 7)"), "mummies ontwaakt")
     shot(A, "piramide.png")
+
+    # reisstenen: activeren in de woestijn en naar het bos reizen
+    cheat(A, "/goud 50")
+    ts = A.evaluate("[__game.W.travel.desert.x, __game.W.travel.desert.z]")
+    goto(A, ts[0] + 1.6, ts[1], ts)
+    check("reissteen activeren" in A.evaluate("__game.prompt()"), "aanwijzing reissteen", A.evaluate("__game.prompt()"))
+    A.evaluate("__game.interact()")
+    check(wait_for(A, "__game.inv.travel === 1"), "reissteen geactiveerd")
+    shot(A, "reissteen.png")
+    A.evaluate("__game.interact()")
+    check(wait_for(A, "Math.hypot(__game.player.x - __game.W.travel.forest.x, __game.player.z - __game.W.travel.forest.z) < 3", 12000), "gereisd naar het bos")
 
     check(not errs, "geen fouten in de browser", "; ".join(errs[:5]))
     ctx.close()

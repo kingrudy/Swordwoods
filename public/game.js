@@ -22,6 +22,7 @@ import { createUi } from './ui.js';
 import { createPanels, GFX_KEY } from './panels.js';
 import { createInteract } from './interact.js';
 import { createControls } from './controls.js';
+import { createTravel } from './travel.js';
 import { createSettings } from './settings.js';
 import { $, nextFrame } from './util.js';
 
@@ -84,7 +85,7 @@ export async function startGame({ net, joined, user }) {
   const onPanel = on => g.panels.panel(on);
   g.hud = createHud({
     W, WORLD, MAP, WATER, player, net, myId, names: g.names, isTouch, chestObjs: g.scenery.chestObjs, remotes: g.ents.remotes, dogs: g.ents.dogs, mons: g.ents.mons, colorForName: M.colorForName,
-    extraMarkers: () => [...g.bs.markers(), ...g.wfx.markers(), ...g.soc.markers(), ...g.des.markers(), ...g.scenery.markers()],
+    extraMarkers: () => [...g.bs.markers(), ...g.wfx.markers(), ...g.soc.markers(), ...g.des.markers(), ...g.scenery.markers(), ...(g.travel ? g.travel.markers() : [])],
     sfxChat: () => g.tone(880, 0.08, 'triangle', 0.05),
     onChatOpen: () => { for (const k in g.keys) g.keys[k] = false; player.vx = player.vz = 0; },
   });
@@ -100,6 +101,7 @@ export async function startGame({ net, joined, user }) {
     onOreFound: i => { const r = g.scenery.oreObjs[i]; if (r) r.seen = true; }, onPanel,
   });
   g.des = createDesert({ ...shared, WATER, anis: g.ents.anis, remotes: g.ents.remotes, builds: () => g.bs.builds, onPanel });
+  g.travel = createTravel(g);
   g.panels = createPanels(g);
   g.inter = createInteract(g);
   g.ctl = createControls(g);
@@ -130,6 +132,7 @@ export async function startGame({ net, joined, user }) {
     g.fx.update(dt, time);
     g.scenery.update(dt, time);
     g.fish.update(dt, time);
+    g.travel.update(dt, time);
     g.inter.update();
     g.ui.update(dt, time);
     for (const p of Object.values(C)) p.update(dt);

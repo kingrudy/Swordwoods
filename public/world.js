@@ -317,5 +317,24 @@ export function createWorld(seed) {
   }
   const desert = { ...D, harbor, bazaar, mounds, oasis, pyramid, point: desertPoint };
 
-  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, ruins, pot, arena, desert, biomeW, biomeAt, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
+  // ---- reisstenen: één vlak bij het startpunt, één bij de haven van de woestijn (zonder rng: de rest blijft gelijk)
+  const SPAWN = { x: 0, z: 2 };
+  const stoneAt = (cx, cz, rings, avoid) => {
+    let best = null, bestScore = 1e9;
+    for (const r of rings) for (let k = 0; k < 24; k++) {
+      const a = k / 24 * Math.PI * 2, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, h = heightAt(x, z);
+      if (h < 0.8 || h > 9 || slopeAt(x, z) > 0.45) continue;
+      if (avoid.some(([ax, az, ad]) => len(x - ax, z - az) < ad)) continue;
+      let free = true; gNear(x, z, o => { if (len(o.x - x, o.z - z) < (o.r || 0.5) + 2.2) free = false; }); if (!free) continue;
+      const score = slopeAt(x, z) * 10 + r * 0.05;
+      if (score < bestScore) { bestScore = score; best = { x, z, y: h }; }
+    }
+    return best || { x: cx + rings[0], z: cz, y: heightAt(cx + rings[0], cz) };
+  };
+  const tForest = stoneAt(SPAWN.x, SPAWN.z, [11, 13, 15, 18], [[shop.x, shop.z, 7], [smith.x, smith.z, 7], [pot.x, pot.z, 5], [SPAWN.x, SPAWN.z, 6]]);
+  const tDesert = stoneAt(harbor.x, harbor.z, [6, 8, 10], [[bazaar.x, bazaar.z, 6], ...mounds.map(m => [m.x, m.z, 3])]);
+  const travel = {};
+  for (const [k, t] of [['forest', tForest], ['desert', tDesert]]) { const o = { ...t, r: 0.6, solid: true, travel: k }; gAdd(o); travel[k] = o; }
+
+  return { seed, heightAt, slopeAt, trees, chests, shop, smith, ores, ruins, pot, arena, desert, travel, biomeW, biomeAt, landPoint, vnoise, grid, gNear, spawn: { x: 0, z: 2 } };
 }

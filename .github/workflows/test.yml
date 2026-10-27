@@ -14,3 +14,24 @@ jobs:
           docker run -d --name sw -p 8304:8304 swordwoods
           for i in $(seq 1 20); do sleep 1; curl -fsS http://localhost:8304/api/health && exit 0; done
           docker logs sw; exit 1
+
+  browser:
+    # Speelt het spel in een echte browser (Chromium met software-rendering): tools/rooktest.py
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.12' }
+      - name: Playwright met Chromium installeren
+        run: |
+          pip install playwright==1.63.0
+          python -m playwright install --with-deps chromium
+      - name: Rooktest
+        env: { ROOKTEST_OUT: rooktest-out }
+        run: mkdir -p rooktest-out && python tools/rooktest.py
+      - name: Schermafbeeldingen bewaren
+        if: always()
+        uses: actions/upload-artifact@v5
+        with: { name: rooktest-schermafbeeldingen, path: rooktest-out, if-no-files-found: ignore }

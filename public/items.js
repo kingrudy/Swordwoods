@@ -215,3 +215,6 @@ export const COSMETICS = [
 ];
 export const COS_SLOTS = [['hat', 'Hoed'], ['cape', 'Cape'], ['collar', 'Halsband (hond)']];
 export const cosmetic = id => COSMETICS.find(c => c.id === id) || null;
+
+/** Reisstenen: activeren kost goud (één keer, bij de steen in de woestijn); reizen duurt even en de steen laadt daarna op. */
+export const TRAVEL = { cost: 20, sec: 3, cooldown: 20, range: 2.6 };

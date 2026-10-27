@@ -395,6 +395,20 @@ export function buildDog(furColor, collar = false) {
   return { kind: 'quad', group: root, body: g, legs, head, tail, tongue, aura, height: 1.0 };
 }
 
+/** Reissteen: grijze zuil met lichtgevende runen en een zwevende kristal. awake = geactiveerd (blauw), anders dof. */
+export function buildTravelStone() {
+  const g = new THREE.Group(), stone = std(0x7d7f86), dark = std(0x5b5d63);
+  const rune = new THREE.MeshStandardMaterial({ color: 0x3a4250, emissive: 0x2a7bff, emissiveIntensity: 0.0 });
+  const add = (geo, mat, x, y, z) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
+  add(new THREE.CylinderGeometry(1.1, 1.25, 0.3, 8), dark, 0, 0.15, 0);
+  const pillar = add(new THREE.CylinderGeometry(0.32, 0.48, 2.3, 6), stone, 0, 1.45, 0); pillar.rotation.y = 0.3;
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.3; const r = add(new THREE.BoxGeometry(0.1, 0.5, 0.02), rune, Math.sin(a) * 0.4, 1.1 + (i % 2) * 0.55, Math.cos(a) * 0.4); r.rotation.y = a; }
+  const crystal = add(new THREE.OctahedronGeometry(0.28), new THREE.MeshStandardMaterial({ color: 0x9ad8ff, emissive: 0x2a7bff, emissiveIntensity: 0.2, transparent: true, opacity: 0.85 }), 0, 3.05, 0);
+  crystal.scale.y = 1.6;
+  const label = makeLabel('Reissteen', '#9ad8ff'); label.position.y = 3.9; label.scale.multiplyScalar(1.3); g.add(label);
+  return { group: g, rune, crystal, label };
+}
+
 /* ---------------------------------------------------------------- hoeden (uiterlijk); maat in meters voor een held van 1,8 m, onderkant op y = 0 */
 export function buildHat(id) {
   const g = new THREE.Group();

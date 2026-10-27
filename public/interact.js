@@ -20,6 +20,7 @@ export function createInteract(g) {
       },
       prompt: (e, t) => (t ? 'Opknappen (X)' : '<b>E</b> · ' + (g.names.get(e.id) || 'medespeler') + ' opknappen') + ' · 3 s blijven staan',
       act: e => net.send({ t: 'revive', id: e.id }) },
+    { id: 'travel', icon: '✨', test: () => g.travel.near(), prompt: (st, t) => g.travel.prompt(st, t), act: () => g.travel.act() },
     { id: 'desert', icon: '⚒️', test: () => g.des.prompt(false) !== null, prompt: (_, t) => g.des.prompt(t), act: () => g.des.interact() },
     { id: 'dog', icon: '🐕', test: () => g.ents.findWildDog(),
       prompt: (d, t) => {

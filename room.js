@@ -23,6 +23,7 @@ import { Building } from './room/building.js';
 import { Pyramid } from './room/pyramid.js';
 import { Bosses } from './room/bosses.js';
 import { Cooking } from './room/cooking.js';
+import { Travel } from './room/travel.js';
 export { ensureSave, ensureDaily, applyTalent, claimLogin, cosAction } from './room/save.js';
 export { CFG } from './room/shared.js';
 
@@ -91,7 +92,7 @@ export class Room {
   sendInv(P) {
     const s = P.u.save;
     this.checkAch(P);
-    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach, week: s.week, stash: s.stash });
+    P.conn.send({ t: 'inv', wood: s.wood, meat: s.meat, potions: s.potions, fish: s.fish, ore: s.ore, gold: s.gold, tut: s.tut, statues: s.statues, up: s.up, dog: s.dog || null, swords: s.swords, equip: s.equip, stats: s.stats, xp: s.xp, tal: s.tal, daily: s.daily, ach: s.ach, week: s.week, stash: s.stash, travel: s.travel });
   }
 
   toast(P, msg, color = '#fff') { P.conn.send({ t: 'toast', msg, color }); }
@@ -203,6 +204,7 @@ export class Room {
       case 'revive': this.startRevive(P, m.id | 0); break;
       case 'cook': this.cook(P, String(m.id)); break;
       case 'stash': this.stash(P, String(m.op)); break;
+      case 'travel': this.travelStart(P); break;
       case 'sell': this.sellStatues(P, String(m.k)); break;
       case 'pyramid': this.openPyramid(P); break;
       case 'bzbuy': this.bazaarBuy(P, String(m.id)); break;
@@ -264,6 +266,7 @@ export class Room {
       if (P.pendingHit >= 0 && this.T >= P.pendingHit) { P.pendingHit = -1; this.resolveHit(P); }
       this.updateFishing(P);
       if (P.digging && this.T >= P.digging.until) this.finishDig(P);
+      if (P.travel) this.updateTravel(P);
       if ((this.tickN + P.id) % 10 === 0) {
         const des = inDesert(P.x, P.z);
         if (des && !P.wasDesert && !P.boat) { P.u.save.stats.voyages++; bump('voyages'); this.tutorial(P, 'voyage'); this.toast(P, '🏝️ Welkom op het Woestijneiland! Graaf in zandbergen (E) naar faraobeelden en verkoop ze bij Farid voor goud.', '#f2c14e'); this.sendInv(P); }
@@ -319,6 +322,6 @@ export class Room {
 }
 
 // De rest van de kamer staat per onderwerp in room/*.js.
-for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid, Bosses, Cooking]) {
+for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid, Bosses, Cooking, Travel]) {
   for (const k of Object.getOwnPropertyNames(Mixin.prototype)) if (k !== 'constructor') Object.defineProperty(Room.prototype, k, Object.getOwnPropertyDescriptor(Mixin.prototype, k));
 }

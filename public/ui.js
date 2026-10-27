@@ -114,6 +114,7 @@ export function createUi(g) {
     inv.wood = m.wood; inv.meat = m.meat; inv.potions = m.potions | 0; inv.up = m.up || inv.up; inv.dog = m.dog || null; inv.fish = m.fish | 0; inv.swords = m.swords; inv.equip = m.equip; inv.stats = m.stats || inv.stats;
     if (m.week) inv.week = m.week;
     if (m.stash) inv.stash = m.stash;
+    inv.travel = m.travel | 0;
     renderInv(); g.pl.rebuildHeld();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
