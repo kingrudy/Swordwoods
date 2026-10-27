@@ -24,7 +24,8 @@ ok(R.ruinSt[0].st === 'cool', 'kist in afkoeltijd'); R.T += 1201; step(1.1); ok(
 function spot(b) { for (let i = 0; i < 20000; i++) { const x = (Math.random() - 0.5) * 380, z = (Math.random() - 0.5) * 380; if (R.world.heightAt(x, z) > 1 && R.world.biomeAt(x, z) === b) return { x, z }; } }
 const snow = spot('snow'), forest = spot('forest');
 function drain(pt) { P.x = pt.x; P.z = pt.z; P.hunger = 90; P.dead = false; step(1.1); const h0 = P.hunger; step(10); return h0 - P.hunger; }
-if (snow) { const a = drain(forest), b = drain(snow); ok(b > a * 1.2, 'honger in de sneeuw sneller: ' + a.toFixed(2) + ' vs ' + b.toFixed(2)); } else console.log('(geen sneeuw in deze wereld)');
+const a = drain(forest);   // altijd even in het gewone bos geweest
+if (snow) { const b = drain(snow); ok(b > a * 1.2, 'honger in de sneeuw sneller: ' + a.toFixed(2) + ' vs ' + b.toFixed(2)); } else console.log('(geen sneeuw in deze wereld)');
 ok(P.u.save.biomes.forest && (!snow || P.u.save.biomes.snow), 'bezochte gebieden onthouden: ' + Object.keys(P.u.save.biomes).join(','));
 // ---- onweer
 P.x = forest.x; P.z = forest.z; P.hp = P.mhp;
