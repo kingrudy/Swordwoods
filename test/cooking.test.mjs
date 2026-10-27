@@ -36,9 +36,10 @@ ok(withStew < without * 0.6, 'stoofpot: half zo snel honger (' + withStew.toFixe
 P.x = fire.x + 1.6; s.meat = 2; s.fish = 2; s.gold = 10; R.handle(P, { t: 'cook', id: 'maal' });
 ok(s.gold === 0 && R.buff(P, 'royal'), 'koningsmaal kost ook 10 goud');
 const m = R.spawnMonster(0, P.x + 1, P.z, 100, 1, 1); m.stun = 99; const it = { type: 'sword', damage: 40 };
+const rnd = Math.random; Math.random = () => 0.5;   // schade heeft ±10% toeval: vastzetten
 let h0 = m.hp; R.hitEnemy(P, it, m, 'm', false); const royal = h0 - m.hp;
-P.buffs.royal = 0; h0 = m.hp; R.hitEnemy(P, it, m, 'm', false); const plain = h0 - m.hp;
-ok(royal > plain * 1.02, 'koningsmaal: meer schade (' + Math.round(royal) + ' tegen ' + Math.round(plain) + ')');
+P.buffs.royal = 0; h0 = m.hp; R.hitEnemy(P, it, m, 'm', false); const plain = h0 - m.hp; Math.random = rnd;
+ok(Math.abs(royal / plain - 1.15) < 0.01, 'koningsmaal: 15% meer schade (' + Math.round(royal) + ' tegen ' + Math.round(plain) + ')');
 ok(msgs.some(m => m.t === 'ev' && m.k === 'cooked' && m.id === 'maal'), 'iedereen ziet dat er gekookt wordt');
 ok(RECIPES.every(r => r.sec > 0 && r.buff), 'alle recepten hebben een voordeel');
 process.exit(fails ? 1 : 0);

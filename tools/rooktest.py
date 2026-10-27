@@ -270,7 +270,10 @@ def mobile(b):
     s = A.evaluate("[__game.W.shop.x, __game.W.shop.z, __game.W.shop.rotY]")
     import math
     goto(A, s[0] + math.sin(s[2]) * 3.5, s[1] + math.cos(s[2]) * 3.5, (s[0], s[1])); play(A, 400)
-    check(wait_for(A, "document.getElementById('tb-use').textContent.includes('🏪')"), "X-knop toont winkel", A.evaluate("document.getElementById('tb-use').textContent + ' ' + JSON.stringify(__game.getLocked())"))
+    check(wait_for(A, "document.getElementById('tb-use').textContent.includes('🏪')"), "X-knop toont winkel", A.evaluate("""(() => { const g = __game.g, p = g.player, W = g.W; return document.getElementById('tb-use').textContent + ' actie=' + __game.action() +
+      ' shop=' + Math.hypot(W.shop.x - p.x, W.shop.z - p.z).toFixed(1) + ' yaw=' + p.yaw.toFixed(2) + ' smith=' + Math.hypot(W.smith.x - p.x, W.smith.z - p.z).toFixed(1) +
+      ' pot=' + Math.hypot(W.pot.x - p.x, W.pot.z - p.z).toFixed(1) + ' trader=' + JSON.stringify(g.wfx.trader || null).slice(0, 60) + ' boten=' + [...g.bs.builds.values()].filter(b => b.kind === 'boat').length; })()"""))
+    if not A.evaluate("document.getElementById('tb-use').textContent.includes('🏪')"): shot(A, "mobiel-fout.png")
     A.dispatch_event("#tb-use", "pointerdown"); play(A, 300)
     check(A.evaluate("document.getElementById('shop').classList.contains('on')"), "winkel open via X")
     shot(A, "mobiel.png")
