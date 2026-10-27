@@ -1,6 +1,7 @@
 // Alles wat je met E (telefoon: X, controller: X) kunt doen staat in één lijst, op volgorde van voorrang.
 // Dezelfde lijst bepaalt de aanwijzing in beeld, wat E doet en het icoon op de X-knop, zodat die nooit uit elkaar lopen.
 import { $ } from './util.js';
+import { COOK_RANGE } from './items.js';
 
 export function createInteract(g) {
   const { net, inv, you } = g;
@@ -33,6 +34,8 @@ export function createInteract(g) {
     { id: 'smith', icon: '⚒️', test: () => g.scenery.nearSmith(), prompt: (_, t) => key(t, 'Smid', 'naar de smid'), act: () => g.panels.openSmith() },
     { id: 'trader', icon: '⚒️', test: () => g.wfx.nearTrader(), prompt: (_, t) => key(t, 'Handelaar', 'reizende handelaar'), act: () => g.wfx.openTrader() },
     { id: 'pot', icon: '⚒️', test: () => g.soc.nearPot(), prompt: (_, t) => key(t, 'Gemeenschapskist', 'gemeenschapskist') + ' · ' + g.soc.pot.have + '/' + g.soc.pot.goal + ' hout', act: () => g.soc.openPot() },
+    { id: 'cook', icon: '🍲', test: () => { for (const b of g.bs.builds.values()) if (b.kind === 'campfire' && Math.hypot(b.x - g.player.x, b.z - g.player.z) < COOK_RANGE) return b; return null; },
+      prompt: (_, t) => key(t, 'Koken', 'koken bij het kampvuur'), act: () => g.panels.openCook() },
     { id: 'fish', icon: '🎣', test: fresh => fresh ? g.fish.findWater() : g.fish.waterAhead(g.time),
       prompt: (_, t) => inv.up.rod ? key(t, 'Vissen', 'vissen') : 'Hier kun je vissen. Koop een vishengel in de winkel.',
       act: w => { if (inv.up.rod) g.fish.cast(w); }, dim: () => !inv.up.rod },

@@ -1,6 +1,6 @@
 // Panelen die het spel even stilzetten: de winkel van Bram, de smid, het pauzemenu (uitleg, talenten, opdrachten,
 // geven, geluid) en de graphics-instelling, plus het automatisch lager zetten van de graphics als het te traag loopt.
-import { RARITIES, SHOP, MAX_POTIONS } from './items.js';
+import { RARITIES, SHOP, MAX_POTIONS, RECIPES, NEED_NAMES } from './items.js';
 import { levelInfo, FORGE_MAX, forgeCost, forgeGain, meltValue, talentPoints, spentPoints } from './progress.js';
 import { renderTalents, renderQuests } from './progressui.js';
 import { QUALITY } from './graphics.js';
@@ -20,7 +20,7 @@ export function createPanels(g) {
   }
 
   /* ---------------------------------------------------------------- winkel */
-  let smithOpen = false;
+  let smithOpen = false, cookOpen = false;
   function renderShop() {
     $('shop-wood').textContent = '🪵 ' + inv.wood + ' hout' + (inv.gold ? ' · 🪙 ' + inv.gold + ' goud' : '');
     let html = '', group = '';
@@ -48,7 +48,7 @@ export function createPanels(g) {
     if (g.wfx && g.wfx.traderOpen) { g.wfx.closeTrader(); return; }
     if (g.soc && g.soc.potOpen) { g.soc.closePot(); return; }
     if (g.des && g.des.bazOpen) { g.des.closeBazaar(); return; }
-    g.shopOpen = false; smithOpen = false; $('shop').classList.remove('on'); $('smith').classList.remove('on');
+    g.shopOpen = false; smithOpen = false; cookOpen = false; $('shop').classList.remove('on'); $('smith').classList.remove('on'); $('cook').classList.remove('on');
     if (relock && !g.isTouch && !g.soft) g.ctl.requestLock();
   }
   $('shop-close').onclick = () => closeShop(true);
@@ -77,12 +77,30 @@ export function createPanels(g) {
     if (m) { const i = +m.dataset.melt; if (m.dataset.sure) net.send({ t: 'melt', i }); else { m.dataset.sure = '1'; m.textContent = 'Zeker? Tik nog eens'; } }
   });
 
+  /* ---------------------------------------------------------------- koken */
+  function renderCook() {
+    $('cook-res').textContent = '🍖 ' + inv.meat + ' · 🐟 ' + inv.fish + ' · 🪵 ' + inv.wood + ' · 🪙 ' + (inv.gold | 0);
+    $('cook-list').innerHTML = RECIPES.map(R => {
+      const parts = Object.entries(R.need).map(([k, n]) => '<span class="' + ((inv[k] | 0) < n ? 'short' : '') + '">' + n + ' ' + NEED_NAMES[k] + '</span>');
+      const can = Object.entries(R.need).every(([k, n]) => (inv[k] | 0) >= n);
+      return '<div class="cook-row"><div><b>' + R.icon + ' ' + esc(R.name) + '</b><small>' + esc(R.desc) + '</small><small class="need">' + parts.join(' · ') + '</small></div>' +
+        '<button class="buy" type="button" data-cook="' + R.id + '"' + (can ? '' : ' disabled') + '>Koken</button></div>';
+    }).join('') + '<p class="q-note">Vis vang je aan de waterkant, vlees krijg je van dieren. Elke maaltijd vult ook je honger flink aan.</p>';
+  }
+  function openCook() {
+    if (g.shopOpen || g.dead) return;
+    panel(true); cookOpen = true; renderCook(); $('cook').classList.add('on');
+  }
+  $('cook-close').onclick = () => closeShop(true);
+  $('cook-list').addEventListener('click', e => { const b = e.target.closest('[data-cook]'); if (b && !b.disabled) net.send({ t: 'cook', id: b.dataset.cook }); });
+
   /* ---------------------------------------------------------------- pauzemenu */
   const veil = $('veil');
   let ptab = g.isTouch ? 'tal' : 'keys';
   function renderPauseTabs() {
     for (const b of document.querySelectorAll('#ptabs [data-pt]')) b.classList.toggle('on', b.dataset.pt === ptab);
-    for (const t of ['keys', 'tal', 'quest', 'give']) $('pt-' + t).classList.toggle('on', t === ptab);
+    for (const t of ['keys', 'tal', 'quest', 'give', 'set']) $('pt-' + t).classList.toggle('on', t === ptab);
+    if (ptab === 'set' || ptab === 'keys') g.settings.render();
     if (ptab === 'give' && g.soc) g.soc.renderGive($('pt-give'));
     const free = talentPoints(levelInfo(inv.xp).level) - spentPoints(inv.tal);
     $('pt-free').textContent = free > 0 ? '(' + free + ')' : '';
@@ -123,7 +141,8 @@ export function createPanels(g) {
 
   /* ---------------------------------------------------------------- opnieuw tekenen als de inventaris verandert */
   net.on('inv', () => {
-    if (g.shopOpen && !smithOpen && !(g.wfx && g.wfx.traderOpen)) renderShop();
+    if (g.shopOpen && !smithOpen && !cookOpen && !(g.wfx && g.wfx.traderOpen)) renderShop();
+    if (cookOpen) renderCook();
     if (smithOpen) renderSmith();
     if (g.wfx && g.wfx.traderOpen) g.wfx.renderTrader();
     if (g.des && g.des.bazOpen) g.des.renderBazaar();
@@ -131,5 +150,5 @@ export function createPanels(g) {
   });
   net.on('ev', m => { if (m.k === 'forged' && smithOpen) renderSmith(); });
 
-  return { panel, openShop, closeShop, openSmith, fpsCheck };
+  return { panel, openShop, closeShop, openSmith, openCook, fpsCheck, get cookOpen() { return cookOpen; } };
 }

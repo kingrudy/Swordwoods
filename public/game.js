@@ -22,6 +22,7 @@ import { createUi } from './ui.js';
 import { createPanels, GFX_KEY } from './panels.js';
 import { createInteract } from './interact.js';
 import { createControls } from './controls.js';
+import { createSettings } from './settings.js';
 import { $, nextFrame } from './util.js';
 
 export async function startGame({ net, joined, user }) {
@@ -74,6 +75,7 @@ export async function startGame({ net, joined, user }) {
 
   /* ---------------------------------------------------------------- onderdelen (volgorde: wie berichten eerst moet zien, eerst) */
   g.ui = createUi(g);
+  g.settings = createSettings(g);
   g.scenery = await createScenery(g);
   g.ents = createEntities(g);
   g.fx = createEffects(g);

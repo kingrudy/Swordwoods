@@ -39,6 +39,7 @@ export const QUEST_KINDS = [
   { kind: 'heavy',  text: n => 'Versla ' + n + ' vijanden met een zware slag', min: 5, max: 12, icon: '💥' },
   { kind: 'ore',    text: n => 'Hak ' + n + ' erts uit ertsaders',    min: 4,  max: 10, icon: '⛏️' },
   { kind: 'dig',    text: n => 'Graaf in ' + n + ' zandbergen op het Woestijneiland', min: 3, max: 8, icon: '🏜️' },
+  { kind: 'cook',   text: n => 'Kook ' + n + (n === 1 ? ' maaltijd' : ' maaltijden') + ' bij een kampvuur', min: 1, max: 3, icon: '🍲' },
 ];
 const hash = s => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 export function today(now = Date.now()) {
@@ -79,6 +80,19 @@ export const weekEvent = (w = isoWeek()) => WEEK_EVENTS[(w.year * 53 + w.week) %
 /** Beloning voor de top 3 van de weekranglijst (goud). */
 export const WEEK_PRIZES = [150, 100, 60];
 
+/* ---------------------------------------------------------------- dagelijkse inlogbeloning */
+/** Beloning per dag van de reeks (1-7). Mis je een dag, dan begint de reeks opnieuw; na dag 7 ook. */
+export const LOGIN_REWARDS = [
+  { icon: '🪵', text: '20 hout', wood: 20 },
+  { icon: '🍖', text: '3 vlees en een drankje', meat: 3, potions: 1 },
+  { icon: '🪙', text: '10 goud', gold: 10 },
+  { icon: '⛏️', text: '3 erts en 30 hout', ore: 3, wood: 30 },
+  { icon: '🧪', text: '2 helende drankjes', potions: 2 },
+  { icon: '🪙', text: '25 goud', gold: 25 },
+  { icon: '🎁', text: 'een kist met een zwaard (minstens zeldzaam) en 50 hout', wood: 50, sword: true },
+];
+export const yesterday = (now = Date.now()) => today(now - 864e5);
+
 /* ---------------------------------------------------------------- prestaties */
 const st = (s, k) => ((s.stats || {})[k] | 0);
 export const ACHIEVEMENTS = [
@@ -108,6 +122,7 @@ export const ACHIEVEMENTS = [
   { id: 'feest',      icon: '🍗', name: 'Feestbeest',        desc: 'Vier een feestmaal in je kamer',  test: s => st(s, 'feasts') >= 1 },
   { id: 'zeeman',     icon: '⛵', name: 'Zeeman',            desc: 'Vaar naar het Woestijneiland',   test: s => st(s, 'voyages') >= 1 },
   { id: 'archeoloog', icon: '🗿', name: 'Archeoloog',        desc: 'Vind 10 faraobeelden',           test: s => st(s, 'statues') >= 10 },
+  { id: 'kok',        icon: '🍲', name: 'Kampvuurkok',        desc: 'Kook 10 maaltijden bij een kampvuur', test: s => st(s, 'meals') >= 10 },
   { id: 'redder',     icon: '❤️', name: 'Reddende engel',    desc: 'Knap 5 keer een gevallen medespeler op', test: s => st(s, 'revives') >= 5 },
   { id: 'weektop',    icon: '🏆', name: 'Weekkampioen',      desc: 'Eindig bovenaan de weekranglijst', test: s => st(s, 'weekWins') >= 1 },
   { id: 'mummie',     icon: '🧟', name: 'Farao gevloerd',    desc: 'Versla de mummie-farao in de piramide', test: s => st(s, 'pharaohs') >= 1 },

@@ -76,6 +76,10 @@
   .wkev .i { font-size:30px; line-height:1; }
   .wkev b { display:block; color:var(--gold); }
   .wkev small { display:block; color:var(--dim); margin-top:2px; }
+  .login-days { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
+  .login-days div { text-align:center; padding:8px 2px; border-radius:10px; background:rgba(255,255,255,.04); font-size:20px; border:1px solid transparent; }
+  .login-days div small { display:block; font-size:11px; color:var(--dim); margin-top:2px; }
+  .login-days div.got { background:rgba(242,193,78,.12); } .login-days div.today { border-color:var(--gold); }
   .wk-note { color:var(--dim); font-size:13px; margin:10px 0 0; line-height:1.45; }
   ol.lb .n { color:var(--dim); }
   ol.lb .s { color:var(--dim); font-variant-numeric:tabular-nums; }
@@ -330,8 +334,14 @@
   .pause-tabs { display:flex; gap:6px; margin:0 0 12px; flex-wrap:wrap; }
   .pause-tabs button.on { background:var(--gold); color:#2b2110; border-color:transparent; }
   .ptab { display:none; } .ptab.on { display:block; }
-  #smith { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:12px; background:rgba(8,14,10,.62); backdrop-filter:blur(4px); }
-  #smith.on { display:flex; }
+  .set-grid { display:grid; gap:10px; margin-bottom:12px; } .set-grid label { display:grid; gap:4px; font-size:14px; } .set-grid label b { color:var(--gold); font-weight:600; margin-left:6px; }
+  .set-grid label.chk { display:flex; align-items:center; gap:8px; } .set-grid input[type=range] { width:100%; }
+  .bind-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:6px; margin-bottom:10px; max-height:38vh; overflow:auto; }
+  .bind { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; padding:4px 8px; border-radius:8px; background:rgba(255,255,255,.04); } .bind .btn { min-width:70px; }
+  #smith, #cook { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:12px; background:rgba(8,14,10,.62); backdrop-filter:blur(4px); }
+  #smith.on, #cook.on { display:flex; }
+  .cook-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.04); margin-bottom:8px; }
+  .cook-row b { font-size:15px; } .cook-row small { display:block; color:var(--dim); margin-top:2px; } .cook-row .need { color:#ffd27a; } .cook-row .need .short { color:#ff9c8a; }
   .sw-row { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; padding:9px 12px; border-radius:12px; background:rgba(255,255,255,.05); border:1px solid var(--line); margin-bottom:8px; }
   .sw-row b { font-size:14px; } .sw-row small { display:block; color:var(--dim); font-size:12px; }
   .sw-row .buy { padding:8px 11px; border-radius:10px; border:0; background:var(--gold); color:#2b2110; font-weight:700; touch-action:manipulation; }
@@ -443,6 +453,11 @@
         <ol class="lb" id="lb-week"></ol>
         <p class="wk-note" id="wk-note"></p>
       </div>
+      <div class="card" id="login-card">
+        <h2>Elke dag een beloning</h2>
+        <div class="login-days" id="login-days"></div>
+        <p class="wk-note" id="login-note"></p>
+      </div>
       </div>
       <div style="display:grid; gap:20px">
         <div class="card">
@@ -535,6 +550,11 @@
   <div id="smith-list"></div>
 </div></div>
 
+<div id="cook"><div class="shop-card">
+  <div class="shop-head"><div><h2>Koken bij het kampvuur</h2><p>Je eet het meteen op: flink minder honger en een tijdelijk voordeel.</p></div><div class="shop-wood" id="cook-res"></div><button class="btn primary" id="cook-close" type="button">Sluiten</button></div>
+  <div id="cook-list"></div>
+</div></div>
+
 <div id="dogmenu"></div>
 <div id="digbar"><i></i></div>
 <div id="actbar"><span></span><b><i></i></b></div>
@@ -579,29 +599,12 @@
   <div class="pause">
     <h2>Pauze</h2>
     <p>Het spel loopt door voor de anderen in je kamer.</p>
-    <div class="pause-tabs" id="ptabs"><button class="btn small on" type="button" data-pt="keys">Besturing</button><button class="btn small" type="button" data-pt="tal">Talenten <span id="pt-free"></span></button><button class="btn small" type="button" data-pt="quest">Opdrachten</button><button class="btn small" type="button" data-pt="give">Geven</button></div>
+    <div class="pause-tabs" id="ptabs"><button class="btn small on" type="button" data-pt="keys">Besturing</button><button class="btn small" type="button" data-pt="tal">Talenten <span id="pt-free"></span></button><button class="btn small" type="button" data-pt="quest">Opdrachten</button><button class="btn small" type="button" data-pt="give">Geven</button><button class="btn small" type="button" data-pt="set">Instellingen</button></div>
+    <div class="ptab" id="pt-set"></div>
     <div class="ptab" id="pt-give"></div>
     <div class="ptab" id="pt-tal"></div>
     <div class="ptab" id="pt-quest"></div>
-    <div class="ptab on" id="pt-keys">
-    <div class="keys">
-      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Lopen (<kbd>Shift</kbd> rennen, <kbd>Spatie</kbd> springen)</span>
-      <span><kbd>Muis</kbd></span><span>Rondkijken</span>
-      <span><kbd>Linkermuisknop</kbd></span><span>Slaan en hakken; ingedrukt houden en loslaten = zware slag (raakt meerdere vijanden)</span>
-      <span><kbd>Rechtermuisknop</kbd></span><span>Blokkeren met je schild (van voren 70% minder schade, pijlen helemaal)</span>
-      <span><kbd>C</kbd></span><span>Ontwijkrol: even onkwetsbaar, ook voor wortels van de Woudreus</span>
-      <span><kbd>E</kbd></span><span>Kist openen, winkel, hond temmen, vissen en binnenhalen</span>
-      <span><kbd>R</kbd></span><span>Vlees eten tegen honger</span>
-      <span><kbd>Q</kbd></span><span>Helende drank drinken</span>
-      <span><kbd>G</kbd></span><span>Je hond een vis geven (boost)</span>
-      <span><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Scrollwiel</kbd></span><span>Bijl of zwaard kiezen</span>
-      <span><kbd>F</kbd></span><span>Slaan (alternatief)</span>
-      <span><kbd>V</kbd></span><span>Hondencommando's: 1 volg, 2 blijf, 3 val aan (waar je naar kijkt), 4 zoek een kist</span>
-      <span><kbd>B</kbd></span><span>Bouwen met hout (klik = plaatsen, <kbd>1</kbd>–<kbd>7</kbd> kiezen, <kbd>7</kbd> afbreken)</span>
-      <span><kbd>M</kbd> / <kbd>Enter</kbd></span><span>Grote kaart / chatten met je kamer (snelberichten zetten een 📍 op de kaart)</span>
-      <span>🎮</span><span>Controller: linkerstick lopen, rechterstick kijken, A slaan (vasthouden = zware slag), B springen, X gebruiken, Y eten, LT blokkeren, LB rollen, RB wapen, D-pad links drank, D-pad omhoog hond voeren, D-pad omlaag bouwen, Start pauze</span>
-    </div>
-    </div>
+    <div class="ptab on" id="pt-keys"></div>
     <div class="gfx"><span>Graphics</span><div class="row" id="gfx-row"></div></div>
     <label class="fpsrow"><input type="checkbox" id="fps-toggle"> Toon beelden per seconde (fps)</label>
     <div class="fpsrow vol"><span>🎵 Muziek</span><input type="range" id="vol-music" min="0" max="100"><span>🔊 Geluid</span><input type="range" id="vol-sfx" min="0" max="100"></div>

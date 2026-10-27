@@ -88,7 +88,7 @@ export class Combat {
 
   hitEnemy(P, it, e, kind, heavy) {
     const s = P.u.save, full = P.hunger >= 80 ? 1.15 : 1;   // goed gevoed = iets sterker
-    const dmg0 = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1) * (1 + 0.06 * tal(s, 'kracht')) * (this.buff(P, 'elixir') ? 1.25 : 1) * (this.buff(P, 'feast') ? 1.1 : 1);
+    const dmg0 = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1) * (1 + 0.06 * tal(s, 'kracht')) * (this.buff(P, 'elixir') ? 1.25 : 1) * (this.buff(P, 'feast') ? 1.1 : 1) * (this.buff(P, 'royal') ? 1.15 : 1);
     const [gf, parried] = kind === 'm' ? this.guardFactor(e, P) : [1, false];   // Schaduwridder pareert van voren
     const dmg = dmg0 * gf;
     e.hp -= dmg; e.stun = Math.max(e.stun || 0, parried ? 0 : heavy ? 0.5 : 0.18);
@@ -115,7 +115,7 @@ export class Combat {
         if (dmg <= 0) return;
       }
     }
-    dmg *= (1 - SHIELD_REDUCE[P.u.save.up.shield]) * (this.buff(P, 'feast') ? 0.9 : 1);
+    dmg *= (1 - SHIELD_REDUCE[P.u.save.up.shield]) * (this.buff(P, 'feast') ? 0.9 : 1) * (this.buff(P, 'royal') ? 0.9 : 1);
     if (kind === 'arrow' && (P.arrowHits = (P.arrowHits || 0) + 1) === 3) this.toast(P, '🛡️ Tip: blokkeer pijlen met je schild (rechtermuisknop, LT of 🛡️): van voren houdt het ze helemaal tegen. Of loop zijwaarts.', '#9ad8ff');
     P.hp -= dmg; P.lastHurt = this.T;
     P.conn.send({ t: 'hurt', dmg: Math.round(dmg), x: src ? r1(src.x) : null, z: src ? r1(src.z) : null });

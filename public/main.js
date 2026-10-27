@@ -3,7 +3,7 @@ import { Net } from './net.js';
 import { RARITIES } from './items.js';
 import { renderTalents, renderQuests, renderAchievements } from './progressui.js';
 import { openInvite, takeInvitedRoom, clearInviteParam } from './invite.js';
-import { WEEK_PRIZES, WEEK_EVENTS } from './progress.js';
+import { WEEK_PRIZES, WEEK_EVENTS, LOGIN_REWARDS, today } from './progress.js';
 import { $, esc } from './util.js';
 
 let invitedRoom = takeInvitedRoom();
@@ -78,8 +78,16 @@ function renderHeroes() {
   $('heroes').innerHTML = HEROES.map(([n, i], k) => '<button type="button" class="hero' + ((save.look | 0) === k ? ' on' : '') + '" data-look="' + k + '"><span>' + i + '</span>' + n + '</button>').join('');
 }
 $('heroes').addEventListener('click', e => { const b = e.target.closest('[data-look]'); if (!b) return; save.look = +b.dataset.look; renderHeroes(); net.send({ t: 'look', v: save.look }); });
+/** Inlogreeks: zeven vakjes, de dagen die je al hebt goud, vandaag omrand. */
+function renderLogin(got) {
+  const L = (save && save.login) || { streak: 0, last: '' }, isToday = L.last === today();
+  $('login-days').innerHTML = LOGIN_REWARDS.map((R, i) => '<div class="' + (i < L.streak ? 'got' : '') + (isToday && i === L.streak - 1 ? ' today' : '') + '" title="' + esc(R.text) + '">' + R.icon + '<small>dag ' + (i + 1) + '</small></div>').join('');
+  $('login-note').innerHTML = (got ? '<b>Vandaag gekregen:</b> ' + esc(got.text.replace(/^Inlogbeloning dag \d van 7: /, '')) + '<br>' : '') +
+    'Kom elke dag terug: de beloning wordt steeds beter, op dag 7 een kist met een zwaard. Mis je een dag, dan begin je weer bij dag 1.';
+}
+let loginGot = null;
 function renderLobby() {
-  renderHeroes();
+  renderHeroes(); renderLogin(loginGot);
   $('lb-hello').textContent = 'Welkom terug, ' + myName + '. Kies een kamer of maak er zelf een.';
   const s = save.stats || {};
   const cells = [['Beste golf', s.bestWave | 0], ['Punten', s.score | 0], ['Monsters verslagen', s.kills | 0], ['Dieren gejaagd', s.animals | 0],
@@ -134,7 +142,7 @@ let handlersSet = false;
 function setHandlers() {
   if (handlersSet) return; handlersSet = true;
   net.on('authed', m => {
-    myName = m.name; save = m.save; renderLobby(); renderRooms(m.rooms); show('lobby'); loadLeaderboard();
+    myName = m.name; save = m.save; if (m.login) loginGot = m.login; renderLobby(); renderRooms(m.rooms); show('lobby'); loadLeaderboard();
     if (invitedRoom) {
       const r = m.rooms.find(x => x.id === invitedRoom); const id = invitedRoom; invitedRoom = null; clearInviteParam();
       if (r) net.send({ t: 'join', id }); else $('lb-err').textContent = 'De kamer uit je uitnodiging bestaat niet meer. Kies een andere kamer.';

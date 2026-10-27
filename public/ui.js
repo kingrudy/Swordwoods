@@ -1,6 +1,6 @@
 // HUD: meldingen (toasts en banners), gezondheid en honger, inventaris en hotbar, golfstatus, spelerslijst,
 // de uitleg voor nieuwe spelers en de pijl naar de winkel.
-import { RARITIES, MONSTERS, AXE, WAVE_MODS, dogXpNeeded } from './items.js';
+import { RARITIES, MONSTERS, AXE, WAVE_MODS, BUFF_ICONS, RECIPES, dogXpNeeded } from './items.js';
 import { TUTORIAL, ACHIEVEMENTS, WEEK_EVENTS, levelInfo, talentPoints, spentPoints } from './progress.js';
 import { renderQuests } from './progressui.js';
 import { $, esc, clamp, fmt, fwdOf } from './util.js';
@@ -83,7 +83,7 @@ export function createUi(g) {
     $('hubar').firstElementChild.style.width = clamp(you.hu, 0, 100) + '%'; $('hubar').lastElementChild.textContent = 'Honger ' + Math.round(you.hu);
     $('hubar').classList.toggle('low', you.hu < 25);
     $('score').textContent = '⭐ Punten: ' + you.sc;
-    const bf = you.bf || null; chip('buffchip', !!bf, bf ? (bf.feast ? '🍗 ' + fmt(bf.feast) + ' ' : '') + (bf.elixir ? '⚗️ ' + fmt(bf.elixir) + ' ' : '') + (bf.haste ? '🍵 ' + fmt(bf.haste) : '') : '');
+    const bf = you.bf || null; chip('buffchip', !!bf, bf ? Object.entries(bf).map(([k, t]) => (BUFF_ICONS[k] || '✨') + ' ' + fmt(t)).join(' ') : '');
     const w = $('wave');
     w.classList.toggle('fight', wave.ph === 1);
     const wm = wave.ph === 1 && wave.mod ? WAVE_MODS.find(x => x.id === wave.mod) : null;
@@ -145,6 +145,12 @@ export function createUi(g) {
   net.on('ev', m => {
     switch (m.k) {
       case 'ate': sfx.eat(); break;
+      case 'cooked': {
+        g.particles.sparkles.emit(m.x, W.heightAt(m.x, m.z) + 1, m.z, 30, 1.2, 2.5, 1.2); g.particles.chips.emit(m.x, W.heightAt(m.x, m.z) + 0.8, m.z, 12, 1, 2, 0.8);
+        if (Math.hypot(m.x - player.x, m.z - player.z) < 20) sfx.eat();
+        if (m.by !== g.myId) { const R = RECIPES.find(r => r.id === m.id), n = names.get(m.by); if (R && n && Math.hypot(m.x - player.x, m.z - player.z) < 20) toast(esc(n) + ' kookt ' + R.icon + ' ' + R.name.toLowerCase() + '.', '#c8b48a'); }
+        break;
+      }
       case 'drank': sfx.drink(); break;
       case 'quest': sfx.happy(); break;
       case 'plvl': {

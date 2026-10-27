@@ -2,7 +2,7 @@
 // De positie bepaalt de client (15x per seconde naar de server); de server controleert en zet zo nodig terug.
 import * as THREE from 'three';
 import { WATER, clampXZ } from './world.js';
-import { AXE, ROLL_CD } from './items.js';
+import { AXE, ROLL_CD, SWIFT_MUL } from './items.js';
 import { tal } from './progress.js';
 import { $, clamp, lerp, ease, fwdOf } from './util.js';
 
@@ -65,9 +65,10 @@ export function createPlayer(g) {
     blocking = on; charge.start = null; net.send({ t: 'block', on });
   }
   /** Richting uit toetsen, stick en controller: [vooruit, rechts]. */
+  const down = id => g.settings.isDown(id);
   const inputDir = () => [
-    (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - virt.y - virt.py,   // joystick omhoog = vooruit
-    (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + virt.x + virt.px,
+    (down('forward') || keys.ArrowUp ? 1 : 0) - (down('back') || keys.ArrowDown ? 1 : 0) - virt.y - virt.py,   // joystick omhoog = vooruit
+    (down('right') || keys.ArrowRight ? 1 : 0) - (down('left') || keys.ArrowLeft ? 1 : 0) + virt.x + virt.px,
   ];
   function doRoll() {
     if (g.dead || g.shopOpen || player.roll || player.sailing || now() < rollReadyAt || rooted() || !g.locked) return;
@@ -117,9 +118,9 @@ export function createPlayer(g) {
     const f = fwdOf(player.yaw), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw), [iz, ix] = inputDir();
     let wx = f.x * iz + rx * ix, wz = f.z * iz + rz * ix;
     let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
-    const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
+    const run = down('sprint') || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
     const sail = !!player.sailing;
-    const sp = rooted() ? 0 : sail ? 10.5 * wl : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * g.wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1) * (now() < (player.slowUntil || 0) ? SLOW_MUL : 1);
+    const sp = rooted() ? 0 : sail ? 10.5 * wl : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * g.wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1) * (you.bf && you.bf.swift ? SWIFT_MUL : 1) * (now() < (player.slowUntil || 0) ? SLOW_MUL : 1);
     const k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
     if (player.roll) {
       const R = player.roll; R.t += dt; const v = 15 * (1 - 0.45 * R.t / 0.38);
@@ -144,7 +145,7 @@ export function createPlayer(g) {
     if (sail) { player.onGround = true; player.vy = 0; }
     if (player.onGround) {
       if (gnd < player.y - 0.7) player.onGround = false;
-      else { player.y = gnd; if (!sail && (keys.Space || virt.jump || virt.pjump)) { player.vy = 7.6; player.onGround = false; } }
+      else { player.y = gnd; if (!sail && (down('jump') || virt.jump || virt.pjump)) { player.vy = 7.6; player.onGround = false; } }
     }
     if (!player.onGround) { player.vy -= 22 * dt; player.y += player.vy * dt; if (player.y <= gnd && player.vy <= 0) { player.y = gnd; player.vy = 0; player.onGround = true; } }
     player.bob += Math.hypot(player.vx, player.vz) * dt * 1.7;
@@ -157,8 +158,16 @@ export function createPlayer(g) {
     const bobY = player.onGround ? Math.sin(player.bob * 2) * 0.045 * Math.min(1, speed / 5) : 0;
     g.shake = Math.max(0, g.shake - dt);
     const eye = g.dead ? 0.4 : player.sailing ? 1.25 : 1.7 - (player.roll ? Math.sin(Math.min(1, player.roll.t / 0.38) * Math.PI) * 0.75 : 0) - (blocking ? 0.08 : 0);
-    camera.position.set(player.x + (Math.random() - 0.5) * g.shake * 0.2, player.y + eye + bobY, player.z + (Math.random() - 0.5) * g.shake * 0.2);
-    camera.rotation.y = player.yaw; camera.rotation.x = g.dead ? -0.9 : player.pitch;
+    const third = g.settings.S.third;
+    camera.position.set(player.x + (Math.random() - 0.5) * g.shake * 0.2, player.y + (third ? 1.6 : eye + bobY), player.z + (Math.random() - 0.5) * g.shake * 0.2);
+    camera.rotation.y = player.yaw; camera.rotation.x = g.dead && !third ? -0.9 : player.pitch;
+    if (third) {                       // camera achter en iets rechts boven je held, zelfde kijkrichting (richten blijft gelijk)
+      const cp = Math.cos(player.pitch), dist = 4.2;
+      camera.position.x += Math.sin(player.yaw) * cp * dist + Math.cos(player.yaw) * 0.6;
+      camera.position.z += Math.cos(player.yaw) * cp * dist - Math.sin(player.yaw) * 0.6;
+      camera.position.y += -Math.sin(player.pitch) * dist + 0.4;
+      camera.position.y = Math.max(camera.position.y, Math.max(W.heightAt(camera.position.x, camera.position.z), player.sailing ? WATER : -99) + 0.4);
+    }
     g.G.update(dt, time, player.x, player.y, player.z);
 
     // positie naar de server (15x per seconde)
@@ -181,8 +190,8 @@ export function createPlayer(g) {
     const sway = Math.sin(player.bob * 2) * 0.012 * Math.min(1, speed / 5);
     hand.position.set(0.34 + sway + blockT * 0.12, -0.3 + Math.abs(sway) - thrust * 0.05 - blockT * 0.22, -0.55 - thrust * 0.1);
     hand.rotation.set(-0.35 + off - blockT * 0.3, -0.25 * thrust * H, 0.32 - thrust * 0.5 * H + (it.type === 'sword' ? 0.1 : 0));
-    hand.visible = !g.dead;
-    shieldHand.visible = blockT > 0.01 && !g.dead;
+    hand.visible = !g.dead && !third;
+    shieldHand.visible = blockT > 0.01 && !g.dead && !third;
     if (shieldHand.visible) { const e2 = ease(blockT); shieldHand.position.set(lerp(-0.75, -0.2, e2), lerp(-0.9, -0.28, e2), -0.62); shieldHand.rotation.set(0, lerp(0.9, 0.25, e2), 0); }
     if (shieldHand.userData.lvl !== inv.up.shield) { shieldHand.userData.lvl = inv.up.shield; shieldHand.clear(); shieldHand.add(M.makeShieldMesh(inv.up.shield)); }
 

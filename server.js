@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Room, ensureSave, applyTalent, ensureDaily } from './room.js';
+import { Room, ensureSave, applyTalent, ensureDaily, claimLogin } from './room.js';
 import { initStats, statsData, statsHtml } from './stats.js';
 import { createStorage } from './storage.js';
 import { handleAdmin } from './admin.js';
@@ -124,7 +124,8 @@ class Client extends WsConn {
       this.send({ t: 'authed', name: u.name, save: u.save, rooms: [] });
       return this.send({ t: 'err', msg: 'Er is een nieuwe versie van Swordwoods. Herlaad de pagina (F5, of op je telefoon omlaag trekken) om verder te spelen.' });
     }
-    this.send({ t: 'authed', name: u.name, save: u.save, rooms: roomList() });
+    const login = claimLogin(u); if (login) markDirty();
+    this.send({ t: 'authed', name: u.name, save: u.save, rooms: roomList(), login });
   }
   lobby(m) {
     const s = this.user.save;

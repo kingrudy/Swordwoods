@@ -1,7 +1,7 @@
 // Alles wat beweegt en van de server komt: andere spelers, monsters, dieren en honden.
 // Zelfgebouwde figuren worden vervangen door geanimeerde 3D-figuren zodra die geladen zijn.
 import * as THREE from 'three';
-import { MONSTERS, DOG_FURS, DOG_BREEDS, decodeEq } from './items.js';
+import { MONSTERS, DOG_FURS, DOG_BREEDS, decodeEq, eqCode } from './items.js';
 import { clamp, lerp, ease, esc, fwdOf } from './util.js';
 
 /* ---------------------------------------------------------------- welke figuur en animaties per monstersoort */
@@ -76,7 +76,7 @@ export function createEntities(g) {
   }
   function onRigReady(name) {
     if (name === 'crossbow') for (const e of mons.values()) if (e.needBow && e.model.kind === 'rig') { e.needBow = false; decorateMonster(e, e.model); }
-    for (const map of [remotes, mons, anis]) for (const e of map.values()) {
+    for (const map of [remotes, mons, anis, remotesSelf]) for (const e of map.values()) {
       if (!e.want || e.want.name !== name) continue;
       const r = CH.createRig(name, e.want.height, G.quality !== 'laag'); if (r) { setRig(e, r); e.want = null; }
     }
@@ -405,6 +405,34 @@ export function createEntities(g) {
     for (const e of mons.values()) updateMonster(e, dt);
     for (const e of dogs.values()) updateDog(e, dt, time);
     for (const e of anis.values()) updateAnimal(e, dt);
+    updateSelf(dt);
   }
-  return { remotes, mons, anis, dogs, update, onRigReady, findWildDog, flash, mountItem };
+  /* ---------------------------------------------------------------- jezelf (alleen zichtbaar met de camera achter je held) */
+  let self = null, lastSwing = 1, lastRoll = null;
+  function updateSelf(dt) {
+    const on = g.settings.S.third;
+    if (!on) { if (self) self.group.visible = false; return; }
+    if (!self) {
+      self = makeEntBase(M.buildHumanoid({ cloth: M.colorForName(g.joined.you.name) })); self.id = g.myId; self.eq = -1; self.swingT = 1;
+      wantRig(self, CH.HEROES[(looks.get(g.myId) | 0) % CH.HEROES.length].key, 1.8);
+      remotesSelf.set(g.myId, self);       // zodat de geanimeerde figuur ook voor jezelf wordt ingewisseld
+    }
+    const e = self; e.group.visible = true;
+    e.tx = player.x; e.tz = player.z; e.ty = player.y; e.tyaw = player.yaw; e.first = true;   // geen naijlen: het ben jezelf
+    moveEnt(e, dt, true); e.speed = Math.hypot(player.vx, player.vz);
+    const code = eqCode(g.pl.current()); if (e.eq !== code) setRemoteEq(e, code);
+    const sw = g.pl.swingT; if (sw < lastSwing && sw < 0.2) e.swingT = 0; lastSwing = sw;
+    if (e.model.kind === 'rig') {
+      const r = e.model;
+      if (g.dead && !e.wasDead) r.once('Death_A', { hold: true }); else if (!g.dead && e.wasDead) r.unlock();
+      e.wasDead = g.dead;
+      if (e.swingT === 0) { r.once('1H_Melee_Attack_Chop', { speed: 1.35 }); e.swingT = 0.01; }
+      if (player.roll && player.roll !== lastRoll) r.once('Dodge_Forward', { speed: 1.5 }); lastRoll = player.roll;
+      if (!g.dead && !r.busy) { if (g.pl.blocking) r.loop('Blocking'); else if (player.sailing) r.loop('Idle'); else rigLocomotion(e); }
+      r.update(dt);
+    } else { if (e.swingT < 1) e.swingT = Math.min(1, e.swingT + dt / 0.45); animateBody(e); }
+  }
+  const remotesSelf = new Map();
+
+  return { remotes, mons, anis, dogs, update, onRigReady, findWildDog, flash, mountItem, updateSelf };
 }

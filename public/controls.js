@@ -39,13 +39,18 @@ export function createControls(g) {
     if (!g.locked) { clearKeys(); if (g.hud && g.hud.chatOpen && !g.isTouch) g.hud.closeChat(); pl().setBlock(false); pl().cancelCharge(); }
   });
 
+  /** Rondkijken met de instellingen voor gevoeligheid en omgekeerde muis. */
+  function look(dx, dy) {
+    const S = g.settings.S;
+    player.yaw -= dx * S.sens; player.pitch = clamp(player.pitch - dy * S.sens * (S.invertY ? -1 : 1), -1.45, 1.45);
+  }
+
   /* ---------------------------------------------------------------- muis */
   const mouseOk = () => g.locked && !g.isTouch && !g.shopOpen;
   document.addEventListener('mousemove', e => {
     if (!mouseOk()) return;
     if (g.soft) { if (!drag.down) return; drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY); }
-    player.yaw -= clamp(e.movementX, -120, 120) * 0.0022;
-    player.pitch = clamp(player.pitch - clamp(e.movementY, -120, 120) * 0.0022, -1.45, 1.45);
+    look(clamp(e.movementX, -120, 120) * 0.0022, clamp(e.movementY, -120, 120) * 0.0022);
   });
   document.addEventListener('mousedown', e => {
     if (!mouseOk()) return;
@@ -71,29 +76,33 @@ export function createControls(g) {
   const DOG_CMDS = ['follow', 'stay', 'attack', 'seek'];
   addEventListener('keydown', e => {
     const hud = g.hud, soc = g.soc, bs = g.bs;
+    if (g.settings.captureKey(e)) return;                 // nieuwe toets kiezen in Instellingen
     if (hud && hud.chatOpen) { if (e.code === 'Escape') { e.preventDefault(); hud.closeChat(); } return; }   // typen in de chat
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-    if (hud && hud.bigOpen && (e.code === 'Escape' || e.code === 'KeyM')) { hud.toggleBig(false); return; }
+    const act = g.settings.actionOf(e.code);
+    if (hud && hud.bigOpen && (e.code === 'Escape' || act === 'map')) { hud.toggleBig(false); return; }
     keys[e.code] = true;
-    if (e.code === 'Space') e.preventDefault();
+    if (e.code === 'Space' || act === 'jump') e.preventDefault();
     if (g.shopOpen) {
       if (e.code === 'Escape') { g.panels.closeShop(false); showVeil(!g.locked); }
-      else if (e.code === 'KeyE' || e.code === 'KeyB') g.panels.closeShop(true);
+      else if (act === 'use' || act === 'build') g.panels.closeShop(true);
       return;
     }
     if (!g.locked) return;
     if (g.soft && e.code === 'Escape') { g.locked = false; drag.down = false; showVeil(true); clearKeys(); return; }
-    switch (e.code) {
-      case 'KeyE': g.inter.interact(); break;
-      case 'KeyQ': net.send({ t: 'drink' }); break;
-      case 'KeyG': feedDog(); break;
-      case 'KeyR': net.send({ t: 'eat' }); break;
-      case 'KeyF': pl().startSwing(); break;
-      case 'KeyC': pl().doRoll(); break;
-      case 'KeyM': hud.toggleBig(); break;
-      case 'Enter': case 'NumpadEnter': case 'KeyT': e.preventDefault(); hud.openChat(); break;
-      case 'KeyB': bs.toggle(); break;
-      case 'KeyV': soc.toggleDogMenu(); return;
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); hud.openChat(); return; }
+    switch (act) {
+      case 'use': g.inter.interact(); break;
+      case 'drink': net.send({ t: 'drink' }); break;
+      case 'feed': feedDog(); break;
+      case 'eat': net.send({ t: 'eat' }); break;
+      case 'swing': pl().startSwing(); break;
+      case 'roll': pl().doRoll(); break;
+      case 'map': hud.toggleBig(); break;
+      case 'chat': e.preventDefault(); hud.openChat(); break;
+      case 'build': bs.toggle(); break;
+      case 'view': g.settings.toggleView(); break;
+      case 'dog': soc.toggleDogMenu(); return;
     }
     if (soc.dogMenu && /^Digit[1-4]$/.test(e.code)) { soc.command(DOG_CMDS[+e.code[5] - 1]); return; }
     if (soc.dogMenu && e.code === 'Escape') { soc.toggleDogMenu(false); return; }
@@ -134,7 +143,7 @@ export function createControls(g) {
     tz.addEventListener('pointermove', e => {
       if (e.pointerId === joyId) move(e);
       else if (e.pointerId === lookId) {
-        player.yaw -= (e.clientX - lx) * 0.0052; player.pitch = clamp(player.pitch - (e.clientY - ly) * 0.0052, -1.45, 1.45);
+        look((e.clientX - lx) * 0.0052, (e.clientY - ly) * 0.0052);
         lx = e.clientX; ly = e.clientY;
       }
     });
@@ -195,7 +204,7 @@ export function createControls(g) {
     if (g.shopOpen && hit(1)) g.panels.closeShop(false);
     if (g.locked && !g.dead && !g.shopOpen) {
       virt.px = dz(p.axes[0]); virt.py = dz(p.axes[1]);
-      player.yaw -= dz(p.axes[2]) * 2.6 * dt; player.pitch = clamp(player.pitch - dz(p.axes[3]) * 2.0 * dt, -1.45, 1.45);
+      look(dz(p.axes[2]) * 2.6 * dt, dz(p.axes[3]) * 2.0 * dt);
       const atk = b(0) || b(7);
       if (atk && !virt.pattack) pl().beginCharge(); else if (!atk && virt.pattack) pl().releaseCharge();
       virt.pattack = atk; virt.pjump = b(1); virt.psprint = b(10);

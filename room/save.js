@@ -1,6 +1,6 @@
 // Opgeslagen spelersgegevens: controleren/aanvullen bij laden, dagelijkse opdrachten en talenten.
-import { MAX_POTIONS, DOG_MAX_LEVEL, DOG_FURS, statueOf, breedOf } from '../public/items.js';
-import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, dailyQuests, FORGE_MAX, TUTORIAL, isoWeek } from '../public/progress.js';
+import { MAX_POTIONS, MAX_SWORDS, DOG_MAX_LEVEL, DOG_FURS, statueOf, breedOf, rollSwordAtLeast } from '../public/items.js';
+import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, yesterday, dailyQuests, FORGE_MAX, TUTORIAL, isoWeek, LOGIN_REWARDS } from '../public/progress.js';
 import { clamp } from './shared.js';
 
 export function ensureSave(u) {
@@ -13,7 +13,7 @@ export function ensureSave(u) {
   if (s.dog && (typeof s.dog.name !== 'string' || !Number.isFinite(s.dog.level))) s.dog = null;
   if (s.dog) { s.dog.breed = breedOf(s.dog.breed).id; s.dog.level = clamp(s.dog.level | 0, 1, DOG_MAX_LEVEL); s.dog.xp = Math.max(0, s.dog.xp | 0); s.dog.fur = clamp(s.dog.fur | 0, 0, DOG_FURS.length - 1); }
   if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) { let h = 0; for (const ch of String(u.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; s.look = h % 4; }
-  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0, bosses: 0, fish: 0, ore: 0, forgedMax: 0, quests: 0, heavyKills: 0, dungeons: 0, pvpWins: 0, pvpLosses: 0, gifts: 0, feasts: 0, voyages: 0, digs: 0, statues: 0, masks: 0, goldEarned: 0, pharaohs: 0, weekTop3: 0, weekWins: 0, revives: 0 }, s.stats || {});
+  s.stats = Object.assign({ kills: 0, deaths: 0, bestWave: 0, score: 0, animals: 0, trees: 0, chests: 0, playSec: 0, built: 0, bosses: 0, fish: 0, ore: 0, forgedMax: 0, quests: 0, heavyKills: 0, dungeons: 0, pvpWins: 0, pvpLosses: 0, gifts: 0, feasts: 0, voyages: 0, digs: 0, statues: 0, masks: 0, goldEarned: 0, pharaohs: 0, weekTop3: 0, weekWins: 0, revives: 0, meals: 0 }, s.stats || {});
   if (!s.biomes || typeof s.biomes !== 'object') s.biomes = {};
   s.xp = Math.max(0, s.xp | 0); s.ore = Math.max(0, s.ore | 0); s.gold = Math.max(0, s.gold | 0);
   s.up.shovel = clamp(s.up.shovel | 0, 0, 1);
@@ -55,4 +55,29 @@ export function ensureWeek(s, k = isoWeek().k) {
   if (!s.week || typeof s.week !== 'object' || s.week.k !== k) s.week = { k, pts: 0 };
   s.week.pts = Math.max(0, s.week.pts | 0);
   return s.week;
+}
+
+/**
+ * Inlogbeloning: de eerste keer per dag (Nederlandse tijd). Een reeks van opeenvolgende dagen loopt op tot 7;
+ * mis je een dag of heb je dag 7 gehad, dan begint hij weer bij 1. Geeft { day, text } als er iets is uitgedeeld.
+ */
+export function claimLogin(u, now = Date.now()) {
+  if (process.env.LOGIN_REWARD === '0') return null;   // tests: geen beloning tussen de verwachte getallen
+  const s = u.save, d = today(now);
+  if (!s.login || typeof s.login !== 'object') s.login = { last: '', streak: 0 };
+  if (s.login.last === d) return null;
+  const streak = s.login.last === yesterday(now) && s.login.streak < LOGIN_REWARDS.length ? s.login.streak + 1 : 1;
+  s.login = { last: d, streak };
+  const R = LOGIN_REWARDS[streak - 1];
+  s.wood += R.wood | 0; s.meat += R.meat | 0; s.gold = (s.gold | 0) + (R.gold | 0); s.ore = (s.ore | 0) + (R.ore | 0);
+  s.potions = Math.min(MAX_POTIONS, s.potions + (R.potions | 0));
+  let swordName = '';
+  if (R.sword) {
+    const sw = rollSwordAtLeast(2, 1.5); sw.d0 = sw.damage; sw.f = 0; swordName = ' (' + sw.name + ')';
+    if (s.swords.length < MAX_SWORDS) s.swords.push(sw);
+    else { let wi = 0; s.swords.forEach((x, i) => { if (x.damage < s.swords[wi].damage) wi = i; }); if (sw.damage > s.swords[wi].damage) s.swords[wi] = sw; }
+  }
+  const text = 'Inlogbeloning dag ' + streak + ' van 7: ' + R.text + swordName + '.';
+  s.notes.push(R.icon + ' ' + text);
+  return { day: streak, text };
 }

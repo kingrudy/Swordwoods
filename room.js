@@ -2,7 +2,7 @@
 // Alle onderwerpen (golven, honden, bouwen, woestijn, ...) staan in room/*.js en worden onderaan aan Room gekoppeld.
 
 import { createWorld, worldOk, WATER, clampXZ, inDesert } from './public/world.js';
-import { rollSwordOfRarity, AXE, MONSTERS, eqCode, WEATHERS, DOG_BREEDS, breedOf, ROLL_CD, ROLL_IFRAME } from './public/items.js';
+import { REGEN_PER_SEC, rollSwordOfRarity, AXE, MONSTERS, eqCode, WEATHERS, DOG_BREEDS, breedOf, ROLL_CD, ROLL_IFRAME } from './public/items.js';
 import { tal, maxHp } from './public/progress.js';
 import { bump } from './stats.js';
 import { logChat, mutedUntil, muteText } from './moderation.js';
@@ -22,7 +22,8 @@ import { Desert } from './room/desert.js';
 import { Building } from './room/building.js';
 import { Pyramid } from './room/pyramid.js';
 import { Bosses } from './room/bosses.js';
-export { ensureSave, ensureDaily, applyTalent } from './room/save.js';
+import { Cooking } from './room/cooking.js';
+export { ensureSave, ensureDaily, applyTalent, claimLogin } from './room/save.js';
 export { CFG } from './room/shared.js';
 
 /** Stralen (m) voor wat een speler te zien krijgt; mist begint op zo'n 60-90 m. */
@@ -200,6 +201,7 @@ export class Room {
       case 'unboard': this.unboard(P); break;
       case 'dig': this.dig(P, m.i | 0); break;
       case 'revive': this.startRevive(P, m.id | 0); break;
+      case 'cook': this.cook(P, String(m.id)); break;
       case 'sell': this.sellStatues(P, String(m.k)); break;
       case 'pyramid': this.openPyramid(P); break;
       case 'bzbuy': this.bazaarBuy(P, String(m.id)); break;
@@ -249,7 +251,8 @@ export class Room {
         const bs = P.u.save.biomes; if (!bs[P.biome]) { bs[P.biome] = 1; this.sendInv(P); this.markDirty(); }
       }
       const cold = P.biome === 'snow' && !warm ? 1.3 : 1;
-      P.hunger = Math.max(0, P.hunger - CFG.hungerRate * dt * (warm ? 0.5 : 1) * cold * (1 - 0.1 * tal(P.u.save, 'maag')));
+      P.hunger = Math.max(0, P.hunger - CFG.hungerRate * dt * (warm ? 0.5 : 1) * cold * (1 - 0.1 * tal(P.u.save, 'maag')) * (this.buff(P, 'hearty') ? 0.5 : 1));
+      if (this.buff(P, 'regen') && P.hp < P.mhp) P.hp = Math.min(P.mhp, P.hp + REGEN_PER_SEC * dt);
       if (warm && P.hp < P.mhp) P.hp = Math.min(P.mhp, P.hp + 3 * dt);
       P.u.save.stats.playSec += dt; bump('playSec', dt);
       if (P.hunger <= 0) {
@@ -312,6 +315,6 @@ export class Room {
 }
 
 // De rest van de kamer staat per onderwerp in room/*.js.
-for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid, Bosses]) {
+for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid, Bosses, Cooking]) {
   for (const k of Object.getOwnPropertyNames(Mixin.prototype)) if (k !== 'constructor') Object.defineProperty(Room.prototype, k, Object.getOwnPropertyDescriptor(Mixin.prototype, k));
 }

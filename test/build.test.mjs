@@ -75,7 +75,10 @@ if (R.builds.has(wall.id)) {
   ok(!msgs.some(m => m.t === 'correct'), 'langs de muur lopen mag gewoon');
   goto(wall.x - nx * 0.6, wall.z - nz * 0.6); P.lastInT = R.T; msgs.length = 0; walk(wall.x - nx * 0.4, wall.z - nz * 0.4);
   ok(!msgs.some(m => m.t === 'correct') && Math.abs(P.x - (wall.x - nx * 0.4)) < 0.01, 'tegen de muur aan staan (client-straal 0,38) mag');
-  goto(wall.x, wall.z); P.lastInT = R.T; msgs.length = 0; walk(wall.x - nx * 1.2, wall.z - nz * 1.2);
+  // de kant van de muur kiezen waar geen ander bouwwerk (zoals het kampvuur hierboven) in de weg staat
+  const others = [...R.builds.values()].filter(b => b !== wall), clear = sg => Math.min(99, ...others.map(b => Math.hypot(b.x - (wall.x + sg * nx * 1.2), b.z - (wall.z + sg * nz * 1.2))));
+  const sg = clear(-1) >= clear(1) ? -1 : 1;
+  goto(wall.x, wall.z); P.lastInT = R.T; msgs.length = 0; walk(wall.x + sg * nx * 1.2, wall.z + sg * nz * 1.2);
   ok(!msgs.some(m => m.t === 'correct'), 'wie in een muur staat mag eruit lopen');
 }
 // toren schiet

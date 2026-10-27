@@ -119,6 +119,13 @@ def desktop(b):
         if A.evaluate("__game.bs.builds.size") > n0: break
     A.evaluate("__game.bs.active && __game.bs.toggle()")
     check(A.evaluate("__game.bs.builds.size") > n0, "kampvuur gebouwd", A.evaluate("__game.bs.builds.size"))
+    f = A.evaluate("(() => { const b = [...__game.bs.builds.values()].find(b => b.kind === 'campfire'); return b ? [b.x, b.z] : null; })()")
+    if f:
+        goto(A, f[0] + 2, f[1], (f[0], f[1])); play(A, 300)
+        check(A.evaluate("__game.action()") == "cook", "aanwijzing koken bij het kampvuur", A.evaluate("__game.prompt()"))
+        A.evaluate("__game.interact()"); play(A, 300)
+        check(A.evaluate("document.getElementById('cook').classList.contains('on') && document.querySelectorAll('[data-cook]').length === 4"), "kookpaneel open met 4 recepten")
+        A.evaluate("__game.closeShop(true)"); play(A, 200)
 
     # monsters, treffers en buit
     cheat(A, "/zwaard 3"); A.evaluate("__game.net.send({ t: 'equip', i: 1 })")
@@ -160,7 +167,18 @@ def desktop(b):
     for tab in ["tal", "quest", "give", "keys"]:
         A.click(f"#ptabs [data-pt={tab}]"); play(A, 100)
         check(A.evaluate(f"document.getElementById('pt-{tab}').classList.contains('on')"), f"pauzetab {tab}")
+    A.click("#ptabs [data-pt=set]"); play(A, 100)
+    check(A.evaluate("document.querySelectorAll('#pt-set [data-bind]').length >= 15 && !!document.querySelector('#pt-set [data-set=fov]')"), "instellingen: toetsen, beeldhoek en gevoeligheid")
+    A.click("#pt-set [data-bind=use]"); A.keyboard.press("KeyX"); play(A, 100)
+    check(A.evaluate("__game.g.settings.S.keys.use === 'KeyX' && document.getElementById('pt-keys').innerText.includes('X')"), "toets voor gebruiken omgezet naar X")
+    A.click("#pt-set [data-reset]"); play(A, 100)
+    check(A.evaluate("__game.g.settings.S.keys.use === 'KeyE'"), "standaardtoetsen terug")
+    A.click("#ptabs [data-pt=keys]"); play(A, 100)
     A.click("#btn-resume"); play(A, 400)
+    A.evaluate("__game.g.settings.toggleView()"); play(A, 1500)
+    check(A.evaluate("(() => { const g = __game, c = g.camera.position, p = g.player; return Math.hypot(c.x - p.x, c.z - p.z) > 2; })()"), "camera achter je held")
+    shot(A, "derdepersoon.png")
+    A.evaluate("__game.g.settings.toggleView()"); play(A, 200)
     A.evaluate("__game.hud.openChat()"); play(A, 200)
     A.keyboard.type("hallo rooktest"); A.keyboard.press("Enter"); play(A, 600)
     check(A.evaluate("document.body.innerText.includes('hallo rooktest')"), "chatbericht zichtbaar")
@@ -222,7 +240,7 @@ def mobile(b):
     s = A.evaluate("[__game.W.shop.x, __game.W.shop.z, __game.W.shop.rotY]")
     import math
     goto(A, s[0] + math.sin(s[2]) * 3.5, s[1] + math.cos(s[2]) * 3.5, (s[0], s[1])); play(A, 400)
-    check(A.evaluate("document.querySelector('#tb-use i, #tb-use').textContent.includes('🏪')"), "X-knop toont winkel", A.evaluate("document.getElementById('tb-use').textContent"))
+    check(wait_for(A, "document.getElementById('tb-use').textContent.includes('🏪')"), "X-knop toont winkel", A.evaluate("document.getElementById('tb-use').textContent + ' ' + JSON.stringify(__game.getLocked())"))
     A.dispatch_event("#tb-use", "pointerdown"); play(A, 300)
     check(A.evaluate("document.getElementById('shop').classList.contains('on')"), "winkel open via X")
     shot(A, "mobiel.png")

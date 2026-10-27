@@ -1,0 +1,21 @@
+import { ROOT, tmpData } from './helpers.mjs';
+process.env.LOGIN_REWARD = '1';
+// Dagelijkse inlogbeloning: één keer per dag, reeks tot 7, opnieuw na een gemiste dag.
+import { ensureSave, claimLogin } from '../room.js';
+import { LOGIN_REWARDS } from '../public/progress.js';
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+const u = { name: 'Trouw', save: {} }; ensureSave(u); const s = u.save;
+const day = n => Date.parse('2026-10-01T10:00:00Z') + n * 864e5;
+let r = claimLogin(u, day(0));
+ok(r && r.day === 1 && s.wood === 20 && s.login.streak === 1, 'dag 1: ' + r.text);
+ok(claimLogin(u, day(0) + 3600e3) === null && s.wood === 20, 'twee keer op een dag: maar één beloning');
+for (let d = 1; d < 6; d++) r = claimLogin(u, day(d));
+ok(r.day === 6 && s.gold === 35 && s.potions === 3 && s.ore === 3, 'dag 2 t/m 6 opgeteld (goud ' + s.gold + ', drankjes ' + s.potions + ')');
+const sw0 = s.swords.length; r = claimLogin(u, day(6));
+ok(r.day === 7 && s.swords.length === sw0 + 1 && s.swords.at(-1).rarity >= 2, 'dag 7: een zwaard van minstens zeldzaam (' + s.swords.at(-1).name + ')');
+r = claimLogin(u, day(7)); ok(r.day === 1, 'na dag 7 begint de reeks opnieuw');
+r = claimLogin(u, day(8)); ok(r.day === 2, 'volgende dag: dag 2');
+r = claimLogin(u, day(10)); ok(r.day === 1, 'een dag gemist: weer dag 1');
+ok(s.notes.some(n => /Inlogbeloning dag 7/.test(n)), 'bericht klaar voor als je een kamer in gaat');
+ok(LOGIN_REWARDS.length === 7, 'zeven dagen');
+process.exit(fails ? 1 : 0);

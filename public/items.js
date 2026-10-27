@@ -184,3 +184,15 @@ export const BIOMES = {
   dark:   { name: 'Het Duistere Bos', icon: '🌑', desc: 'Kisten bevatten hier betere zwaarden.' },
   desert: { name: 'Het Woestijneiland', icon: '🏜️', desc: 'Graaf in zandbergen naar faraobeelden en verkoop ze bij Farid voor goud.' },
 };
+
+/** Koken bij een kampvuur: je eet het meteen op (+40 honger) en krijgt een tijdelijk voordeel. */
+export const RECIPES = [
+  { id: 'spies', name: 'Visspies',       icon: '🍢', need: { fish: 2, wood: 1 },           buff: 'regen',  sec: 240, desc: '4 min lang 3 levens per seconde terug' },
+  { id: 'stoof', name: 'Jagersstoofpot', icon: '🍲', need: { meat: 3, wood: 2 },           buff: 'hearty', sec: 360, desc: '6 min lang half zo snel honger' },
+  { id: 'pan',   name: 'Pittige vispan', icon: '🥘', need: { fish: 1, meat: 1, wood: 2 },  buff: 'swift',  sec: 180, desc: '3 min lang 15% sneller lopen' },
+  { id: 'maal',  name: 'Koningsmaal',    icon: '👑', need: { meat: 2, fish: 2, gold: 10 }, buff: 'royal',  sec: 300, desc: '5 min lang 15% meer schade en 10% minder schade' },
+];
+export const COOK_RANGE = 3.5, COOK_HUNGER = 40, REGEN_PER_SEC = 3, SWIFT_MUL = 1.15;
+/** Pictogram per tijdelijk voordeel (HUD). */
+export const BUFF_ICONS = { feast: '🍗', elixir: '⚗️', haste: '🍵', regen: '🍢', hearty: '🍲', swift: '🥘', royal: '👑' };
+export const NEED_NAMES = { fish: 'vis', meat: 'vlees', wood: 'hout', gold: 'goud' };
