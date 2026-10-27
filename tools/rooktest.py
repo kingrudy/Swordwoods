@@ -255,6 +255,7 @@ def desktop(b):
     A.evaluate("__game.interact()")
     check(wait_for(A, "Math.hypot(__game.player.x - __game.W.travel.forest.x, __game.player.z - __game.W.travel.forest.z) < 3", 12000), "gereisd naar het bos")
 
+    cheat(A, "/stil")      # monsters opruimen: de telefoonspeler komt straks in dezelfde kamer
     check(not errs, "geen fouten in de browser", "; ".join(errs[:5]))
     ctx.close()
 
