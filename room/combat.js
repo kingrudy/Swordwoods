@@ -88,14 +88,16 @@ export class Combat {
 
   hitEnemy(P, it, e, kind, heavy) {
     const s = P.u.save, full = P.hunger >= 80 ? 1.15 : 1;   // goed gevoed = iets sterker
-    const dmg = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1) * (1 + 0.06 * tal(s, 'kracht')) * (this.buff(P, 'elixir') ? 1.25 : 1) * (this.buff(P, 'feast') ? 1.1 : 1);
-    e.hp -= dmg; e.stun = heavy ? 0.5 : 0.18;
-    if (heavy && !(kind === 'm' && e.type === 3)) {          // terugduwen (niet de baas)
+    const dmg0 = (it.type === 'axe' ? AXE.damage + s.up.axe * 2 : it.damage) * full * (0.9 + Math.random() * 0.2) * (heavy ? HEAVY_MUL : 1) * (1 + 0.06 * tal(s, 'kracht')) * (this.buff(P, 'elixir') ? 1.25 : 1) * (this.buff(P, 'feast') ? 1.1 : 1);
+    const [gf, parried] = kind === 'm' ? this.guardFactor(e, P) : [1, false];   // Schaduwridder pareert van voren
+    const dmg = dmg0 * gf;
+    e.hp -= dmg; e.stun = Math.max(e.stun || 0, parried ? 0 : heavy ? 0.5 : 0.18);
+    if (heavy && !parried && !(kind === 'm' && MONSTERS[e.type].boss)) {          // terugduwen (niet de baas)
       const dx = e.x - P.x, dz = e.z - P.z, d = len(dx, dz) || 1, r = kind === 'm' ? MONSTERS[e.type].r : ANIMALS[e.type].r;
       this.move(e, e.x + dx / d * 1.4, e.z + dz / d * 1.4, r);
     }
     if (kind === 'a') { e.angry = true; e.hurtT = this.T; }
-    this.bc({ t: 'ev', k: 'hit', e: kind, id: e.id, dmg: Math.round(dmg), x: r1(e.x), z: r1(e.z), heavy: heavy ? 1 : 0 });
+    this.bc({ t: 'ev', k: 'hit', e: kind, id: e.id, dmg: Math.round(dmg), x: r1(e.x), z: r1(e.z), heavy: heavy ? 1 : 0, ...(parried ? { parry: 1 } : {}) });
     if (e.hp <= 0) { if (kind === 'm') { this.killMonster(e, P); if (heavy) { s.stats.heavyKills++; this.quest(P, 'heavy'); } } else this.killAnimal(e, P); }
   }
 
@@ -108,6 +110,7 @@ export class Combat {
       if ((dx * -Math.sin(P.yaw) + dz * -Math.cos(P.yaw)) / d > 0.35) {
         dmg *= kind === 'arrow' ? 0 : BLOCK_MELEE;
         if (kind !== 'arrow' && src.stun !== undefined) src.stun = Math.max(src.stun, 0.35);
+        if (kind !== 'arrow') this.onBlocked(src);
         this.bc({ t: 'ev', k: 'blocked', id: P.id, x: r1(P.x), z: r1(P.z) });
         if (dmg <= 0) return;
       }

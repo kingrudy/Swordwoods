@@ -5,17 +5,21 @@ import { MONSTERS, DOG_FURS, DOG_BREEDS, decodeEq } from './items.js';
 import { clamp, lerp, ease, esc, fwdOf } from './util.js';
 
 /* ---------------------------------------------------------------- welke figuur en animaties per monstersoort */
-const RIG_FOR_MONSTER = (type, id) => ({ 0: id % 2 ? 'skeleton_rogue' : 'skeleton_minion', 2: 'forest_monster', 3: 'forest_monster', 4: 'skeleton_mage', 5: 'rogue_hooded', 6: 'skeleton_warrior', 7: 'skeleton_minion', 8: 'skeleton_warrior' })[type] || null;
-const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10, 4: 1.7, 5: 1.75, 6: 2.15, 7: 1.75, 8: 4.4 };   // bosmonster: hoogte inclusief de boom op zijn rug
+const RIG_FOR_MONSTER = (type, id) => ({ 0: id % 2 ? 'skeleton_rogue' : 'skeleton_minion', 2: 'forest_monster', 3: 'forest_monster', 4: 'skeleton_mage', 5: 'rogue_hooded', 6: 'skeleton_warrior', 7: 'skeleton_minion', 8: 'skeleton_warrior', 9: 'forest_monster', 10: 'mage', 11: 'knight' })[type] || null;
+const RIG_HEIGHT = { 0: 1.65, 2: 4.5, 3: 10, 4: 1.7, 5: 1.75, 6: 2.15, 7: 1.75, 8: 4.4, 9: 9, 10: 2.7, 11: 3.2 };   // bosmonster: hoogte inclusief de boom op zijn rug
 export const CLIPS = {
   skeleton: { idle: 'Idle_Combat', walk: 'Walking_D_Skeletons', run: 'Running_C', walkSpeed: 2.2, runSpeed: 5.2, attack: '1H_Melee_Attack_Chop', atkSpeed: 1.4, die: 'Death_A', hit: 'Hit_A', spawn: 'Spawn_Ground_Skeletons' },
   forest: { idle: 'Idle', walk: 'Walk', run: 'Walk', walkSpeed: 1.6, runSpeed: 99, attack: 'Attack', atkSpeed: 1.0, die: 'Dying', hit: null, spawn: null },
 };
 CLIPS.archer = { ...CLIPS.skeleton, attack: '1H_Ranged_Shoot', atkSpeed: 1.3 };
 CLIPS.hunter = { ...CLIPS.skeleton, attack: '2H_Melee_Attack_Chop', atkSpeed: 1.25 };
+CLIPS.hero = { idle: 'Idle', walk: 'Walking_A', run: 'Running_A', walkSpeed: 2.0, runSpeed: 5.5, attack: '1H_Melee_Attack_Chop', atkSpeed: 1.2, die: 'Death_A', hit: 'Hit_A', spawn: null };
+CLIPS.witch = { ...CLIPS.hero, attack: '1H_Melee_Attack_Stab', cast: 'Taunt' };
+CLIPS.knight = { ...CLIPS.hero, attack: '2H_Melee_Attack_Chop', atkSpeed: 1.0 };
 CLIPS.sneak = { idle: 'Idle_Combat', walk: 'Walking_A', run: 'Running_A', walkSpeed: 2.0, runSpeed: 5.5, attack: 'Dualwield_Melee_Attack_Slice', atkSpeed: 1.3, die: 'Death_A', hit: 'Hit_A', spawn: null };
-export const clipsOf = e => e.type === 2 || e.type === 3 ? CLIPS.forest : e.type === 4 ? CLIPS.archer : e.type === 5 ? CLIPS.sneak : e.type === 6 ? CLIPS.hunter : CLIPS.skeleton;
-const TINT = { 6: 0xffb8a8, 7: 0xf0dcae };   // hondenjager rossig, mummie zandkleurige zwachtels
+export const clipsOf = e => e.type === 2 || e.type === 3 || e.type === 9 ? CLIPS.forest : e.type === 10 ? CLIPS.witch : e.type === 11 ? CLIPS.knight : e.type === 4 ? CLIPS.archer : e.type === 5 ? CLIPS.sneak : e.type === 6 ? CLIPS.hunter : CLIPS.skeleton;
+const TINT = { 6: 0xffb8a8, 7: 0xf0dcae, 10: 0x8fd08a };   // hondenjager rossig, mummie zwachtels, Sneeuwreus ijzig, Moerasheks groen
+const GLOW = { 8: [0x4a3000, 0.5], 9: [0x10304a, 0.45], 10: [0x0a3a10, 0.5], 11: [0x2a0a40, 0.8] };   // farao goud, ridder paars
 
 export function createEntities(g) {
   const { scene, W, M, CH, G, net, player, camera, names, looks, sfx } = g, { sparkles, blood } = g.particles;
@@ -38,8 +42,11 @@ export function createEntities(g) {
     if (e.type >= 5) rig.inner.traverse(o => {
       if (!o.isMesh) return;
       if (e.type === 5) { o.material.color.multiply(new THREE.Color(0x5a4a6e)); o.material.transparent = true; (e.stealthMats ||= []).push(o.material); }
-      else if (TINT[e.type]) o.material.color.multiply(new THREE.Color(TINT[e.type]));
-      else if (e.type === 8) { o.material.color.multiply(new THREE.Color(0xffd27a)); if (o.material.emissive) { o.material.emissive.set(0x4a3000); o.material.emissiveIntensity = 0.5; } }   // farao: goud
+      if (TINT[e.type]) o.material.color.multiply(new THREE.Color(TINT[e.type]));
+      if (e.type === 8) o.material.color.multiply(new THREE.Color(0xffd27a));
+      if (e.type === 11) o.material.color.multiply(new THREE.Color(0x3a3448));
+      if (e.type === 9) o.material.color.setRGB(1.7, 2.0, 2.4);                     // Sneeuwreus: de donkere huid flink oplichten tot ijsblauw
+      if (GLOW[e.type] && o.material.emissive) { o.material.emissive.set(GLOW[e.type][0]); o.material.emissiveIntensity = GLOW[e.type][1]; }
     });
   }
   let bossSkin = null;
@@ -107,6 +114,7 @@ export function createEntities(g) {
       e.flashMats = [];
       e.group.traverse(o => { if (o.isMesh && o.material && o.material.emissive && !(o.material.emissiveIntensity > 1)) {
         if (!o.material.userData.own) { o.material = o.material.clone(); o.material.userData.own = true; }
+        o.material.userData.e0 = [o.material.emissive.getHex(), o.material.emissiveIntensity];   // eigen gloed (farao, ridder) terugzetten na het flitsen
         e.flashMats.push(o.material);
       } });
     }
@@ -115,7 +123,10 @@ export function createEntities(g) {
   function tickFlash(e, dt) {
     if (!(e.flashT > 0)) return;
     e.flashT = Math.max(0, e.flashT - dt); const k = e.flashT / 0.16;
-    for (const m of e.flashMats) { m.emissive.setRGB(1, 0.15, 0.1); m.emissiveIntensity = k * 0.9; }
+    for (const m of e.flashMats) {
+      if (k > 0) { m.emissive.setRGB(1, 0.15, 0.1); m.emissiveIntensity = k * 0.9; }
+      else { m.emissive.setHex(m.userData.e0[0]); m.emissiveIntensity = m.userData.e0[1]; }
+    }
   }
   function showBar(e) { e.bar.position.set(e.x, e.y + e.barY, e.z); e.bar.quaternion.copy(camera.quaternion); M.setBar(e.bar, e.hp / e.maxhp); }
 
@@ -175,9 +186,9 @@ export function createEntities(g) {
   /* ---------------------------------------------------------------- monsters en dieren */
   const seenMons = new Set();
   function makeMonster(id, type) {
-    const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.isMon = true; e.scaleF = type === 2 ? 1.9 : type === 3 ? 3.6 : type === 8 ? 2.0 : type === 0 ? 0.85 : 1;
+    const model = M.buildMonster(type), e = makeEntBase(model); e.id = id; e.type = type; e.isMon = true; e.scaleF = type === 2 ? 1.9 : type === 3 || type === 9 ? 3.6 : type === 8 ? 2.0 : type === 11 ? 1.7 : type === 10 ? 1.4 : type === 0 ? 0.85 : 1;
     e.bar = M.makeBar(0.9 + model.height * 0.18); scene.add(e.bar); e.barY = model.height + 0.35;
-    if (type === 3 || type === 8) { const l = M.makeLabel(MONSTERS[type].name, type === 8 ? '#ffd27a' : '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
+    if (MONSTERS[type].boss || type === 8) { const l = M.makeLabel(MONSTERS[type].name, type === 8 ? '#ffd27a' : '#ff9a6a'); l.position.y = model.height + 1.1; l.scale.multiplyScalar(2.2); e.group.add(l); }
     wantRig(e, RIG_FOR_MONSTER(type, id), RIG_HEIGHT[type], !seenMons.has(id));   // uit de grond opstaan alleen de eerste keer
     seenMons.add(id); if (seenMons.size > 2000) seenMons.clear();
     mons.set(id, e); return e;
@@ -218,7 +229,7 @@ export function createEntities(g) {
       else e.group.visible = !hidden;
       if (e.alphaOld !== a > 0.95) { e.alphaOld = a > 0.95; e.group.traverse(o => { if (o.isMesh) o.castShadow = a > 0.95; }); }
     }
-    if (e.bar) { e.bar.visible = !hidden && (e.hp < e.maxhp || e.type === 3 || e.type === 8); if (e.bar.visible) showBar(e); }
+    if (e.bar) { e.bar.visible = !hidden && (e.hp < e.maxhp || MONSTERS[e.type].boss || e.type === 8); if (e.bar.visible) showBar(e); }
   }
   function updateAnimal(e, dt) {
     if (tickDying(anis, e, dt, 0.5, 0.8)) return;
@@ -331,7 +342,8 @@ export function createEntities(g) {
       }
       case 'hit': {
         const map = m.e === 'm' ? mons : anis, e = map.get(m.id), gy = heightAt(m.x, m.z);
-        g.fx.addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.dmg + (m.heavy ? '!' : ''), m.heavy ? '#ff9a3a' : m.e === 'm' ? '#ffe08a' : '#ffffff');
+        g.fx.addPopup(m.x, gy + (e ? e.model.height : 1.2) + 0.5, m.z, m.parry ? 'Pareert! ' + m.dmg : m.dmg + (m.heavy ? '!' : ''), m.parry ? '#9aa3b5' : m.heavy ? '#ff9a3a' : m.e === 'm' ? '#ffe08a' : '#ffffff');
+        if (m.parry) { sfx.clang(); if (!g.parryTip) { g.parryTip = true; g.ui.toast('🛡️ De Schaduwridder pareert van voren. Blok zijn slag (rechtermuisknop / 🛡️) zodat hij wankelt, of sla hem in de rug.', '#9ad8ff'); } }
         if (m.heavy && near(m.x, m.z, 6)) g.shake = Math.max(g.shake, 0.18);
         blood.emit(m.x, gy + (e ? e.model.height * 0.5 : 0.7), m.z, 8, 2.2, 2.5, 0.6);
         if (e) { flash(e); if (m.e === 'm' && e.model.kind === 'rig' && !e.model.busy && !e.dying) { const cs = clipsOf(e); if (cs.hit) e.model.once(cs.hit, { speed: 1.6 }); } }
@@ -348,6 +360,20 @@ export function createEntities(g) {
         break;
       }
       case 'lunge': rigOnce(mons.get(m.id), 'Dodge_Forward', { speed: 1.4 }); break;
+      case 'stagger': {
+        const e = mons.get(m.id); if (!e) break;
+        rigOnce(e, 'Hit_A', { speed: 0.6 }); g.fx.addPopup(e.x, e.y + e.model.height + 0.8, e.z, 'Wankelt!', '#7affc8');
+        sparkles.emit(e.x, e.y + 2, e.z, 40, 2, 2, 1); if (near(e.x, e.z, 30)) sfx.clang();
+        break;
+      }
+      case 'blink': {
+        const e = mons.get(m.id);
+        g.particles.leaves.emit(m.x0, heightAt(m.x0, m.z0) + 1, m.z0, 40, 2.5, 2, 1.2); g.particles.leaves.emit(m.x, heightAt(m.x, m.z) + 1, m.z, 40, 2.5, 2, 1.2);
+        if (e) { e.x = e.tx = m.x; e.z = e.tz = m.z; rigOnce(e, CLIPS.witch.cast, { speed: 1.2 }); }
+        if (near(m.x, m.z, 30)) sfx.rumble();
+        break;
+      }
+      case 'frost': case 'poison': { const e = mons.get(m.id); if (e) rigOnce(e, clipsOf(e) === CLIPS.witch ? CLIPS.witch.cast : clipsOf(e).attack, { speed: 0.8 }); break; }
       case 'roll': { const e = remotes.get(m.id); if (e && e.model.kind === 'rig') e.model.once('Dodge_Forward', { speed: 1.5 }); break; }
       case 'block': { const e = remotes.get(m.id); if (e) e.blocking = m.on; break; }
       case 'blocked': {
@@ -360,7 +386,7 @@ export function createEntities(g) {
       case 'matk': { const e = mons.get(m.id); if (e) { const cs = clipsOf(e); rigOnce(e, cs.attack, { speed: cs.atkSpeed }); } break; }
       case 'mdie': {
         const e = mons.get(m.id);
-        if (e && e.model.kind === 'rig') { e.dying = e.type === 2 || e.type === 3 ? 2.0 : 1.8; e.model.once(clipsOf(e).die, { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
+        if (e && e.model.kind === 'rig') { e.dying = clipsOf(e) === CLIPS.forest ? 2.0 : 1.8; e.model.once(clipsOf(e).die, { hold: true }); if (e.bar) { scene.remove(e.bar); e.bar = null; } }
         else killEnt(mons, m.id);
         blood.emit(m.x, heightAt(m.x, m.z) + 0.8, m.z, 30, 3.2, 3.5, 1); if (near(m.x, m.z, 40)) sfx.kill();
         break;

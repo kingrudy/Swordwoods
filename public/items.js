@@ -60,14 +60,23 @@ export const MONSTERS = [
   { key: 'kobold', name: 'Boskobold',    hp: 24, dmg: 6,  speed: 3.7, r: 0.5, score: 10, minWave: 1, weight: 6, atkCd: 1.1 },
   { key: 'wolf',   name: 'Schaduwwolf',  hp: 18, dmg: 8,  speed: 6.3, r: 0.55, score: 12, minWave: 2, weight: 4, atkCd: 0.8 },
   { key: 'troll',  name: 'Bosmonster',    hp: 80, dmg: 12, speed: 2.8, r: 0.95, score: 30, minWave: 4, weight: 2, atkCd: 1.9 },
-  { key: 'reus',   name: 'Woudreus',   hp: 420, dmg: 30, speed: 3.3, r: 1.7, score: 150, minWave: 99, weight: 0, atkCd: 2.0 },
+  { key: 'reus',   name: 'Woudreus',   hp: 420, dmg: 30, speed: 3.3, r: 1.7, score: 150, minWave: 99, weight: 0, atkCd: 2.0, boss: true },
   { key: 'schutter', name: 'Skeletschutter', hp: 16, dmg: 6, speed: 3.4, r: 0.5, score: 14, minWave: 3, weight: 2, atkCd: 2.9, ranged: true },
   { key: 'sluiper',  name: 'Sluiper',        hp: 16, dmg: 13, speed: 6.4, r: 0.45, score: 16, minWave: 5, weight: 2, atkCd: 1.3, stealth: true },
   { key: 'jager',    name: 'Hondenjager',    hp: 60, dmg: 12, speed: 4.6, r: 0.6, score: 22, minWave: 6, weight: 2, atkCd: 1.2, hunter: true },
   // Alleen in de piramide op het Woestijneiland (komen nooit in golven voor)
   { key: 'mummie',   name: 'Mummie',         hp: 48, dmg: 10, speed: 3.3, r: 0.55, score: 25, minWave: 99, weight: 0, atkCd: 1.3 },
   { key: 'farao',    name: 'Mummie-farao',   hp: 650, dmg: 24, speed: 3.0, r: 1.2, score: 400, minWave: 99, weight: 0, atkCd: 1.8 },
+  // Bazen die om de beurt elke 5e golf komen (na de Woudreus)
+  { key: 'sneeuwreus', name: 'Sneeuwreus',    hp: 480, dmg: 26, speed: 3.1, r: 1.7, score: 170, minWave: 99, weight: 0, atkCd: 2.0, boss: true },
+  { key: 'heks',       name: 'Moerasheks',    hp: 340, dmg: 18, speed: 3.8, r: 0.7, score: 170, minWave: 99, weight: 0, atkCd: 1.6, boss: true },
+  { key: 'ridder',     name: 'Schaduwridder', hp: 520, dmg: 28, speed: 4.0, r: 0.9, score: 200, minWave: 99, weight: 0, atkCd: 1.7, boss: true, guarded: true },
 ];
+/** Volgorde van de bazen: golf 5, 10, 15, 20, daarna weer van voren (steeds sterker). */
+export const BOSSES = [3, 9, 10, 11];
+export const bossForWave = n => BOSSES[(Math.max(1, Math.floor(n / 5)) - 1) % BOSSES.length];
+/** Schaduwridder: van voren gepareerd (zoveel schade komt erdoor), tenzij hij wankelt na een geblokte slag. */
+export const GUARD_FRONT = 0.15, STAGGER_SEC = 2.5, STAGGER_MUL = 1.5;
 /** Piramide: betaal goud bij de ingang om de mummies en daarna de farao te wekken. */
 export const PYRAMID = { cost: 30, cooldown: 1800, guards: 5, perPlayer: 2, giveUp: 25, reward: [40, 80], maskChance: 0.25 };
 /** Golfmodificaties: soms krijgt een golf een extra eigenschap (en meer beloning). */

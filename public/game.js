@@ -2,6 +2,7 @@
 // Elk onderdeel staat in een eigen bestand en krijgt hetzelfde gedeelde object `g` mee (status, scène, server, ...).
 import * as THREE from 'three';
 import { createWorld, WATER, WORLD, MAP } from './world.js';
+import { MONSTERS } from './items.js';
 import * as M from './models.js';
 import * as CH from './characters.js';
 import { createGraphics, QUALITY } from './graphics.js';
@@ -57,6 +58,7 @@ export async function startGame({ net, joined, user }) {
       chips: new Particles(scene, 0xc89a5e, 0.11, 300), leaves: new Particles(scene, 0x4c8f36, 0.14, 300, false, 3),
       sparkles: new Particles(scene, 0xffe08a, 0.16, 400, true, -1.5), blood: new Particles(scene, 0xb8332d, 0.13, 300, false, 12),
       splash: new Particles(scene, 0xcfeaff, 0.12, 200, false, 9), sand: new Particles(scene, 0xe2c27e, 0.2, 400, false, 6),
+      frost: new Particles(scene, 0xe6f6ff, 0.15, 300, true, 4), gas: new Particles(scene, 0x8fe060, 0.22, 300, false, -0.6),
     },
     // start met zicht op de winkel
     player: { x: joined.you.x, y: joined.you.y, z: joined.you.z, vy: 0, vx: 0, vz: 0, yaw: Math.atan2(-(W.shop.x - joined.you.x), -(W.shop.z - joined.you.z)), pitch: 0, onGround: true, bob: 0 },
@@ -106,7 +108,7 @@ export async function startGame({ net, joined, user }) {
   function updateSound(dt, time) {
     const { music, sfx, wfx, wave } = g;
     if (Math.floor(time * 2) !== Math.floor((time - dt) * 2)) {
-      const boss = wave.ph === 1 && [...g.ents.mons.values()].some(e => e.type === 3);
+      const boss = wave.ph === 1 && [...g.ents.mons.values()].some(e => MONSTERS[e.type].boss);
       music.setMood(boss ? 'boss' : wave.ph === 1 ? 'fight' : G.state.night > 0.5 ? 'night' : 'calm');
       music.setOctave(wfx.biome === 'snow' ? 5 : wfx.biome === 'dark' ? -2 : 0);
       const w = wfx.weather; AU.ambience(w === 'regen' ? 1 : w === 'onweer' ? 1.3 : 0, (wfx.biome === 'snow' ? 0.8 : 0) + (w === 'onweer' ? 0.6 : w === 'mist' ? 0.2 : 0.1));

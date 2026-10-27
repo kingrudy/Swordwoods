@@ -175,6 +175,16 @@ def desktop(b):
     check(A.evaluate("[...__game.mons.values()].some(e => e.type === 3)"), "woudreus verschenen")
     check(wait_for(A, "__game.fx.some(f => f.kind === 'warn' || f.kind === 'roots')", 12000), "wortels van de woudreus")
     shot(A, "baas.png")
+    # de andere bazen: Sneeuwreus (ijsstorm), Moerasheks (gifwolk), Schaduwridder (pareert)
+    for typ, naam, fxjs in [(9, "sneeuwreus", "__game.fx.some(f => f.style === 'frost')"), (10, "moerasheks", "__game.fx.some(f => f.style === 'poison' || f.kind === 'gas')"), (11, "schaduwridder", "true")]:
+        A.evaluate("__game.net.send({ t: 'chat', text: '/golf' })"); play(A, 600)
+        cheat(A, f"/spawn {typ} 1", 1500)
+        check(wait_for(A, f"[...__game.mons.values()].some(e => e.type === {typ})"), naam + " verschenen")
+        check(wait_for(A, fxjs, 14000), naam + " gebruikt zijn vaardigheid")
+        if typ == 11:
+            e = A.evaluate("(() => { const e = [...__game.mons.values()].find(e => e.type === 11); return [e.x, e.z]; })()")
+            goto(A, e[0] + 1.5, e[1], (e[0], e[1])); A.evaluate("__game.startSwing()"); play(A, 600)
+        shot(A, naam + ".png")
     A.evaluate("__game.net.send({ t: 'chat', text: '/golf' })")
 
     # woestijn: graven, bazaar, piramide

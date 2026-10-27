@@ -1,5 +1,6 @@
 // Extra HUD: minikaart + grote kaart, kamerchat met snelberichten en markeringen, fps-teller.
 import { $, esc } from './util.js';
+import { MONSTERS } from './items.js';
 
 export const QUICK = [
   { text: 'Help!', ping: true }, { text: 'Kom hierheen!', ping: true }, { text: 'Kist gevonden!', ping: true },
@@ -50,7 +51,7 @@ export function createHud(ctx) {
       if (e.owner === myId) out.push({ x: e.x, z: e.z, kind: 'mydog' });
       else if (!e.owner && seenDogs.has(e.id)) out.push({ x: e.x, z: e.z, kind: 'wilddog' });
     }
-    for (const e of ctx.mons.values()) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 70 && !(e.type === 5 && d > 9)) out.push({ x: e.x, z: e.z, kind: 'monster', boss: e.type === 3 || e.type === 8 }); }
+    for (const e of ctx.mons.values()) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 70 && !(e.type === 5 && d > 9)) out.push({ x: e.x, z: e.z, kind: 'monster', boss: !!MONSTERS[e.type]?.boss || e.type === 8 }); }
     for (const m of (ctx.extraMarkers ? ctx.extraMarkers() : [])) out.push(m);
     return out;
   }

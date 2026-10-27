@@ -21,6 +21,7 @@ import { WorldEvents } from './room/worldEvents.js';
 import { Desert } from './room/desert.js';
 import { Building } from './room/building.js';
 import { Pyramid } from './room/pyramid.js';
+import { Bosses } from './room/bosses.js';
 export { ensureSave, ensureDaily, applyTalent } from './room/save.js';
 export { CFG } from './room/shared.js';
 
@@ -61,7 +62,7 @@ export class Room {
     this.felled = new Map();      // idx -> respawn time
     this.chestOpen = new Map();   // idx -> reset time
     this.wave = { n: 0, ph: 0, t: CFG.firstWave, mod: null };   // ph 0 = wachten, 1 = gevecht
-    this.projs = []; this.hazards = [];
+    this.projs = []; this.hazards = []; this.zones = [];
     this.oreLeft = Int8Array.from(this.world.ores, o => o.rich ? 6 : 4); this.oreBack = new Map();
     this.ruinSt = this.world.ruins.map(() => ({ st: 'idle', guards: new Set(), until: 0 }));
     this.weather = { k: 'helder', until: 150 + Math.random() * 150, bolt: 0 };
@@ -301,7 +302,7 @@ export class Room {
     for (const P of this.players.values()) {
       const near = (e, r) => Math.abs(e.x - P.x) < r && Math.abs(e.z - P.z) < r && len(e.x - P.x, e.z - P.z) < r;
       const m = [], a = [];
-      for (const [e, t] of mons) if (e.type === 3 || e.type === 8 || near(e, rm)) m.push(t);
+      for (const [e, t] of mons) if (MONSTERS[e.type].boss || e.type === 8 || near(e, rm)) m.push(t);
       for (const [e, t] of anis) if (near(e, ra)) a.push(t);
       const you = { hp: Math.round(P.hp), mhp: P.mhp, bf: this.buffInfo(P), hu: Math.round(P.hunger), sc: P.u.save.stats.score, rs: P.dead ? Math.max(0, Math.ceil(P.respawnAt - this.T)) : 0 };
       P.conn.send(head + ',"m":' + JSON.stringify(m) + ',"a":' + JSON.stringify(a) + ',"y":' + JSON.stringify(you) + '}');
@@ -311,6 +312,6 @@ export class Room {
 }
 
 // De rest van de kamer staat per onderwerp in room/*.js.
-for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid]) {
+for (const Mixin of [Progress, Economy, Combat, Waves, Animals, Dogs, Fishing, Social, WorldEvents, Desert, Building, Pyramid, Bosses]) {
   for (const k of Object.getOwnPropertyNames(Mixin.prototype)) if (k !== 'constructor') Object.defineProperty(Room.prototype, k, Object.getOwnPropertyDescriptor(Mixin.prototype, k));
 }

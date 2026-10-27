@@ -244,6 +244,9 @@ export function buildMonster(type) {
     case 6: return { kind: 'biped', ...buildHumanoid({ skin: 0xd9cfba, cloth: 0x7a2a22, scale: 1.15, bulk: 1.2, eye: 0xff5a2a, club: true, hairStyle: false }), height: 2.2 };
     case 7: return { kind: 'biped', ...buildHumanoid({ skin: 0xe6d6a8, cloth: 0xcfbf90, scale: 0.95, eye: 0x7aff6a, hairStyle: false }), height: 1.8 };
     case 8: return { kind: 'biped', ...buildHumanoid({ skin: 0xe6d6a8, cloth: 0xf2c14e, scale: 2.0, bulk: 1.3, eye: 0x7aff6a, club: true, hairStyle: false }), height: 4.2 };
+    case 9: return { kind: 'biped', ...buildHumanoid({ skin: 0xdbe8f2, cloth: 0x6d8aa8, scale: 3.4, bulk: 1.6, tusks: true, eye: 0x7ad8ff, club: true, hairStyle: false }), height: 7.2 };
+    case 10: return { kind: 'biped', ...buildHumanoid({ skin: 0x7fa36a, cloth: 0x2f4a2a, scale: 1.35, eye: 0xc6ff4a, hairStyle: false }), height: 2.6 };
+    case 11: return { kind: 'biped', ...buildHumanoid({ skin: 0x2a2633, cloth: 0x1a1622, scale: 1.7, bulk: 1.3, eye: 0xb070ff, club: true, hairStyle: false }), height: 3.2 };
     default: return { kind: 'biped', ...buildHumanoid({ skin: 0x5a3d6b, cloth: 0x2a1f33, scale: 3.6, bulk: 1.55, tusks: true, eye: 0xff4a10, club: true, hairStyle: false }), height: 7.6 };
   }
 }

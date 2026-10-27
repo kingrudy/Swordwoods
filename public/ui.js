@@ -5,6 +5,8 @@ import { TUTORIAL, ACHIEVEMENTS, WEEK_EVENTS, levelInfo, talentPoints, spentPoin
 import { renderQuests } from './progressui.js';
 import { $, esc, clamp, fmt, fwdOf } from './util.js';
 
+const BOSS_TIP = { 3: 'rol weg uit de rode cirkels', 9: 'zijn ijsstorm maakt je traag', 10: 'blijf uit haar gifwolken', 11: 'blok zijn slag, dan wankelt hij' };
+
 export function createUi(g) {
   const { net, inv, you, wave, names, looks, player, W, sfx } = g;
   let lastPlayers = [];
@@ -118,7 +120,7 @@ export function createUi(g) {
   net.on('wave', m => {
     if (m.ph === 1) {
       const mod = WAVE_MODS.find(x => x.id === m.mod);
-      banner('GOLF ' + m.n + (m.boss ? '<small>Een baas nadert: ' + MONSTERS[3].name + '</small>' : mod ? '<small style="color:#ff9a6a">' + mod.name + ': ' + mod.desc + ' · meer beloning</small>' : '<small>' + m.count + ' monsters komen eraan</small>'), 4600);
+      banner('GOLF ' + m.n + (m.boss ? '<small>Een baas nadert: ' + MONSTERS[m.boss === true ? 3 : m.boss].name + (BOSS_TIP[m.boss] ? ' · ' + BOSS_TIP[m.boss] : '') + '</small>' : mod ? '<small style="color:#ff9a6a">' + mod.name + ': ' + mod.desc + ' · meer beloning</small>' : '<small>' + m.count + ' monsters komen eraan</small>'), 4600);
       sfx.horn();
       if (m.ease) setTimeout(() => toast('💪 Nieuwe poging: de monsters van deze golf zijn ' + m.ease + '% zwakker.', '#9ad8ff'), 1500);
     } else if (m.wipe) banner('Iedereen is gevallen<small>Golf ' + (m.n + 1) + ' begint opnieuw</small>', 4200);

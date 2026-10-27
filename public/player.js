@@ -7,6 +7,7 @@ import { tal } from './progress.js';
 import { $, clamp, lerp, ease, fwdOf } from './util.js';
 
 const HEAVY_HOLD = 0.45;   // zo lang vasthouden voor een zware slag
+const SLOW_MUL = 0.55;     // ijsstorm van de Sneeuwreus
 
 export function createPlayer(g) {
   const { W, M, net, inv, you, camera, handScene, sfx, keys, virt } = g;
@@ -81,6 +82,7 @@ export function createPlayer(g) {
 
   /* ---------------------------------------------------------------- berichten van de server */
   net.on('correct', m => { player.x = m.x; player.y = m.y; player.z = m.z; player.vx = player.vz = player.vy = 0; });
+  net.on('slowed', m => { const was = now() < (player.slowUntil || 0); player.slowUntil = now() + m.s; if (!was) g.ui.toast('❄️ Bevroren: je bent even trager.', '#9adcff'); });
   net.on('rooted', m => { player.rootUntil = now() + m.s; player.roll = null; g.shake = Math.max(g.shake, 0.3); g.ui.toast('🌿 Vastgegroeid door wortels!', '#9adf6a'); });
   net.on('hurt', () => { $('vignette').classList.add('on'); setTimeout(() => $('vignette').classList.remove('on'), 90); g.shake = 0.35; sfx.hurt(); });
   net.on('dead', m => {
@@ -117,7 +119,7 @@ export function createPlayer(g) {
     let wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; wl = 1; }
     const run = keys.ShiftLeft || keys.ShiftRight || virt.sprint || virt.toggle || virt.psprint;
     const sail = !!player.sailing;
-    const sp = rooted() ? 0 : sail ? 10.5 * wl : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * g.wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1);
+    const sp = rooted() ? 0 : sail ? 10.5 * wl : (run && !blocking ? 9 : 5.4) * wl * (blocking ? 0.45 : 1) * (1 + 0.04 * tal(inv, 'vlug')) * g.wfx.swampK * (you.bf && you.bf.haste ? 1.2 : 1) * (now() < (player.slowUntil || 0) ? SLOW_MUL : 1);
     const k = Math.min(1, dt * (player.onGround ? 11 : 2.5));
     if (player.roll) {
       const R = player.roll; R.t += dt; const v = 15 * (1 - 0.45 * R.t / 0.38);

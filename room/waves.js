@@ -1,7 +1,7 @@
 // Golven, monsters en hun gedrag (schutters, sluipers, hondenjagers, baas), pijlen en wortels.
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
 import { WATER, clampXZ, inDesert } from '../public/world.js';
-import { rollSword, MONSTERS, WAVE_MODS } from '../public/items.js';
+import { rollSword, MONSTERS, WAVE_MODS, bossForWave } from '../public/items.js';
 import { XP } from '../public/progress.js';
 import { bump, maxOf } from '../stats.js';
 import { BUILD_BY_ID, pushOut, boundR } from '../public/builds.js';
@@ -11,7 +11,7 @@ export class Waves {
   wipe() {
     bump('wipe.' + String(this.wave.n).padStart(2, '0'));
     const w = this.wave; if (w.ph === 1) { if (w.failN === w.n) w.fails++; else { w.failN = w.n; w.fails = 1; } }
-    this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.wave.mod = null;
+    this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.zones.length = 0; this.wave.mod = null;
     if (this.pyr.st === 'guards' || this.pyr.st === 'boss') this.pyrSet('idle');
     this.wave.n = Math.max(0, this.wave.n - 1); this.wave.ph = 0; this.wave.t = CFG.wipeDelay;
     this.bc({ t: 'wave', ph: 0, n: this.wave.n, wipe: true, next: this.wave.t });
@@ -38,17 +38,17 @@ export class Waves {
       for (; k < pool.length - 1; k++) { if (t < pool[k].m.weight) break; t -= pool[k].m.weight; }
       list.push(pool[k].i);
     }
-    const boss = n % 5 === 0;
-    if (boss) list.push(3);
+    const boss = n % 5 === 0 ? bossForWave(n) : 0;
+    if (boss) list.push(boss);
     let spawned = 0;
     for (const type of list) {
       const P = this.pickAlive(), cx = P ? P.x : 0, cz = P ? P.z : 0;
       const pt = this.world.landPoint(Math.random, cx, cz, 38, 58, 0.0) || this.world.landPoint(Math.random, 0, 0, 20, 90, 0.0);
       if (!pt) continue;
-      const bossMul = type === 3 ? (1 + 0.25 * (n / 5 - 1)) * (alive === 1 ? 0.75 : 1) : 1;   // alleen tegen de baas: wat minder levens
+      const bossMul = MONSTERS[type].boss ? (1 + 0.25 * (n / 5 - 1)) * (alive === 1 ? 0.75 : 1) : 1;   // alleen tegen de baas: wat minder levens
       this.spawnMonster(type, pt.x, pt.z, hpMul * bossMul, scale.dmg * bossMul, scale.spd); spawned++;
     }
-    this.bc({ t: 'wave', ph: 1, n, boss, count: spawned, mod: w.mod, ease: tired ? Math.round((1 - ease) * 100) : 0 });
+    this.bc({ t: 'wave', ph: 1, n, boss: boss || 0, count: spawned, mod: w.mod, ease: tired ? Math.round((1 - ease) * 100) : 0 });
     if (w.mod) bump('mod.' + w.mod);
   }
 
@@ -58,7 +58,7 @@ export class Waves {
       id: this.eid++, type, x, z, yaw: 0, hp: M.hp * hpMul, maxhp: M.hp * hpMul,
       dmg: M.dmg * dmgMul, speed: M.speed * spdMul, nextAtk: 0, stun: 0, retarget: 0, target: null,
       wave: true,   // telt mee voor het einde van de golf (bewakers van ruïnes en piramide niet)
-      abRoots: this.T + 6, abSummon: this.T + 12, abSand: this.T + 5, lungeCd: 0, lungeUntil: 0, strafe: Math.random() < 0.5 ? 1 : -1,
+      abRoots: this.T + 6, abSummon: this.T + 12, abSand: this.T + 5, abFrost: this.T + 6, abPoison: this.T + 5, abBlink: this.T + 9, abDash: this.T + 4, lungeCd: 0, lungeUntil: 0, strafe: Math.random() < 0.5 ? 1 : -1,
     };
     this.monsters.set(m.id, m);
     return m;
@@ -69,7 +69,7 @@ export class Waves {
   endWave() {
     const w = this.wave, modW = (w.mod ? 1.5 : 1) * this.wk('wave'); w.ph = 0; w.t = CFG.waveGap; w.mod = null; w.fails = 0; w.failN = 0;
     bump('waves'); bump('waveSec', this.T - (w.startT || this.T)); bump('wave.reached.' + String(w.n).padStart(2, '0')); maxOf('wave.max', w.n);
-    this.projs.length = 0; this.hazards.length = 0;
+    this.projs.length = 0; this.hazards.length = 0; this.zones.length = 0;
     for (const P of this.players.values()) {
       if (P.dead) continue;
       const s = P.u.save; s.stats.bestWave = Math.max(s.stats.bestWave, w.n);
@@ -92,11 +92,11 @@ export class Waves {
     if (!P) { this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type }); return; }
     const M = MONSTERS[m.type], s = P.u.save;
     s.stats.kills++; s.stats.score += M.score * Math.max(1, this.wave.n);
-    if (m.type === 3) s.stats.bosses++;
+    if (M.boss) s.stats.bosses++;
     bump('kills'); bump('kill.' + M.key);
     this.addXp(P, M.score * XP.kill); this.quest(P, 'kill');
     this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type });
-    if (Math.random() < (m.type === 3 ? 1 : 0.06 * this.wk('drop'))) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
+    if (Math.random() < (M.boss ? 1 : 0.06 * this.wk('drop'))) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
     this.sendInv(P); this.markDirty();
   }
 
@@ -155,14 +155,14 @@ export class Waves {
         if (pt) { m.x = pt.x; m.z = pt.z; dx = tg.x - m.x; dz = tg.z - m.z; d = len(dx, dz); }
       }
       m.yaw = Math.atan2(-dx, -dz);
-      if (m.type === 3) this.bossAbilities(m, alive);
+      if (M.boss) this.bossAbilities(m, pool);
       else if (m.type === 8) this.pharaohAbilities(m, pool);
       if (M.ranged && !m.siege) { this.archerAI(m, M, tg, dx, dz, d, dt); continue; }
       let speed = m.speed;
       if (M.stealth) {                              // sluiper: springt het laatste stuk naar voren
         if (d < 6 && d > 1.6 && this.T >= m.lungeCd) { m.lungeCd = this.T + 4; m.lungeUntil = this.T + 0.45; this.bc({ t: 'ev', k: 'lunge', id: m.id }); }
-        if (this.T < m.lungeUntil) speed *= 2.6;
       }
+      if (this.T < m.lungeUntil) speed *= 2.6;          // sluiper en Schaduwridder: even naar voren stormen
       const reach = M.r + 0.9;
       if (m.siege && (!this.builds.has(m.siege.id) || len(m.siege.x - m.x, m.siege.z - m.z) > boundR(BUILD_BY_ID[m.siege.kind]) + M.r + 1.2)) m.siege = null;
       if (m.siege && d > reach) {                 // bouwwerk in de weg: eerst kapotslaan
@@ -171,7 +171,7 @@ export class Waves {
         if (this.T >= m.nextAtk) {
           m.nextAtk = this.T + M.atkCd; m.siegeHits = (m.siegeHits || 0) + 1;
           this.bc({ t: 'ev', k: 'matk', id: m.id });
-          this.hurtBuild(sb, m.dmg * (m.type === 3 ? 2.5 : 1.3), m);
+          this.hurtBuild(sb, m.dmg * (M.boss ? 2.5 : 1.3), m);
           if (m.siegeHits > 3) { m.siege = null; m.siegeHits = 0; }   // af en toe opnieuw proberen erlangs te lopen
           if (!this.monsters.has(m.id)) continue;
         }
@@ -188,7 +188,7 @@ export class Waves {
         if (tg.isDog) this.hurtDog(tg, m.dmg * (M.hunter ? 1.5 : 1)); else this.hurt(tg, m.dmg, m);
       }
     }
-    this.updateProjectiles(dt); this.updateHazards();
+    this.updateProjectiles(dt); this.updateHazards(dt);
     // niet op elkaar stapelen
     for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
       const a = arr[i], b = arr[j], dx = b.x - a.x, dz = b.z - a.z, d = len(dx, dz), min = MONSTERS[a.type].r + MONSTERS[b.type].r;
@@ -228,50 +228,6 @@ export class Waves {
       }
       p.life -= dt;
       if (hit || p.life <= 0) this.projs.splice(i, 1);
-    }
-  }
-
-  bossAbilities(m, alive) {
-    const near = alive.filter(p => !p.isDog && len(p.x - m.x, p.z - m.z) < 30);
-    if (this.T >= m.abRoots && near.length) {         // wortels schieten onder spelers uit de grond
-      m.abRoots = this.T + 8 + Math.random() * 3;
-      const pts = near.slice(0, 6).map(p => [r1(p.x), r1(p.z)]);
-      for (const [x, z] of pts) this.hazards.push({ x, z, r: 2.4, at: this.T + 1.3, dmg: 18 * (this.waveScale?.dmg || 1) });
-      this.bc({ t: 'ev', k: 'roots', id: m.id, pts, delay: 1.3 });
-    }
-    if (this.T >= m.abSummon && near.length) {        // roept kobolds op
-      m.abSummon = this.T + 18 + Math.random() * 6;
-      const summoned = [...this.monsters.values()].filter(x => x.summoned).length;
-      const sc = this.waveScale || { hp: 1, dmg: 1, spd: 1 };
-      const pts = [];
-      for (let i = 0; i < 3 && summoned + i < 8; i++) {
-        const a = Math.random() * 6.28, x = m.x + Math.cos(a) * 3.5, z = m.z + Math.sin(a) * 3.5;
-        if (this.world.heightAt(x, z) < WATER + 0.9) continue;
-        const k = this.spawnMonster(0, x, z, sc.hp * 0.8, sc.dmg, sc.spd); k.summoned = true; pts.push([r1(x), r1(z)]);
-      }
-      if (pts.length) this.bc({ t: 'ev', k: 'summon', id: m.id, pts });
-    }
-  }
-
-  updateHazards() {
-    for (let i = this.hazards.length - 1; i >= 0; i--) {
-      const h = this.hazards[i]; if (this.T < h.at) continue;
-      this.hazards.splice(i, 1);
-      for (const P of this.players.values()) {
-        if (P.dead || len(P.x - h.x, P.z - h.z) > h.r) continue;
-        if (this.T < (P.iframe || 0)) { P.conn.send({ t: 'ev', k: 'dodged' }); continue; }
-        this.hurt(P, h.dmg, null, 'melee', h.bolt ? 'bliksem' : h.sand ? 'zandstraal' : 'wortels');
-        if (!h.bolt && !h.sand) { P.rootUntil = this.T + 1.5; P.conn.send({ t: 'rooted', s: 1.5 }); }
-      }
-      for (const d of this.dogs.values()) if (d.state === 'follow' && len(d.x - h.x, d.z - h.z) < h.r) this.hurtDog(d, h.dmg * 0.6);
-      if (h.bolt) {
-        for (const m of [...this.monsters.values()]) if (len(m.x - h.x, m.z - h.z) < h.r) { m.hp -= 40; if (m.hp <= 0) this.killMonster(m, null); }
-        this.world.gNear(h.x, h.z, o => {
-          if (!o.type || this.felled.has(o.idx) || len(o.x - h.x, o.z - h.z) > 2.6) return;
-          this.felled.set(o.idx, this.T + CFG.treeRespawn); this.treeHp[o.idx] = 0;
-          this.bc({ t: 'ev', k: 'felled', i: o.idx, dx: 1, dz: 0 });
-        });
-      }
     }
   }
 }
