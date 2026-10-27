@@ -9,8 +9,8 @@ import { clamp, sstep } from './util.js';
 
 const C = h => new THREE.Color(h);
 
-export const CYCLE_SEC = 1200;          // één dag + nacht = 20 minuten
-const DAY_FRAC = 0.7;                   // 70% dag, 30% nacht
+export { CYCLE_SEC } from './world.js';
+import { CYCLE_SEC, DAY_FRAC, dayT as clockT } from './world.js';
 
 export const QUALITY = {
   laag:   { label: 'Laag',   pr: 1,   shadow: 1024, bloom: false, grass: 0.35, flies: 40 },
@@ -222,7 +222,7 @@ export function createGraphics({ renderer, scene, camera, handScene, handCam, qu
   /* ---------------------------------------------------------------- tijd van de dag */
   function dayT() {
     if (forcedT !== null) return forcedT;
-    return (((Date.now() + serverOffset) / 1000) % CYCLE_SEC) / CYCLE_SEC;
+    return clockT(Date.now() + serverOffset);
   }
   const tmpC = new THREE.Color(), sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
   const state = { night: 0, day: 1, elev: 1 };

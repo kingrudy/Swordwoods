@@ -1,17 +1,20 @@
 // Golven, monsters en hun gedrag (schutters, sluipers, hondenjagers, baas), pijlen en wortels.
 // Methodes van Room (worden in room.js op Room.prototype gezet; `this` is de kamer).
-import { WATER, clampXZ, inDesert } from '../public/world.js';
+import { WATER, clampXZ, inDesert, isNight } from '../public/world.js';
 import { rollSword, MONSTERS, WAVE_MODS, bossForWave } from '../public/items.js';
 import { XP } from '../public/progress.js';
 import { bump, maxOf } from '../stats.js';
 import { BUILD_BY_ID, pushOut, boundR, SPIKE_SLOW } from '../public/builds.js';
 import { r1, r2, len, CFG } from './shared.js';
 
+/** Nachtgolf: sterkere en meer monsters, en de volgende golf komt sneller; dubbele buit (punten, hout, zwaarden). */
+export const NIGHT = { hp: 1.25, dmg: 1.2, spd: 1.08, count: 1.2, loot: 2, gap: 0.5 };
+
 export class Waves {
   wipe() {
     bump('wipe.' + String(this.wave.n).padStart(2, '0'));
     const w = this.wave; if (w.ph === 1) { if (w.failN === w.n) w.fails++; else { w.failN = w.n; w.fails = 1; } }
-    this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.zones.length = 0; this.wave.mod = null;
+    this.monsters.clear(); this.projs.length = 0; this.hazards.length = 0; this.zones.length = 0; this.wave.mod = null; this.wave.night = false;
     if (this.pyr.st === 'guards' || this.pyr.st === 'boss') this.pyrSet('idle');
     this.wave.n = Math.max(0, this.wave.n - 1); this.wave.ph = 0; this.wave.t = CFG.wipeDelay;
     this.bc({ t: 'wave', ph: 0, n: this.wave.n, wipe: true, next: this.wave.t });
@@ -19,17 +22,26 @@ export class Waves {
 
   pickAlive() { const a = [...this.players.values()].filter(p => !p.dead && !inDesert(p.x, p.z)); return a[Math.floor(Math.random() * a.length)] || null; }
 
+  /** Nacht volgens de klok van de server (dezelfde als de lucht bij de spelers); tests kunnen hem vastzetten. */
+  isNight() {
+    if (this.forceNight !== undefined) return this.forceNight;
+    const f = process.env.FORCE_NIGHT; if (f === '0' || f === '1') return f === '1';   // tests: vaste tijd
+    return isNight(Date.now());
+  }
+
   startWave(forceMod = null) {
     const w = this.wave; w.n++; w.ph = 1; w.startT = this.T;
+    w.night = this.isNight();          // nachtgolf: sterker en meer monsters, maar dubbele buit
+    const NG = w.night ? NIGHT : { hp: 1, dmg: 1, spd: 1, count: 1 };
     const n = w.n, alive = [...this.players.values()].filter(p => !p.dead).length || 1;
     const mod = forceMod ? WAVE_MODS.find(x => x.id === forceMod) : (n >= 3 && n % 5 !== 0 && Math.random() < 0.45 ? WAVE_MODS[Math.floor(Math.random() * WAVE_MODS.length)] : null);
     w.mod = mod ? mod.id : null;
     const tired = w.fails && w.failN === n ? Math.min(3, w.fails) : 0;   // na een wipe op deze golf: telkens iets makkelijker (max 3 keer)
     const ease = 1 - 0.12 * tired;
-    const scale = { hp: (1 + 0.30 * (n - 1)) * (mod?.hp || 1) * ease, dmg: (1 + 0.12 * (n - 1)) * (mod?.dmg || 1) * ease, spd: Math.min(1.4, 1 + 0.02 * (n - 1)) * (mod?.spd || 1) };
+    const scale = { hp: (1 + 0.30 * (n - 1)) * (mod?.hp || 1) * ease * NG.hp, dmg: (1 + 0.12 * (n - 1)) * (mod?.dmg || 1) * ease * NG.dmg, spd: Math.min(1.4, 1 + 0.02 * (n - 1)) * (mod?.spd || 1) * NG.spd };
     this.waveScale = scale;
     const hpMul = scale.hp * (1 + 0.15 * (alive - 1));
-    const count = Math.min(80, Math.round((3 + 1.6 * n) * (0.7 + 0.3 * alive) * (mod?.count || 1)));
+    const count = Math.min(80, Math.round((3 + 1.6 * n) * (0.7 + 0.3 * alive) * (mod?.count || 1) * NG.count));
     const pool = MONSTERS.map((m, i) => ({ m, i })).filter(x => x.m.minWave <= n);
     const total = pool.reduce((a, x) => a + x.m.weight, 0);
     const list = [];
@@ -48,8 +60,9 @@ export class Waves {
       const bossMul = MONSTERS[type].boss ? (1 + 0.25 * (n / 5 - 1)) * (alive === 1 ? 0.75 : 1) : 1;   // alleen tegen de baas: wat minder levens
       this.spawnMonster(type, pt.x, pt.z, hpMul * bossMul, scale.dmg * bossMul, scale.spd); spawned++;
     }
-    this.bc({ t: 'wave', ph: 1, n, boss: boss || 0, count: spawned, mod: w.mod, ease: tired ? Math.round((1 - ease) * 100) : 0 });
+    this.bc({ t: 'wave', ph: 1, n, boss: boss || 0, count: spawned, mod: w.mod, night: w.night, ease: tired ? Math.round((1 - ease) * 100) : 0 });
     if (w.mod) bump('mod.' + w.mod);
+    if (w.night) bump('wave.night');
   }
 
   spawnMonster(type, x, z, hpMul, dmgMul, spdMul) {
@@ -67,7 +80,7 @@ export class Waves {
   waveLeft() { let n = 0; for (const m of this.monsters.values()) if (m.wave) n++; return n; }
 
   endWave() {
-    const w = this.wave, modW = (w.mod ? 1.5 : 1) * this.wk('wave'); w.ph = 0; w.t = CFG.waveGap; w.mod = null; w.fails = 0; w.failN = 0;
+    const w = this.wave, modW = (w.mod ? 1.5 : 1) * this.wk('wave') * (w.night ? NIGHT.loot : 1); w.ph = 0; w.t = CFG.waveGap; w.mod = null; w.fails = 0; w.failN = 0;
     bump('waves'); bump('waveSec', this.T - (w.startT || this.T)); bump('wave.reached.' + String(w.n).padStart(2, '0')); maxOf('wave.max', w.n);
     this.projs.length = 0; this.hazards.length = 0; this.zones.length = 0;
     for (const P of this.players.values()) {
@@ -77,11 +90,12 @@ export class Waves {
       const bonus = Math.round(w.n * 25 * modW); s.stats.score += bonus;
       P.hp = Math.min(P.mhp, P.hp + 30);
       const wb = Math.round(w.n * 3 * modW); s.wood += wb;
-      this.toast(P, 'Golf ' + w.n + ' verslagen! +' + bonus + ' punten en +' + wb + ' hout', '#f2c14e');
-      if (Math.random() < 0.4) this.giveSword(P, rollSword(Math.min(1, w.n / 12)), 'wave');
+      this.toast(P, (w.night ? '🌙 Nachtgolf ' : 'Golf ') + w.n + ' verslagen! +' + bonus + ' punten en +' + wb + ' hout', '#f2c14e');
+      if (Math.random() < (w.night ? 0.8 : 0.4)) this.giveSword(P, rollSword(Math.min(1, w.n / 12)), 'wave');
       this.sendInv(P);
     }
     this.markDirty();
+    w.night = false;
     this.bc({ t: 'wave', ph: 0, n: w.n, cleared: true, next: w.t });
   }
 
@@ -96,7 +110,7 @@ export class Waves {
     bump('kills'); bump('kill.' + M.key);
     this.addXp(P, M.score * XP.kill); this.quest(P, 'kill');
     this.bc({ t: 'ev', k: 'mdie', id: m.id, x: r1(m.x), z: r1(m.z), type: m.type });
-    if (Math.random() < (M.boss ? 1 : 0.06 * this.wk('drop'))) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
+    if (Math.random() < (M.boss ? 1 : 0.06 * this.wk('drop') * (this.wave.night && m.wave ? NIGHT.loot : 1))) this.giveSword(P, rollSword(Math.min(1, this.wave.n / 12)), 'monster');
     this.sendInv(P); this.markDirty();
   }
 

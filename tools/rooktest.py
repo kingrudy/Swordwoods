@@ -23,7 +23,7 @@ def check(ok, name, info=""):
 def start_server():
     data = tempfile.mkdtemp(prefix="rooktest-data-")
     env = dict(os.environ, PORT=str(PORT), EXTRA_PORTS="", ALLOW_CHEATS="1", MAX_SPEED="99999", DATA_DIR=data,
-               FIRST_WAVE_DELAY="9999", WAVE_GAP="9999", WEEK_EVENT="geen")
+               FIRST_WAVE_DELAY="9999", WAVE_GAP="9999", WEEK_EVENT="geen", FORCE_NIGHT="0")
     p = subprocess.Popen(["node", "server.js"], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     for _ in range(100):
         try:

@@ -12,7 +12,7 @@ import { ensureSave, applyTalent, wearing } from './room/save.js';
 import { Progress } from './room/progress.js';
 import { Economy } from './room/economy.js';
 import { Combat } from './room/combat.js';
-import { Waves } from './room/waves.js';
+import { Waves, NIGHT } from './room/waves.js';
 import { Animals } from './room/animals.js';
 import { Dogs } from './room/dogs.js';
 import { Fishing } from './room/fishing.js';
@@ -272,7 +272,7 @@ export class Room {
     }
 
     const w = this.wave;
-    if (w.ph === 0) { w.t -= dt; if (w.t <= 0) this.startWave(); }
+    if (w.ph === 0) { w.t -= dt * (this.isNight() ? 1 / NIGHT.gap : 1); if (w.t <= 0) this.startWave(); }   // 's nachts komt de volgende golf sneller
     else if (this.waveLeft() === 0) this.endWave();
 
     this.updateWorldEvents(dt);
@@ -303,7 +303,8 @@ export class Room {
     for (const P of this.players.values()) p.push([P.id, r1(P.x), r1(P.y), r1(P.z), r2(P.yaw), Math.round(P.hp), eqCode(this.eqItem(P)), P.dead ? 1 : 0, P.swings, P.boat ? P.boat.id : 0, P.digging ? 1 : 0]);
     const mons = [...this.monsters.values()].map(e => [e, [e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]]);
     const anis = [...this.animals.values()].map(e => [e, [e.id, e.type, r1(e.x), r1(e.z), r2(e.yaw), Math.round(e.hp), Math.round(e.maxhp)]]);
-    const head = JSON.stringify({ t: 's', f: full ? 1 : 0, p, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t)), left: this.waveLeft(), mod: this.wave.mod } }).slice(0, -1);
+    const nn = this.isNight();   // nacht: de wachttijd loopt twee keer zo snel, dus echte seconden sturen
+    const head = JSON.stringify({ t: 's', f: full ? 1 : 0, p, d, w: { n: this.wave.n, ph: this.wave.ph, t: Math.max(0, Math.ceil(this.wave.t * (nn ? NIGHT.gap : 1))), left: this.waveLeft(), mod: this.wave.mod, night: this.wave.night ? 1 : 0, nn: nn ? 1 : 0 } }).slice(0, -1);
     const rm = full ? SNAP.monFar : SNAP.near, ra = full ? SNAP.aniFar : SNAP.near;
     for (const P of this.players.values()) {
       const near = (e, r) => Math.abs(e.x - P.x) < r && Math.abs(e.z - P.z) < r && len(e.x - P.x, e.z - P.z) < r;

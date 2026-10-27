@@ -3,6 +3,11 @@
 import { clamp, lerp, sstep } from './util.js';
 
 export const WORLD = 420, HALF = WORLD / 2, WATER = -2.2;
+/** Dag en nacht volgen de klok van de server: één dag + nacht duurt 20 minuten, waarvan 30% nacht. */
+export const CYCLE_SEC = 1200, DAY_FRAC = 0.7;
+export const dayT = nowMs => ((nowMs / 1000) % CYCLE_SEC) / CYCLE_SEC;
+/** Echt donker (zon flink onder de horizon). */
+export const isNight = nowMs => { const t = dayT(nowMs); return t >= 0.72 && t < 0.985; };
 /** Het Woestijneiland ligt ten oosten van het bos-eiland, over zee. */
 export const DESERT = { cx: 345, cz: 0, r: 92 };
 /** Hele speelveld (beide eilanden en de zee ertussen). */
