@@ -1,7 +1,7 @@
 // Alles wat beweegt en van de server komt: andere spelers, monsters, dieren en honden.
 // Zelfgebouwde figuren worden vervangen door geanimeerde 3D-figuren zodra die geladen zijn.
 import * as THREE from 'three';
-import { MONSTERS, DOG_FURS, DOG_BREEDS, decodeEq, eqCode } from './items.js';
+import { MONSTERS, DOG_FURS, DOG_BREEDS, decodeEq, eqCode, cosmetic } from './items.js';
 import { clamp, lerp, ease, esc, fwdOf } from './util.js';
 
 /* ---------------------------------------------------------------- welke figuur en animaties per monstersoort */
@@ -63,10 +63,35 @@ export function createEntities(g) {
     else { e.item.scale.setScalar(0.7); e.item.rotation.set(-Math.PI / 2 + 0.3, 0, 0); e.item.position.set(0, -0.02, -0.06); }
     parent.add(e.item);
   }
+  /** Gekocht uiterlijk op een held: cape in een andere kleur, en een hoed in plaats van de eigen hoed of helm. */
+  function applyCos(e) {
+    const c = g.cos.get(e.id), r = e.model;
+    if (!c || r.kind !== 'rig') return;
+    const cape = cosmetic(c.cape);
+    let headMesh = null;
+    r.inner.traverse(o => {
+      if (!o.isMesh) return;
+      const n = o.name + '|' + (o.parent ? o.parent.name : '');
+      if (cape && /_Cape\b/.test(n)) { o.material.map = null; o.material.color.set(cape.color); if (cape.shiny) { o.material.metalness = 0.6; o.material.roughness = 0.3; } o.material.needsUpdate = true; }
+      if (/_Hat\b|_Helmet\b/.test(n)) o.visible = !c.hat;
+      if (/_Head\b/.test(n)) headMesh = o;
+    });
+    if (!c.hat || !r.head) return;
+    // bovenkant van het hoofd ten opzichte van het hoofdbot (in de ruststand), zodat de hoed goed zit bij elke held
+    r.group.updateMatrixWorld(true);
+    const ws = new THREE.Vector3(); r.head.getWorldScale(ws);
+    const bone = new THREE.Vector3().setFromMatrixPosition(r.head.matrixWorld);
+    const box = headMesh ? new THREE.Box3().setFromObject(headMesh) : null;
+    const top = box ? box.max.y : bone.y + 0.45 * r.height / 1.8, width = box ? Math.max(box.max.x - box.min.x, box.max.z - box.min.z) : 0.5;
+    const k = Math.max(0.6, Math.min(2.5, width * 0.95 / 0.5));          // hoeden zijn gemaakt voor een hoofd van ~0,5 m breed
+    const hat = M.buildHat(c.hat); hat.scale.setScalar(k / ws.x); hat.position.set(0, (top - bone.y - 0.1 * k) / ws.y, 0);
+    r.head.add(hat); e.hat = hat;
+  }
   function setRig(e, rig) {
     e.group.remove(e.body); e.body = rig.group; e.group.add(rig.group);
     e.model = rig; e.flashMats = null; e.stealthMats = null;
     if (e.item) mountItem(e);
+    if (!e.isMon && !e.isDog) applyCos(e);
     if (e.isMon) { decorateMonster(e, rig); if (e.type === 3) bossLook(rig); }
   }
   function wantRig(e, name, height, fresh = false) {
@@ -253,7 +278,8 @@ export function createEntities(g) {
   /* ---------------------------------------------------------------- honden */
   function makeDog(a) {
     const [id, , , , , , owner, , , , fur] = a;
-    const e = makeEntBase(M.buildDog(DOG_FURS[fur] ?? DOG_FURS[0], owner > 0)); e.id = id; e.owner = owner; e.bar = M.makeBar(0.7); scene.add(e.bar); e.barY = 1.15; e.labelKey = '';
+    const band = owner > 0 ? cosmetic((g.cos.get(owner) || {}).collar) : null;
+    const e = makeEntBase(M.buildDog(DOG_FURS[fur] ?? DOG_FURS[0], band ? { color: band.color, bell: band.bell } : owner > 0)); e.id = id; e.isDog = true; e.owner = owner; e.bar = M.makeBar(0.7); scene.add(e.bar); e.barY = 1.15; e.labelKey = '';
     dogs.set(id, e); return e;
   }
   function syncDogs(list) {

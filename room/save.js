@@ -1,5 +1,5 @@
 // Opgeslagen spelersgegevens: controleren/aanvullen bij laden, dagelijkse opdrachten en talenten.
-import { MAX_POTIONS, MAX_SWORDS, DOG_MAX_LEVEL, DOG_FURS, statueOf, breedOf, rollSwordAtLeast } from '../public/items.js';
+import { MAX_POTIONS, MAX_SWORDS, DOG_MAX_LEVEL, DOG_FURS, statueOf, breedOf, rollSwordAtLeast, cosmetic } from '../public/items.js';
 import { levelInfo, TALENT_BY_ID, talentPoints, spentPoints, tal, today, yesterday, dailyQuests, FORGE_MAX, TUTORIAL, isoWeek, LOGIN_REWARDS } from '../public/progress.js';
 import { clamp } from './shared.js';
 
@@ -27,6 +27,9 @@ export function ensureSave(u) {
   if (!Number.isInteger(s.tut)) s.tut = (s.stats.kills > 20 || s.stats.playSec > 1800) ? TUTORIAL.length : 0;
   s.tut = clamp(s.tut, 0, TUTORIAL.length);
   for (const w of s.swords) { if (!Number.isFinite(w.d0)) w.d0 = w.damage; w.f = clamp(w.f | 0, 0, FORGE_MAX); }
+  if (!s.cos || typeof s.cos !== 'object') s.cos = {};       // uiterlijk: wat je hebt en wat je draagt
+  s.cos.own = Array.isArray(s.cos.own) ? [...new Set(s.cos.own.filter(id => cosmetic(id)))] : [];
+  for (const slot of ['hat', 'cape', 'collar']) { const c = cosmetic(s.cos[slot]); s.cos[slot] = c && c.slot === slot && s.cos.own.includes(c.id) ? c.id : null; }
   if (!s.stash || typeof s.stash !== 'object') s.stash = {};
   for (const k of ['wood', 'meat', 'fish', 'ore']) s.stash[k] = Math.max(0, s.stash[k] | 0);
   if (!Array.isArray(s.notes)) s.notes = [];
@@ -82,4 +85,22 @@ export function claimLogin(u, now = Date.now()) {
   const text = 'Inlogbeloning dag ' + streak + ' van 7: ' + R.text + swordName + '.';
   s.notes.push(R.icon + ' ' + text);
   return { day: streak, text };
+}
+
+/** Wat iemand draagt, zoals andere spelers het te zien krijgen. */
+export const wearing = s => ({ hat: s.cos?.hat || null, cape: s.cos?.cape || null, collar: s.cos?.collar || null });
+
+/** Uiterlijk kopen (met goud) of dragen/afdoen. Geeft een foutmelding terug, of null als het gelukt is. */
+export function cosAction(s, op, id, slot) {
+  if (op === 'wear' && !id) { if (['hat', 'cape', 'collar'].includes(slot)) s.cos[slot] = null; return null; }
+  const c = cosmetic(id); if (!c) return 'Onbekend.';
+  if (op === 'buy') {
+    if (s.cos.own.includes(c.id)) return 'Heb je al.';
+    if (c.need && (s.stats[c.need.stat] | 0) < c.need.n) return c.need.text + '.';
+    if ((s.gold | 0) < c.cost) return 'Te weinig goud (' + c.cost + ' nodig).';
+    s.gold -= c.cost; s.cos.own.push(c.id); s.cos[c.slot] = c.id;
+    return null;
+  }
+  if (op === 'wear') { if (!s.cos.own.includes(c.id)) return 'Koop dit eerst.'; s.cos[c.slot] = c.id; return null; }
+  return 'Onbekend.';
 }

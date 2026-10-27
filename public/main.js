@@ -1,6 +1,6 @@
 // Inloggen, account maken en lobby. Het 3D-spel (three.js) wordt pas geladen zodra je een kamer betreedt.
 import { Net } from './net.js';
-import { RARITIES } from './items.js';
+import { RARITIES, COSMETICS, COS_SLOTS } from './items.js';
 import { renderTalents, renderQuests, renderAchievements } from './progressui.js';
 import { openInvite, takeInvitedRoom, clearInviteParam } from './invite.js';
 import { WEEK_PRIZES, WEEK_EVENTS, LOGIN_REWARDS, today } from './progress.js';
@@ -78,6 +78,23 @@ function renderHeroes() {
   $('heroes').innerHTML = HEROES.map(([n, i], k) => '<button type="button" class="hero' + ((save.look | 0) === k ? ' on' : '') + '" data-look="' + k + '"><span>' + i + '</span>' + n + '</button>').join('');
 }
 $('heroes').addEventListener('click', e => { const b = e.target.closest('[data-look]'); if (!b) return; save.look = +b.dataset.look; renderHeroes(); net.send({ t: 'look', v: save.look }); });
+/** Uiterlijk: per soort (hoed, cape, halsband) kopen met goud of aan- en uitdoen. */
+function renderCos() {
+  const c = save.cos || { own: [] }, gold = save.gold | 0, st = save.stats || {};
+  $('cos-gold').textContent = '🪙 ' + gold + ' goud';
+  $('cos-list').innerHTML = COS_SLOTS.map(([slot, label]) => '<div class="cos-slot">' + label + '</div><div class="cos-row">' + COSMETICS.filter(x => x.slot === slot).map(x => {
+    const own = c.own.includes(x.id), on = c[slot] === x.id, locked = x.need && (st[x.need.stat] | 0) < x.need.n;
+    const sub = on ? 'Aan · tik om af te doen' : own ? 'Dragen' : locked ? x.need.text : 'Koop · ' + x.cost + ' goud';
+    const dis = !own && (locked || gold < x.cost);
+    return '<button type="button" class="cos-item' + (on ? ' on' : '') + '" data-cos="' + x.id + '" data-slot="' + slot + '"' + (dis ? ' disabled' : '') + '><b>' + x.icon + ' ' + esc(x.name) + '</b><small>' + esc(sub) + '</small></button>';
+  }).join('') + '</div>').join('');
+}
+$('cos-list').addEventListener('click', e => {
+  const b = e.target.closest('[data-cos]'); if (!b || b.disabled) return;
+  const c = save.cos || { own: [] }, id = b.dataset.cos, slot = b.dataset.slot;
+  if (c[slot] === id) net.send({ t: 'cos', op: 'wear', slot, id: null });
+  else net.send({ t: 'cos', op: c.own.includes(id) ? 'wear' : 'buy', id, slot });
+});
 /** Inlogreeks: zeven vakjes, de dagen die je al hebt goud, vandaag omrand. */
 function renderLogin(got) {
   const L = (save && save.login) || { streak: 0, last: '' }, isToday = L.last === today();
@@ -87,7 +104,7 @@ function renderLogin(got) {
 }
 let loginGot = null;
 function renderLobby() {
-  renderHeroes(); renderLogin(loginGot);
+  renderHeroes(); renderLogin(loginGot); renderCos();
   $('lb-hello').textContent = 'Welkom terug, ' + myName + '. Kies een kamer of maak er zelf een.';
   const s = save.stats || {};
   const cells = [['Beste golf', s.bestWave | 0], ['Punten', s.score | 0], ['Monsters verslagen', s.kills | 0], ['Dieren gejaagd', s.animals | 0],

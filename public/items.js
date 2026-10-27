@@ -196,3 +196,22 @@ export const COOK_RANGE = 3.5, COOK_HUNGER = 40, REGEN_PER_SEC = 3, SWIFT_MUL = 
 /** Pictogram per tijdelijk voordeel (HUD). */
 export const BUFF_ICONS = { feast: '🍗', elixir: '⚗️', haste: '🍵', regen: '🍢', hearty: '🍲', swift: '🥘', royal: '👑' };
 export const NEED_NAMES = { fish: 'vis', meat: 'vlees', wood: 'hout', gold: 'goud' };
+
+/* ---------------------------------------------------------------- uiterlijk (te koop met goud, alleen voor de sier) */
+export const COSMETICS = [
+  { id: 'cape_rood',   slot: 'cape', name: 'Rode cape',          icon: '🟥', cost: 40,  color: 0xb3262b },
+  { id: 'cape_blauw',  slot: 'cape', name: 'Koningsblauwe cape', icon: '🟦', cost: 40,  color: 0x2a4fb0 },
+  { id: 'cape_groen',  slot: 'cape', name: 'Woudgroene cape',    icon: '🟩', cost: 40,  color: 0x2f7a3a },
+  { id: 'cape_zwart',  slot: 'cape', name: 'Nachtzwarte cape',   icon: '⬛', cost: 60,  color: 0x1b1b24 },
+  { id: 'cape_goud',   slot: 'cape', name: 'Gouden cape',        icon: '🟨', cost: 120, color: 0xd9a521, shiny: true },
+  { id: 'hoed_stro',   slot: 'hat',  name: 'Strohoed',           icon: '👒', cost: 50 },
+  { id: 'hoed_tovenaar', slot: 'hat', name: 'Tovenaarshoed',     icon: '🧙', cost: 80 },
+  { id: 'hoed_piraat', slot: 'hat',  name: 'Piratenhoed',        icon: '🏴‍☠️', cost: 90 },
+  { id: 'hoed_farao',  slot: 'hat',  name: 'Faraokap',           icon: '🪬', cost: 150, need: { stat: 'pharaohs', n: 1, text: 'Versla eerst de mummie-farao' } },
+  { id: 'hoed_kroon',  slot: 'hat',  name: 'Gouden kroon',       icon: '👑', cost: 250 },
+  { id: 'band_rood',   slot: 'collar', name: 'Rode halsband',    icon: '🔴', cost: 20,  color: 0xd0403a },
+  { id: 'band_blauw',  slot: 'collar', name: 'Blauwe halsband',  icon: '🔵', cost: 20,  color: 0x2f6fd0 },
+  { id: 'band_goud',   slot: 'collar', name: 'Gouden halsband met belletje', icon: '🔔', cost: 60, color: 0xd9a83a, bell: true },
+];
+export const COS_SLOTS = [['hat', 'Hoed'], ['cape', 'Cape'], ['collar', 'Halsband (hond)']];
+export const cosmetic = id => COSMETICS.find(c => c.id === id) || null;

@@ -355,6 +355,7 @@ export function buildShop() {
 
 /* ---------------------------------------------------------------- hond */
 /** Hond met kwispelstaart, flaporen en (optioneel) halsband. Kijkt richting -Z. */
+/** collar: false (wilde hond), true (gewone rode halsband) of { color, bell } (gekocht uiterlijk). */
 export function buildDog(furColor, collar = false) {
   const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
   const fur = std(furColor), light = std(new THREE.Color(furColor).lerp(new THREE.Color(0xffffff), 0.45).getHex()), dark = std(0x1c1410);
@@ -383,14 +384,61 @@ export function buildDog(furColor, collar = false) {
   const tm = capsule(0.035, 0.24, fur, 6); tm.position.y = 0.13; tail.add(tm); tail.rotation.x = -0.7;
   let collarMesh = null;
   if (collar) {
-    collarMesh = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 6, 16), new THREE.MeshStandardMaterial({ color: 0xd0403a, roughness: 0.6 }));
+    const cc = typeof collar === 'object' ? collar : { color: 0xd0403a };
+    collarMesh = new THREE.Mesh(new THREE.TorusGeometry(0.13, cc.bell ? 0.032 : 0.025, 6, 16), new THREE.MeshStandardMaterial({ color: cc.color, roughness: 0.5, metalness: cc.bell ? 0.5 : 0 }));
     collarMesh.position.set(0, bodyY + 0.15, -0.3); collarMesh.rotation.x = 1.2; g.add(collarMesh);
-    const tag = sphere(0.03, goldMat, [8, 6]); tag.position.set(0, bodyY + 0.07, -0.37); g.add(tag);
+    const tag = sphere(cc.bell ? 0.045 : 0.03, goldMat, [8, 6]); tag.position.set(0, bodyY + 0.07, -0.37); g.add(tag);
   }
   shadows(root);
   const aura = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 8, 32), new THREE.MeshBasicMaterial({ color: 0x6fe0ff, transparent: true, opacity: 0.85, toneMapped: false }));
   aura.rotation.x = -Math.PI / 2; aura.position.y = 0.06; aura.visible = false; root.add(aura);
   return { kind: 'quad', group: root, body: g, legs, head, tail, tongue, aura, height: 1.0 };
+}
+
+/* ---------------------------------------------------------------- hoeden (uiterlijk); maat in meters voor een held van 1,8 m, onderkant op y = 0 */
+export function buildHat(id) {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = true; g.add(o); return o; };
+  switch (id) {
+    case 'hoed_stro': {
+      const straw = std(0xe3c27a), band = std(0x8a3b2a);
+      add(new THREE.CylinderGeometry(0.42, 0.44, 0.03, 20), straw, 0, 0.02, 0);
+      add(new THREE.CylinderGeometry(0.2, 0.23, 0.2, 18), straw, 0, 0.13, 0);
+      add(new THREE.CylinderGeometry(0.235, 0.235, 0.05, 18), band, 0, 0.06, 0);
+      break;
+    }
+    case 'hoed_tovenaar': {
+      const cloth = std(0x4b2d8f), star = new THREE.MeshStandardMaterial({ color: 0xffe08a, emissive: 0x806010, emissiveIntensity: 0.6 });
+      add(new THREE.CylinderGeometry(0.4, 0.4, 0.03, 20), cloth, 0, 0.02, 0);
+      const cone = add(new THREE.ConeGeometry(0.24, 0.62, 18), cloth, 0, 0.33, 0, 0, 0, 0.18);
+      add(new THREE.OctahedronGeometry(0.06), star, 0.04, 0.3, 0.2);
+      void cone; break;
+    }
+    case 'hoed_piraat': {
+      const felt = std(0x1c1a1e), trim = std(0xd9a83a, { metalness: 0.4 }), skull = std(0xf0ece0);
+      add(new THREE.CylinderGeometry(0.22, 0.25, 0.22, 16), felt, 0, 0.12, 0);
+      for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; add(new THREE.BoxGeometry(0.46, 0.18, 0.05), felt, Math.sin(a) * 0.2, 0.14, Math.cos(a) * 0.2, 0.25, a, 0).geometry.translate(0, 0, 0); }
+      add(new THREE.TorusGeometry(0.255, 0.012, 6, 24), trim, 0, 0.05, 0, Math.PI / 2);
+      add(new THREE.SphereGeometry(0.045, 10, 8), skull, 0, 0.17, 0.26);
+      break;
+    }
+    case 'hoed_farao': {          // nemes: blauw en goud gestreepte hoofddoek met een slang op het voorhoofd
+      const blue = std(0x1f4fa0, { metalness: 0.3 });
+      for (let i = 0; i < 5; i++) add(new THREE.CylinderGeometry(0.27 - i * 0.012, 0.28 - i * 0.012, 0.05, 18, 1, true), i % 2 ? blue : goldMat, 0, 0.03 + i * 0.05, 0).material.side = THREE.DoubleSide;
+      add(new THREE.SphereGeometry(0.255, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), goldMat, 0, 0.26, 0);
+      for (const x of [-1, 1]) add(new THREE.BoxGeometry(0.1, 0.36, 0.05), x < 0 ? blue : goldMat, x * 0.25, -0.12, 0.08);
+      add(new THREE.ConeGeometry(0.035, 0.12, 6), goldMat, 0, 0.33, 0.24, 0.5);
+      break;
+    }
+    case 'hoed_kroon': {
+      const gem = new THREE.MeshStandardMaterial({ color: 0xc0202a, metalness: 0.2, roughness: 0.2, emissive: 0x400008 });
+      add(new THREE.CylinderGeometry(0.23, 0.22, 0.12, 20, 1, true), goldMat, 0, 0.06, 0).material.side = THREE.DoubleSide;
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; add(new THREE.ConeGeometry(0.05, 0.13, 6), goldMat, Math.sin(a) * 0.22, 0.17, Math.cos(a) * 0.22); }
+      add(new THREE.SphereGeometry(0.035, 10, 8), gem, 0, 0.07, 0.23);
+      break;
+    }
+  }
+  return g;
 }
 
 /* ---------------------------------------------------------------- vissen */

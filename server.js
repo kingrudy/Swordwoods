@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Room, ensureSave, applyTalent, ensureDaily, claimLogin } from './room.js';
+import { Room, ensureSave, applyTalent, ensureDaily, claimLogin, cosAction } from './room.js';
 import { initStats, statsData, statsHtml } from './stats.js';
 import { createStorage } from './storage.js';
 import { handleAdmin } from './admin.js';
@@ -132,6 +132,11 @@ class Client extends WsConn {
     switch (m.t) {
       case 'rooms': this.send({ t: 'rooms', rooms: roomList() }); break;
       case 'talent': if (applyTalent(s, String(m.id))) markDirty(); this.send({ t: 'save', save: s }); break;
+      case 'cos': {           // uiterlijk kopen of dragen (alleen in de lobby)
+        const err = cosAction(s, m.op === 'buy' ? 'buy' : 'wear', m.id ? String(m.id) : null, String(m.slot || ''));
+        if (err) return this.send({ t: 'err', msg: err });
+        markDirty(); this.send({ t: 'save', save: s }); break;
+      }
       case 'look': { const l = m.v | 0; if (l >= 0 && l <= 3) { s.look = l; markDirty(); this.send({ t: 'look', v: l }); } break; }
       case 'create': {
         if (rooms.size >= 24) return this.send({ t: 'err', msg: 'Er zijn al te veel kamers. Kies een bestaande.' });

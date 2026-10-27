@@ -8,7 +8,7 @@ import { bump } from './stats.js';
 import { logChat, mutedUntil, muteText } from './moderation.js';
 import { BUILD_BY_ID } from './public/builds.js';
 import { num, r1, r2, len, clamp, CFG } from './room/shared.js';
-import { ensureSave, applyTalent } from './room/save.js';
+import { ensureSave, applyTalent, wearing } from './room/save.js';
 import { Progress } from './room/progress.js';
 import { Economy } from './room/economy.js';
 import { Combat } from './room/combat.js';
@@ -23,7 +23,7 @@ import { Building } from './room/building.js';
 import { Pyramid } from './room/pyramid.js';
 import { Bosses } from './room/bosses.js';
 import { Cooking } from './room/cooking.js';
-export { ensureSave, ensureDaily, applyTalent, claimLogin } from './room/save.js';
+export { ensureSave, ensureDaily, applyTalent, claimLogin, cosAction } from './room/save.js';
 export { CFG } from './room/shared.js';
 
 /** Stralen (m) voor wat een speler te zien krijgt; mist begint op zo'n 60-90 m. */
@@ -108,12 +108,12 @@ export class Room {
     this.players.set(P.id, P); this.emptySince = null;
     if (s.dog) this.spawnOwnedDog(P);
     bump('sessions');
-    this.bc({ t: 'pjoin', id: P.id, name: P.name, look: s.look }, P);
+    this.bc({ t: 'pjoin', id: P.id, name: P.name, look: s.look, cos: wearing(s) }, P);
     conn.send({
       t: 'joined', now: Date.now(),
       room: { id: this.id, name: this.name, seed: this.seed, max: this.max },
       you: { id: P.id, name: P.name, x: P.x, y: P.y, z: P.z },
-      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look })),
+      players: [...this.players.values()].map(p => ({ id: p.id, name: p.name, look: p.u.save.look, cos: wearing(p.u.save) })),
       felled: [...this.felled.keys()], chests: [...this.chestOpen.keys()], ores: [...this.oreBack.keys()], mounds: [...this.moundBack.keys()],
       builds: [...this.builds.values()].map(b => this.btuple(b)),
       ruins: this.ruinSt.map(r => r.st), weather: this.weather.k, trader: this.traderInfo(), pot: this.potInfo(), pyr: this.pyrInfo(), week: this.weekInfo(),
@@ -234,6 +234,7 @@ export class Room {
     if (cmd === 'hond' && !P.u.save.dog) { P.u.save.dog = { name: 'Testje', level: 3, xp: 0, fur: 1, breed: breedOf(a).id }; this.spawnOwnedDog(P); this.sendInv(P); }
     if (cmd === 'weer') { this.weather.k = WEATHERS.some(w => w.k === a) ? a : 'onweer'; this.weather.until = this.T + 600; this.weather.bolt = this.T + 2; this.bc({ t: 'weather', k: this.weather.k }); }
     if (cmd === 'piramide') { if (this.pyr.st === 'cool') this.pyrSet('idle'); P.u.save.gold += 30; this.sendInv(P); }
+    if (cmd === 'goud') { P.u.save.gold += Math.min(100000, a | 0); this.sendInv(P); }
     if (cmd === 'handelaar') { this.trader = null; this.traderAt = this.T; }
     if (cmd === 'zwaard') this.giveSword(P, rollSwordOfRarity(Math.max(0, Math.min(4, a | 0))), 'chest');
     if (cmd === 'erts') { P.u.save.ore += Math.min(1000, a | 0); this.sendInv(P); }

@@ -116,7 +116,7 @@ export function createUi(g) {
     renderInv(); g.pl.rebuildHeld();
   });
   net.on('toast', m => toast(esc(m.msg), m.color));
-  net.on('pjoin', m => { names.set(m.id, m.name); looks.set(m.id, m.look | 0); toast('<b>' + esc(m.name) + '</b> doet mee.', '#6fd37a'); });
+  net.on('pjoin', m => { names.set(m.id, m.name); looks.set(m.id, m.look | 0); g.cos.set(m.id, m.cos || {}); toast('<b>' + esc(m.name) + '</b> doet mee.', '#6fd37a'); });
   net.on('pleave', m => { const n = names.get(m.id); if (n) toast(esc(n) + ' is vertrokken.', '#bbb'); names.delete(m.id); });
   net.on('wave', m => {
     if (m.ph === 1) {

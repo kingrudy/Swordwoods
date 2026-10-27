@@ -66,7 +66,7 @@ export async function startGame({ net, joined, user }) {
     inv: { wood: 0, meat: 0, potions: 0, fish: 0, ore: 0, xp: 0, tal: {}, daily: null, ach: {}, tut: 999, up: { shield: 0, axe: 0, rod: 0 }, swords: [], equip: 0, stats: {} },
     you: { hp: 100, hu: 80, sc: 0, rs: 0 },
     wave: { n: 0, ph: 0, t: 0, left: 0 },
-    names: new Map(joined.players.map(p => [p.id, p.name])), looks: new Map(joined.players.map(p => [p.id, p.look | 0])),
+    names: new Map(joined.players.map(p => [p.id, p.name])), looks: new Map(joined.players.map(p => [p.id, p.look | 0])), cos: new Map(joined.players.map(p => [p.id, p.cos || {}])),
     keys: {}, virt: { x: 0, y: 0, sprint: false, toggle: false, attack: false, jump: false, px: 0, py: 0, pattack: false, pjump: false, psprint: false },
     // vlaggen: dood, muis vast (of zacht spelen), paneel open, eigen hengel in het water, schudden van de camera
     dead: false, locked: false, soft: false, shopOpen: false, fishing: null, shake: 0, myDog: null, time: 0,
